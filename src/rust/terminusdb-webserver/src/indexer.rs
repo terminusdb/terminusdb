@@ -417,6 +417,28 @@ struct BranchTask {
 }
 
 /// The global indexer registry.
+/// Dead man's switch decision: is a task stalled past the deadline?
+/// Pure so the rule is unit-testable — the abort itself stays in
+/// check_dead_mans_switch.
+///
+/// A task is stalled only when it is mid-push (`has_current_commit`,
+/// armed by set_current_commit), it has not finished its expected
+/// documents (a task waiting for the terminal line is not stuck), and
+/// the engine has reported no batch progress or heartbeat within the
+/// deadline. `progress_age` is None between a pending commit and the
+/// push start — that is not a stall.
+fn dead_man_violation(
+    has_current_commit: bool,
+    processed_docs: u64,
+    total_docs: u64,
+    progress_age: Option<Duration>,
+    deadline: Duration,
+) -> bool {
+    has_current_commit
+        && !(total_docs > 0 && processed_docs >= total_docs)
+        && matches!(progress_age, Some(age) if age > deadline)
+}
+
 pub struct IndexerRegistry {
     tasks: StdMutex<HashMap<BranchKey, Arc<BranchTask>>>,
     pending_queue: StdMutex<VecDeque<BranchKey>>,
@@ -905,7 +927,7 @@ impl IndexerRegistry {
         *self.current_branch.lock().unwrap() = Some(key.clone());
 
         // Get the task data.
-        let (progress, cancel, next_commit, store_clustering) = {
+        let (progress, cancel, next_commit, store_clustering, task) = {
             let tasks = self.tasks.lock().unwrap();
             match tasks.get(&key) {
                 Some(task) => {
@@ -915,7 +937,13 @@ impl IndexerRegistry {
                     // on_task_complete will set it from X-Next-Commit header.
                     *task.next_commit.lock().unwrap() = None;
                     let sc = task.store_clustering.load(Ordering::SeqCst);
-                    (task.progress.clone(), task.cancel.clone(), nc, sc)
+                    (
+                        task.progress.clone(),
+                        task.cancel.clone(),
+                        nc,
+                        sc,
+                        task.clone(),
+                    )
                 }
                 None => {
                     // Task was removed (e.g. by abort_domain) — skip.
@@ -992,7 +1020,7 @@ impl IndexerRegistry {
                         progress.set_error(msg.clone());
                         TaskResult::Error(msg)
                     });
-                    registry_clone.on_task_complete(&key_clone, result);
+                    registry_clone.on_task_complete(&key_clone, result, &task);
                 });
             }
             None => {
@@ -1005,8 +1033,40 @@ impl IndexerRegistry {
         }
     }
 
-    /// Called when a commit task completes.
-    fn on_task_complete(&self, key: &BranchKey, result: TaskResult) {
+    /// Called when a commit task completes. `task` is the BranchTask this
+    /// run was spawned with — a task evicted by the dead man's switch (or
+    /// abort_domain) can still complete afterwards, and by then its key may
+    /// have been re-registered by a new notify. Only the currently registered
+    /// task may mutate the registry or free the scheduler slot; a stale
+    /// completion would otherwise cancel or corrupt its replacement.
+    fn on_task_complete(&self, key: &BranchKey, result: TaskResult, task: &Arc<BranchTask>) {
+        let (registered_is_this_task, replacement_registered) = {
+            let tasks = self.tasks.lock().unwrap();
+            match tasks.get(key) {
+                Some(t) if Arc::ptr_eq(t, task) => (true, false),
+                Some(_) => (false, true),
+                None => (false, false),
+            }
+        };
+        if !registered_is_this_task {
+            crate::log::log_info(format!(
+                "[indexer] ignoring stale task completion for {} {}",
+                key.path, key.branch
+            ));
+            // No replacement for this key: the slot may still name it —
+            // free it so queued branches can run.
+            if !replacement_registered {
+                {
+                    let mut current = self.current_branch.lock().unwrap();
+                    if current.as_ref() == Some(key) {
+                        *current = None;
+                    }
+                }
+                self.try_spawn_next();
+            }
+            return;
+        }
+
         // Clear current branch.
         *self.current_branch.lock().unwrap() = None;
 
@@ -1228,55 +1288,73 @@ impl IndexerRegistry {
     }
 
     /// Dead man's switch: check all active tasks for progress violations.
-    /// If any task has a current_commit set (actively processing) but no
-    /// document progress for longer than the deadline, crash the server
-    /// with a FATAL log message and a full stack trace.
+    /// A task with a current_commit (actively processing) that reports no
+    /// batch progress or heartbeat for longer than the deadline is stalled:
+    /// cancel it, mark it failed, evict it from the registry, and free the
+    /// scheduler slot so indexing for other branches continues. The commit
+    /// is never tagged, so a re-push re-attempts it; the branch reports the
+    /// error until a notify registers a fresh task.
     ///
-    /// ARCHITECTURAL INVARIANT: This fail-loud behaviour must NEVER be changed
-    /// to cancel-and-continue, log-and-swallow, or any non-aborting strategy
-    /// without explicit approval from a human architect. If this switch fires,
-    /// there is a serious correctness issue in the TerminusDB product — a
-    /// thread is stuck in a state that violates the indexing contract. Aborting
-    /// is the only safe response: it surfaces the bug immediately with a stack
-    /// trace rather than silently corrupting the index or leaking resources.
+    /// FATAL-level diagnostics (every task's snapshot plus the watchdog
+    /// backtrace) are emitted first — a stall means the engine wedged on a
+    /// call and the evidence must survive, but one stuck branch must not
+    /// take the server or the other branches' indexing down with it.
     ///
     /// The deadline is configurable via TERMINUSDB_INDEXER_WATCHDOG_DEADLINE
-    /// (default: 60 seconds). CPU-only embedding backends (e.g. Ollama)
-    /// can take >10s for the first document, so the default allows for
-    /// slow first-document processing.
+    /// (default: 300 seconds). Heartbeats keep a slow-but-healthy embed call
+    /// alive under it, so the deadline only needs to outlive a genuinely
+    /// stalled batch.
     fn check_dead_mans_switch(&self) {
         let deadline_secs = std::env::var("TERMINUSDB_INDEXER_WATCHDOG_DEADLINE")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(60);
+            .unwrap_or(300);
 
-        let deadline = Duration::from_secs(deadline_secs);
+        self.check_dead_mans_switch_with_deadline(Duration::from_secs(deadline_secs));
+    }
 
-        let tasks = self.tasks.lock().unwrap();
-        for (key, task) in tasks.iter() {
-            let (completed, total, _status, current_commit, processed_docs, total_docs, _docs_sent) =
-                task.progress.snapshot();
+    /// The deadline as a parameter so tests can exercise the switch without
+    /// racing on the process-global environment variable.
+    fn check_dead_mans_switch_with_deadline(&self, deadline: Duration) {
+        // Collect stalled tasks under the lock; eviction and rescheduling
+        // happen after it is dropped (try_spawn_next takes the same lock).
+        let mut stalled: Vec<(BranchKey, String)> = Vec::new();
+        {
+            let tasks = self.tasks.lock().unwrap();
+            for (key, task) in tasks.iter() {
+                let (
+                    completed,
+                    total,
+                    _status,
+                    current_commit,
+                    processed_docs,
+                    total_docs,
+                    _docs_sent,
+                ) = task.progress.snapshot();
 
-            // Only check tasks that are actively indexing (have a current_commit
-            // and have started the push — last_progress_at is set by
-            // set_current_commit, not set_pending_commit).
-            if let Some(ref commit) = current_commit {
-                // Skip if all documents have been processed — the task is
-                // waiting for the vectorlink response, not stuck.
-                if total_docs > 0 && processed_docs >= total_docs {
-                    continue;
-                }
-                if let Some(age) = task.progress.progress_age() {
-                    if age > deadline {
-                        // Dead man's switch violation! Crash the server.
+                // Only check tasks that are actively indexing (have a current_commit
+                // and have started the push — last_progress_at is set by
+                // set_current_commit, not set_pending_commit).
+                if let Some(ref commit) = current_commit {
+                    let age = task.progress.progress_age();
+                    if dead_man_violation(
+                        current_commit.is_some(),
+                        processed_docs,
+                        total_docs,
+                        age,
+                        deadline,
+                    ) {
+                        // Dead man's switch violation — abort the task, not the server.
+                        let age = age.unwrap_or_default();
                         let msg = format!(
                             "[FATAL] Indexer dead man's switch violation: \
                              branch {} {} commit {} \
-                             no document progress for {:?} (deadline {:?}) \
+                             no batch progress for {:?} (deadline {:?}) \
                              processed_documents={} total_documents={} \
                              commits_processed={} total_commits={} \
-                             — a single document should take < 5s, \
-                             this indicates a stuck task that must be investigated",
+                             — the engine reports batch progress or heartbeats \
+                             while work is in flight; silence indicates a stuck \
+                             call. Aborting this indexing task; the server continues",
                             key.path,
                             key.branch,
                             commit,
@@ -1288,17 +1366,54 @@ impl IndexerRegistry {
                             total
                         );
                         eprintln!("{}", msg);
-
-                        // Print all thread stack traces for debugging.
-                        // On macOS, we use backtrace_symbols via signal.
-                        // The simplest cross-platform approach: send SIGABRT
-                        // which triggers the Prolog signal handler to print
-                        // all thread stacks before crashing.
-                        eprintln!("[FATAL] Aborting server for stack trace analysis...");
-                        std::process::abort();
+                        stalled.push((key.clone(), msg));
                     }
                 }
             }
+
+            // Dump every task's state while the lock is held — the snapshots
+            // are the evidence for which branch wedged and what ran beside it.
+            if !stalled.is_empty() {
+                for (other_key, other_task) in tasks.iter() {
+                    eprintln!(
+                        "[FATAL] task {} {}: {:?}",
+                        other_key.path,
+                        other_key.branch,
+                        other_task.progress.snapshot()
+                    );
+                }
+            }
+        }
+
+        if stalled.is_empty() {
+            return;
+        }
+        eprintln!(
+            "[FATAL] watchdog thread backtrace:\n{}",
+            std::backtrace::Backtrace::force_capture()
+        );
+
+        for (key, msg) in stalled {
+            {
+                let mut tasks = self.tasks.lock().unwrap();
+                if let Some(task) = tasks.remove(&key) {
+                    // Ask the task to exit at its next cancellation point.
+                    // A task wedged in a non-cancellable await leaves its
+                    // spawned tokio task behind, but eviction means it can
+                    // no longer block the scheduler or poison a replacement.
+                    task.cancel.cancel();
+                    task.progress.set_error(msg);
+                }
+            }
+            // Free the scheduler slot when the stalled task held it — the
+            // one-at-a-time pipeline stays jammed otherwise.
+            {
+                let mut current = self.current_branch.lock().unwrap();
+                if current.as_ref() == Some(&key) {
+                    *current = None;
+                }
+            }
+            self.try_spawn_next();
         }
     }
 }
@@ -1362,6 +1477,25 @@ fn maybe_start_handoff_poller(transport: &Arc<dyn EngineTransport>) {
     handle.spawn(handoff_poller_loop(dir, registry));
 }
 
+/// A task file signals by appearing, changing or disappearing: create,
+/// remove, and data or rename events wake the scan. Everything else must
+/// not — the poller's own claim_pending opens the watched directory on
+/// every scan, which inotify reports as Access(Open), and strictatime
+/// mounts can add atime Modify(Metadata) from the same reads. Waking on
+/// an event the scan itself emits loops forever.
+fn handoff_event_wakes(event: &notify::Event) -> bool {
+    match event.kind {
+        notify::EventKind::Create(_) | notify::EventKind::Remove(_) => true,
+        notify::EventKind::Modify(kind) => matches!(
+            kind,
+            notify::event::ModifyKind::Any
+                | notify::event::ModifyKind::Data(_)
+                | notify::event::ModifyKind::Name(_)
+        ),
+        _ => false,
+    }
+}
+
 /// Poll the handoff directory: claim pending task files and deliver each
 /// to the registry, deleting the file once the signal is accepted. The
 /// file is the signal and only the signal — like `indexer_notify`, once
@@ -1379,9 +1513,9 @@ async fn handoff_poller_loop(dir: std::path::PathBuf, registry: Arc<IndexerRegis
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(HANDOFF_DEFAULT_POLL_SECS);
     let mut interval = tokio::time::interval(Duration::from_secs(poll_secs));
-    // Any event in the task directory wakes the scan early; claim_pending
-    // tolerates partial or locked files, so no event filtering is needed.
-    // The channel also absorbs bursts — a flood of events collapses into
+    // Only task-file mutations wake the scan early — handoff_event_wakes
+    // drops the access and metadata events the scan emits itself. The
+    // channel also absorbs bursts — a flood of events collapses into
     // one scan.
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<()>(64);
     // The closure gets a clone so event_tx outlives a failed watcher —
@@ -1391,8 +1525,10 @@ async fn handoff_poller_loop(dir: std::path::PathBuf, registry: Arc<IndexerRegis
     // the watcher always has a path instead of degrading to sweep-only.
     let _ = std::fs::create_dir_all(&dir);
     let _watcher = match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if res.is_ok() {
-            let _ = watcher_tx.try_send(());
+        if let Ok(event) = res {
+            if handoff_event_wakes(&event) {
+                let _ = watcher_tx.try_send(());
+            }
         }
     }) {
         Ok(mut w) => {
@@ -2435,6 +2571,231 @@ mod tests {
     }
 
     #[test]
+    fn test_dead_man_violation_idle_task_is_safe() {
+        // No current commit — the task is idle, the switch stays quiet.
+        assert!(!dead_man_violation(
+            false,
+            0,
+            0,
+            Some(Duration::from_secs(3600)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_pending_commit_is_safe() {
+        // current_commit set via set_pending_commit leaves last_progress_at
+        // unset — age None means the push has not started, not a stall.
+        assert!(!dead_man_violation(
+            true,
+            0,
+            0,
+            None,
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_fresh_progress_is_safe() {
+        assert!(!dead_man_violation(
+            true,
+            10,
+            100,
+            Some(Duration::from_secs(30)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_stalled_task_trips() {
+        assert!(dead_man_violation(
+            true,
+            1120,
+            23_000,
+            Some(Duration::from_secs(61)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_fully_processed_is_safe() {
+        // All documents embedded — the task waits for the terminal line,
+        // which is not a stall even past the deadline.
+        assert!(!dead_man_violation(
+            true,
+            100,
+            100,
+            Some(Duration::from_secs(3600)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_zero_total_still_trips() {
+        // No expected count yet: a silent push past the deadline is a stall.
+        assert!(dead_man_violation(
+            true,
+            0,
+            0,
+            Some(Duration::from_secs(61)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    fn stalled_branch_task(progress: &Arc<BranchProgress>) -> Arc<BranchTask> {
+        progress.set_total_documents(10);
+        progress.set_current_commit("commit1".to_string());
+        Arc::new(BranchTask {
+            progress: progress.clone(),
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(None),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        })
+    }
+
+    #[test]
+    fn test_dead_mans_switch_evicts_stalled_task_and_frees_scheduler() {
+        // A task silent past the deadline loses its registry entry, its
+        // cancellation token fires, its status goes Error, and the
+        // one-at-a-time scheduler slot is freed for other branches — the
+        // server itself keeps running.
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let progress = BranchProgress::new();
+        let task = stalled_branch_task(&progress);
+        // Backdate the last progress past any deadline — set_current_commit
+        // armed the timer at "now", the stall is the elapsed silence.
+        *progress.last_progress_at.lock().unwrap() = Some(Instant::now() - Duration::from_secs(1));
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
+        *registry.current_branch.lock().unwrap() = Some(key.clone());
+
+        registry.check_dead_mans_switch_with_deadline(Duration::ZERO);
+
+        assert!(registry.tasks.lock().unwrap().get(&key).is_none());
+        assert!(task.cancel.is_cancelled());
+        let (_, _, status, _, _, _, _) = progress.snapshot();
+        assert!(matches!(status, IndexStatus::Error(_)));
+        assert!(registry.current_branch.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_dead_mans_switch_keeps_task_with_recent_progress() {
+        // A task still reporting progress inside the deadline stays
+        // registered, uncancelled, and keeps the scheduler slot.
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let progress = BranchProgress::new();
+        let task = stalled_branch_task(&progress);
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
+        *registry.current_branch.lock().unwrap() = Some(key.clone());
+
+        registry.check_dead_mans_switch_with_deadline(Duration::from_secs(300));
+
+        assert!(registry.tasks.lock().unwrap().get(&key).is_some());
+        assert!(!task.cancel.is_cancelled());
+        assert_eq!(registry.current_branch.lock().unwrap().as_ref(), Some(&key));
+    }
+
+    #[test]
+    fn test_on_task_complete_ignores_stale_completion_with_replacement() {
+        // The dead man's switch evicted the old task and a notify already
+        // registered a replacement under the same key. The old task's late
+        // completion must not clear the replacement's scheduler slot, mark
+        // its progress, or remove it.
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let old_task = Arc::new(BranchTask {
+            progress: BranchProgress::new(),
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(None),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        });
+        let new_progress = BranchProgress::new();
+        let new_task = Arc::new(BranchTask {
+            progress: new_progress.clone(),
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(None),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        });
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), new_task.clone());
+        *registry.current_branch.lock().unwrap() = Some(key.clone());
+
+        registry.on_task_complete(&key, TaskResult::Error("late error".to_string()), &old_task);
+
+        assert!(
+            registry
+                .tasks
+                .lock()
+                .unwrap()
+                .get(&key)
+                .is_some_and(|t| Arc::ptr_eq(t, &new_task)),
+            "the replacement task must stay registered"
+        );
+        assert_eq!(
+            registry.current_branch.lock().unwrap().as_ref(),
+            Some(&key),
+            "the replacement's scheduler slot must not be freed"
+        );
+        let (_, _, status, _, _, _, _) = new_progress.snapshot();
+        assert!(
+            matches!(status, IndexStatus::Indexing),
+            "the replacement's status must not be overwritten by the stale error"
+        );
+    }
+
+    #[test]
+    fn test_on_task_complete_stale_without_replacement_frees_slot() {
+        // An evicted task completing late with no replacement still frees
+        // a scheduler slot left naming its key, so queued branches run.
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let old_task = Arc::new(BranchTask {
+            progress: BranchProgress::new(),
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(None),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        });
+        *registry.current_branch.lock().unwrap() = Some(key.clone());
+
+        registry.on_task_complete(&key, TaskResult::Error("late error".to_string()), &old_task);
+
+        assert!(registry.current_branch.lock().unwrap().is_none());
+        assert!(registry.tasks.lock().unwrap().get(&key).is_none());
+    }
+
+    #[test]
     fn test_indexer_registry_set_get_config() {
         let registry = IndexerRegistry::new();
         registry.set_config("http://localhost:8080".to_string(), "Basic abc".to_string());
@@ -2845,7 +3206,7 @@ mod tests {
             branch: "dummy".to_string(),
         });
 
-        registry.on_task_complete(&key, TaskResult::NextCommit("next123".to_string()));
+        registry.on_task_complete(&key, TaskResult::NextCommit("next123".to_string()), &task);
 
         // on_task_complete clears current_branch, then try_spawn_next runs
         // and clears next_commit after reading it. We verify the side effects
@@ -2886,7 +3247,7 @@ mod tests {
             .unwrap()
             .insert(key.clone(), task.clone());
 
-        registry.on_task_complete(&key, TaskResult::NextCommit("next123".to_string()));
+        registry.on_task_complete(&key, TaskResult::NextCommit("next123".to_string()), &task);
 
         // try_spawn_next should have popped the key from the queue.
         assert!(
@@ -2920,7 +3281,11 @@ mod tests {
             store_clustering: std::sync::atomic::AtomicBool::new(false),
             reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
-        registry.tasks.lock().unwrap().insert(key.clone(), task);
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
 
         // Block try_spawn_next from actually spawning.
         *registry.current_branch.lock().unwrap() = Some(BranchKey {
@@ -2928,7 +3293,7 @@ mod tests {
             branch: "dummy".to_string(),
         });
 
-        registry.on_task_complete(&key, TaskResult::Error("test error".to_string()));
+        registry.on_task_complete(&key, TaskResult::Error("test error".to_string()), &task);
 
         assert!(registry.tasks.lock().unwrap().get(&key).is_none());
         let (_, _, status, _, _, _, _) = progress.snapshot();
@@ -3070,7 +3435,7 @@ mod tests {
 
         // on_task_complete with NextCommit should ignore "commit3" and
         // set next_commit = None because reset_chain is true.
-        registry.on_task_complete(&key, TaskResult::NextCommit("commit3".to_string()));
+        registry.on_task_complete(&key, TaskResult::NextCommit("commit3".to_string()), &task);
 
         assert_eq!(
             progress.completed.load(Ordering::Relaxed),
@@ -3541,6 +3906,56 @@ mod tests {
             }),
             "a writable engine must schedule a local branch task"
         );
+    }
+
+    #[test]
+    fn test_handoff_events_from_own_scans_do_not_wake_poller() {
+        use notify::event::{AccessKind, AccessMode, EventKind, MetadataKind, ModifyKind};
+        // The poller's claim_pending opens and reads the watched directory
+        // on every scan — inotify reports that as Access(Open), and
+        // strictatime mounts add atime Modify(Metadata). Waking on either
+        // loops forever; the scan must never wake on events it emits itself.
+        for kind in [
+            EventKind::Access(AccessKind::Open(AccessMode::Any)),
+            EventKind::Access(AccessKind::Read),
+            EventKind::Access(AccessKind::Close(AccessMode::Write)),
+            EventKind::Access(AccessKind::Other),
+            EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any)),
+            EventKind::Modify(ModifyKind::Other),
+            EventKind::Any,
+            EventKind::Other,
+        ] {
+            let event = notify::Event::new(kind);
+            assert!(
+                !handoff_event_wakes(&event),
+                "{:?} must not wake the poller",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn test_handoff_task_file_mutations_wake_poller() {
+        use notify::event::{
+            CreateKind, DataChange, EventKind, ModifyKind, RemoveKind, RenameMode,
+        };
+        for kind in [
+            EventKind::Create(CreateKind::File),
+            EventKind::Create(CreateKind::Any),
+            EventKind::Remove(RemoveKind::File),
+            EventKind::Remove(RemoveKind::Any),
+            EventKind::Modify(ModifyKind::Data(DataChange::Any)),
+            EventKind::Modify(ModifyKind::Name(RenameMode::To)),
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            EventKind::Modify(ModifyKind::Any),
+        ] {
+            let event = notify::Event::new(kind);
+            assert!(
+                handoff_event_wakes(&event),
+                "{:?} must wake the poller",
+                kind
+            );
+        }
     }
 
     /// Engine transport returning a canned status for delete execution.

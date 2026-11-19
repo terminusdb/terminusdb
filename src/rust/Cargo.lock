@@ -5069,7 +5069,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03da047801ff44bb6a4d407d4860c05fd70bb81714e6b2f3812603d5b145b042"
 dependencies = [
  "heck 0.5.0",
- "itertools 0.14.0",
+ "itertools 0.12.1",
  "log",
  "multimap",
  "petgraph 0.8.3",
@@ -5101,7 +5101,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -7243,7 +7243,7 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 [[package]]
 name = "vectorlink"
 version = "2.0.0"
-source = "git+https://github.com/terminusdb-org/vectorlink?rev=b4299c031236d5042887dcdecce70c7b9f6b80e6#b4299c031236d5042887dcdecce70c7b9f6b80e6"
+source = "git+https://github.com/terminusdb-org/vectorlink?rev=e0bd1e70abed9c1f7c6d0d2c08a9ef9f1da581c4#e0bd1e70abed9c1f7c6d0d2c08a9ef9f1da581c4"
 dependencies = [
  "arrow-array",
  "arrow-schema",

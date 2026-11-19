@@ -22,7 +22,7 @@ use std::{
     io::Read,
     path::{Component, Path as StdPath, PathBuf},
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, OnceLock,
     },
 };
@@ -798,6 +798,10 @@ pub enum DispatchMessage {
         output_worker_write_fd: i32,
         request_id: String,
     },
+    /// Wake-up marker queued by `nudge_log_drain` when log entries land —
+    /// without it the loop sleeps in `blocking_recv` and buffered entries
+    /// only flush when a request happens to arrive.
+    FlushLogs,
 }
 
 /// Sender for the single-engine dispatcher queue.
@@ -833,6 +837,31 @@ fn in_flight_requests() -> Arc<Mutex<HashSet<String>>> {
 /// engine under `terminusdb mcp`) install it themselves when this is false.
 pub fn dispatcher_initialized() -> bool {
     DISPATCH_QUEUE.get().is_some()
+}
+
+/// Set when a wake-up marker for the log channel is queued; cleared when
+/// the marker is processed so the next log entry queues a fresh one. The
+/// marker is deduplicated so a log flood cannot fill the bounded dispatch
+/// queue and starve real requests.
+static LOG_DRAIN_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// Queue a one-shot marker so the dispatcher loop wakes to drain the log
+/// channel even with no request traffic. Called from `crate::log::log`
+/// after an entry is enqueued.
+pub fn nudge_log_drain() {
+    if LOG_DRAIN_PENDING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let queued = DISPATCH_QUEUE
+        .get()
+        .map(|tx| tx.try_send(DispatchMessage::FlushLogs).is_ok())
+        .unwrap_or(false);
+    if !queued {
+        // Queue full or dispatcher not running — entries still drain at
+        // engine init and on every dispatch pass; re-arm so a later
+        // entry can try again.
+        LOG_DRAIN_PENDING.store(false, Ordering::SeqCst);
+    }
 }
 
 /// Bounds on the log drain before each dispatch. Each entry costs a full
@@ -898,6 +927,17 @@ pub fn init_dispatcher() {
             );
             match msg {
                 DispatchMessage::Shutdown => break,
+                DispatchMessage::FlushLogs => {
+                    // Clear before draining so an entry landing mid-drain
+                    // queues a fresh marker and is picked up next pass.
+                    LOG_DRAIN_PENDING.store(false, Ordering::SeqCst);
+                    crate::log::drain_log_messages(
+                        &context,
+                        &log_rx,
+                        LOG_DRAIN_PER_DISPATCH,
+                        LOG_DRAIN_BUDGET,
+                    );
+                }
                 DispatchMessage::Pipe(req) => {
                     let dispatch_start = std::time::Instant::now();
                     let dispatch_result = dispatch_pipe_to_prolog(&context, &req);
