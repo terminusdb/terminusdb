@@ -769,7 +769,16 @@ register_sse_subscription_parsed(Request, StreamId, Mode, Descriptor,
     ),
     (   nonvar(Response)
     ->  true
-    ;   (   catch('$appserver':appserver_check_subscription_limit(Auth), _, fail)
+    ;   %% Reclaim slots held by streams whose client has gone before counting
+        %% against the per-user limit. Until now the sweep ran only from
+        %% do_broadcast_graphql_events, so a user who opened and dropped
+        %% `TERMINUSDB_SSE_MAX_SUBSCRIPTIONS_PER_USER` streams without any
+        %% commit occurring in between was refused every further subscription
+        %% indefinitely: nothing was left to trigger the sweep that would have
+        %% released them. Subscribing is the other moment at which stale
+        %% streams matter, so it sweeps too.
+        sweep_stale_sse_streams,
+        (   catch('$appserver':appserver_check_subscription_limit(Auth), _, fail)
         ->  true
         ;   sse_graphql_error_json("Subscription limit exceeded", "TOO_MANY_REQUESTS", ErrJson),
             sse_json_response(Request, 429, ErrJson, Response)
