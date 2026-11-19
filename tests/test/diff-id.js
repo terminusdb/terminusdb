@@ -414,33 +414,37 @@ describe('diff-id', function () {
           after_data_version: dv3,
         })
       expect(diff03.status).to.equal(200)
-      expect(diff03.body).to.deep.equal(
-        [
-          {
-            '@insert': {
-              '@id': docId1,
-              '@type': class1,
-              a: 'pickles and eggs',
-            },
-            '@op': 'Insert',
+      // Pages slice the changed-document enumeration, which yields document
+      // ids in sorted order — a stable order is what makes paging safe.
+      const byInsertId = (x, y) => (x['@insert']['@id'] < y['@insert']['@id'] ? -1 : 1)
+      const expected = [
+        {
+          '@insert': {
+            '@id': docId1,
+            '@type': class1,
+            a: 'pickles and eggs',
           },
-          {
-            '@insert': {
-              '@id': docId2,
-              '@type': class2,
-              b: 'frog legs',
-            },
-            '@op': 'Insert',
+          '@op': 'Insert',
+        },
+        {
+          '@insert': {
+            '@id': docId2,
+            '@type': class2,
+            b: 'frog legs',
           },
-          {
-            '@insert': {
-              '@id': docId3,
-              '@type': class2,
-              b: 'duck soup',
-            },
-            '@op': 'Insert',
+          '@op': 'Insert',
+        },
+        {
+          '@insert': {
+            '@id': docId3,
+            '@type': class2,
+            b: 'duck soup',
           },
-        ])
+          '@op': 'Insert',
+        },
+      ]
+      expected.sort(byInsertId)
+      expect(diff03.body.slice().sort(byInsertId)).to.deep.equal(expected)
 
       const diff03Start0Count1 = await agent.post(path).send(
         {
@@ -450,17 +454,7 @@ describe('diff-id', function () {
           count: 1,
         })
       expect(diff03Start0Count1.status).to.equal(200)
-      expect(diff03Start0Count1.body).to.deep.equal(
-        [
-          {
-            '@insert': {
-              '@id': docId1,
-              '@type': class1,
-              a: 'pickles and eggs',
-            },
-            '@op': 'Insert',
-          },
-        ])
+      expect(diff03Start0Count1.body).to.deep.equal(expected.slice(0, 1))
 
       const diff03Start1Count1 = await agent.post(path).send(
         {
@@ -470,17 +464,7 @@ describe('diff-id', function () {
           count: 1,
         })
       expect(diff03Start1Count1.status).to.equal(200)
-      expect(diff03Start1Count1.body).to.deep.equal(
-        [
-          {
-            '@insert': {
-              '@id': docId2,
-              '@type': class2,
-              b: 'frog legs',
-            },
-            '@op': 'Insert',
-          },
-        ])
+      expect(diff03Start1Count1.body).to.deep.equal(expected.slice(1, 2))
 
       const diff03Start1Count3 = await agent.post(path).send(
         {
@@ -490,25 +474,7 @@ describe('diff-id', function () {
           count: 3,
         })
       expect(diff03Start1Count3.status).to.equal(200)
-      expect(diff03Start1Count3.body).to.deep.equal(
-        [
-          {
-            '@insert': {
-              '@id': docId2,
-              '@type': class2,
-              b: 'frog legs',
-            },
-            '@op': 'Insert',
-          },
-          {
-            '@insert': {
-              '@id': docId3,
-              '@type': class2,
-              b: 'duck soup',
-            },
-            '@op': 'Insert',
-          },
-        ])
+      expect(diff03Start1Count3.body).to.deep.equal(expected.slice(1, 3))
     })
 
     it('apply squash commit', async function () {

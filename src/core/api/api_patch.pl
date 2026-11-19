@@ -1365,19 +1365,21 @@ test(commits_changed_id_enumerates_touched_documents,
             Changed),
     sort(Changed, Sorted_Changed),
 
-    % Positive set: everything the range touched is enumerated.
-    % revert/a may or may not be enumerated (the revert may not even
-    % produce a store change) — membership is the contract, so compare
-    % on the guaranteed positive set and the guaranteed negative set.
+    % Positive set: documents whose state differs between the endpoints —
+    % the range squashes to a net delta, so flash/a and revert/a net out
+    % and are never enumerated.
     maplist([Compressed, Expanded]>>(
                 atomic_list_concat(
                     ['http://somewhere.for.now/document/', Compressed],
                     Expanded)),
-            ["created/a", "flash/a", "gone/a", "keep/a"],
+            ["created/a", "gone/a", "keep/a"],
             Expected_Changed),
     ord_subset(Expected_Changed, Sorted_Changed),
-    % Negative set: untouched/a is never enumerated.
+    % Negative set: untouched, net-zero and untouched-by-diff documents are
+    % never enumerated.
     \+ member('http://somewhere.for.now/document/untouched/a', Sorted_Changed),
+    \+ member('http://somewhere.for.now/document/flash/a', Sorted_Changed),
+    \+ member('http://somewhere.for.now/document/revert/a', Sorted_Changed),
 
     % Diff-level contract — this is what the apply semantics need.
     % JSONDocument ids stay expanded (anyURI), so compare by expansion.
