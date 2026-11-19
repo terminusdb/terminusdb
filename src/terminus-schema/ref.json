@@ -37,20 +37,31 @@
                 "@class" : "xsd:anyURI" },
   "operation" : "MergeOperation" }
 
+{ "@id" : "BranchOrigin",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@key" : { "@type" : "ValueHash" },
+  "@documentation" : {
+      "@comment" : "Branch creation provenance: the graph spec the branch was created from (a dangling literal when it names another repository) and the commit it pointed at when the branch was created." },
+  "commit" : { "@type" : "Optional",
+               "@class" : "Commit" },
+  "source" : { "@type" : "Optional",
+               "@class" : "xsd:string" } }
+
 { "@id" : "Branch",
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "A named branch object which points to the current head (or none if empty).",
       "@properties" : { "name" : "The name of the branch.",
                         "head" : "An optional commit object giving the present latest commit.",
-                        "created_from" : "The commit the branch was created from (if one exists)."}
+                        "created_from" : "The origin the branch was created from (if one exists)."}
   },
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] },
   "head" : { "@type" : "Optional",
              "@class" : "Commit" },
   "created_from" : { "@type" : "Optional",
-                     "@class" : "Commit" },
+                     "@class" : "BranchOrigin" },
   "name" : "xsd:string" }
 
 { "@id" : "Commit",

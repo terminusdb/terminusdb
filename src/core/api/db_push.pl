@@ -127,8 +127,11 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
             ;   Remote_Commit_Uri_Option = none
             ),
             branch_name_uri(Remote_Repository_Context, Remote_Branch, Remote_Branch_Uri)
-        ;   insert_branch_object(Remote_Repository_Context_With_Prefixes,
-                                 Remote_Branch, Local_Commit_Uri,
+        ;   descriptor_spec_string(Branch_Descriptor, Local_Branch_Spec),
+            insert_branch_object(Remote_Repository_Context_With_Prefixes,
+                                 Remote_Branch,
+                                 _{commit: Local_Commit_Uri,
+                                   source: Local_Branch_Spec},
                                  Remote_Branch_Uri),
             Remote_Commit_Uri_Option = none
         ),
@@ -487,7 +490,9 @@ test(push_created_remote_branch_records_created_from,
     branch_name_uri(Repository_Descriptor, "dev", Remote_Branch_Uri),
     create_context(Repository_Descriptor, Remote_Repo_Ctx),
     get_document(Remote_Repo_Ctx, Remote_Branch_Uri, Remote_Branch_Doc),
-    get_dict(created_from, Remote_Branch_Doc, Local_Head_Uri).
+    get_dict(created_from, Remote_Branch_Doc, Origin),
+    get_dict(commit, Origin, Local_Head_Uri),
+    get_dict(source, Origin, "admin/foo/local/branch/main").
 
 test(push_twice_with_second_push_changing_nothing,
      [setup((setup_temp_store(State),

@@ -15,6 +15,7 @@
               layer_uri_for_commit/4,
               insert_branch_object/3,
               insert_branch_object/4,
+              descriptor_spec_string/2,
               delete_branch_object/2,
               insert_base_commit_object/5,
               insert_base_commit_object/6,
@@ -195,6 +196,25 @@ insert_branch_object(Context, Branch_Name, Created_From, Branch_Uri) :-
     ;   insert_document(Context,
                         Branch_Document.put(created_from, Created_From),
                         Branch_Uri)).
+
+/**
+ * descriptor_spec_string(+Descriptor, -Spec) is det.
+ *
+ * The absolute path spec naming a branch or commit descriptor — the
+ * form a client would use to address it (org/db/repo/branch/name or
+ * org/db/repo/commit/id). Recorded as branch creation provenance.
+ */
+descriptor_spec_string(Descriptor, Spec) :-
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    atomic_list_concat([Database_Descriptor.organization_name,
+                        Database_Descriptor.database_name,
+                        Repository_Descriptor.repository_name],
+                       '/', Prefix),
+    (   branch_descriptor{branch_name: Name} :< Descriptor
+    ->  atomic_list_concat([Prefix, "branch", Name], '/', Spec)
+    ;   commit_descriptor{commit_id: Id} :< Descriptor
+    ->  atomic_list_concat([Prefix, "commit", Id], '/', Spec)).
 
 delete_branch_object(Context, Branch_Uri) :-
     delete_document(Context, Branch_Uri).

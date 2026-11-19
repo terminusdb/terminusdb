@@ -7,6 +7,7 @@
 :- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
+:- use_module(core(document)).
 :- use_module(db_create).
 :- use_module(db_delete).
 :- use_module(db_fetch).
@@ -66,14 +67,23 @@ do_clone_(Auth,Account,DB,Remote,Source, Fetch_Predicate,Meta_Data) :-
     fast_forward_branch(To_Branch_Descriptor, From_Branch_Descriptor, Applied_Commits),
 
     % The local branch was created empty before the fetched commits
-    % arrived — its origin is the source head it was created to follow.
+    % arrived — its origin is the source it was created to follow.
+    (   remote_path(Source, db(Remote_Organization, Remote_Database))
+    ->  atomic_list_concat([Remote_Organization, Remote_Database,
+                            "local", "branch", "main"], '/', Source_Spec)
+    ;   Source_Spec = Source
+    ),
     To_Repo_Descriptor = (To_Branch_Descriptor.repository_descriptor),
     create_context(To_Repo_Descriptor, To_Repo_Context),
     with_transaction(To_Repo_Context,
-                     (   branch_head_commit(To_Repo_Context, "main", Head_Uri),
-                         branch_name_uri(To_Repo_Context, "main", To_Branch_Uri)
-                     ->  ask(To_Repo_Context,
-                             insert(To_Branch_Uri, created_from, Head_Uri))
+                     (   branch_name_uri(To_Repo_Context, "main", To_Branch_Uri),
+                         get_document(To_Repo_Context, To_Branch_Uri, Branch_Doc),
+                         (   branch_head_commit(To_Repo_Context, "main", Head_Uri)
+                         ->  Origin = _{commit: Head_Uri, source: Source_Spec}
+                         ;   Origin = _{source: Source_Spec}),
+                         put_dict(created_from, Branch_Doc, Origin, Updated_Doc),
+                         replace_document(To_Repo_Context, Updated_Doc, _)
+                     ->  true
                      ;   true),
                      _),
 
@@ -194,14 +204,17 @@ test("clone records the source head as created_from",
           "origin", "admin/ffsrc", [_U,_H,_P]>>fail, _Meta_Data),
 
     % The cloned branch existed empty before the fetched commits arrived —
-    % its origin is the source head it was created to follow.
+    % its origin is the source head it was created to follow, and the
+    % source spec names the repository it was cloned from.
     resolve_absolute_string_descriptor("admin/ffdest/local/branch/main", Dest_Branch),
     Repo_Descriptor = (Dest_Branch.repository_descriptor),
     branch_head_commit(Repo_Descriptor, "main", Head_Uri),
     branch_name_uri(Repo_Descriptor, "main", Branch_Uri),
     create_context(Repo_Descriptor, Repo_Ctx),
     get_document(Repo_Ctx, Branch_Uri, Branch_Doc),
-    get_dict(created_from, Branch_Doc, Head_Uri).
+    get_dict(created_from, Branch_Doc, Origin),
+    get_dict(commit, Origin, Head_Uri),
+    get_dict(source, Origin, "admin/ffsrc/local/branch/main").
 
 :- end_tests(clone_indexer_hook).
 

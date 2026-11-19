@@ -68,6 +68,7 @@
               descriptor_commit_id_uri/4,
               insert_branch_object/3,
               insert_branch_object/4,
+              descriptor_spec_string/2,
               delete_branch_object/2,
               insert_base_commit_object/5,
               insert_base_commit_object/6,
