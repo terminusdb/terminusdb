@@ -495,6 +495,16 @@ api_global_error_jsonld(error(bad_apply_type(Apply_Type),_), Type, JSON) :-
                               'api:apply_type' : Apply_Type},
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(apply_schema_delta(Before, After),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The commits ~q and ~q carry different schemas. Squash apply merges instance documents only — merge the schema separately first.", [Before, After]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ApplySchemaDelta',
+                              'api:before_commit' : Before,
+                              'api:after_commit' : After},
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(bad_conflict_resolution(Resolution),_), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "Invalid conflict_resolution ~q. Expected \"error\", \"ours\", \"theirs\", or an object with \"default\" and \"documents\" keys.", [Resolution]),

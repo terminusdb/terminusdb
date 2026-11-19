@@ -356,6 +356,21 @@ squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
               error(bad_apply_type(Type), _)),
     coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
     coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
+    % Squash merges instance documents only — a schema delta between the
+    % endpoints cannot be applied, so refuse it instead of dropping it.
+    create_context(Branch_Descriptor.repository_descriptor, Repo_Context),
+    ref_entity:commit_id_uri(Repo_Context, Before_Commit_Id, Before_Commit_Uri),
+    ref_entity:commit_id_uri(Repo_Context, After_Commit_Id, After_Commit_Uri),
+    (   ref_entity:layer_uri_for_commit(Repo_Context, Before_Commit_Uri,
+                                        schema, Before_Schema_Uri)
+    ->  true
+    ;   Before_Schema_Uri = none),
+    (   ref_entity:layer_uri_for_commit(Repo_Context, After_Commit_Uri,
+                                        schema, After_Schema_Uri)
+    ->  true
+    ;   After_Schema_Uri = none),
+    do_or_die(Before_Schema_Uri = After_Schema_Uri,
+              error(apply_schema_delta(Before_Commit_Id, After_Commit_Id), _)),
     create_context(Branch_Descriptor, Commit_Info, Context),
     option(conflict_resolution(Raw_Resolution), Options, error),
     normalize_conflict_resolution(Raw_Resolution, Context, Resolution),
@@ -1397,6 +1412,43 @@ test(commits_changed_id_enumerates_touched_documents,
     \+ diff_id_in(Diffs, 'flash/a', _),
     \+ diff_id_in(Diffs, 'revert/a', _),
     \+ diff_id_in(Diffs, 'untouched/a', _).
+
+/* Squash merges instance documents only — a schema delta between the
+ * endpoints cannot be applied, so the apply refuses it rather than
+ * dropping the schema change silently. */
+test(apply_squash_refuses_a_schema_delta,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [graph_type(instance), author("gavin"), message("test."),
+               full_replace(false), json(false)],
+
+    open_string('[{"@id":"City/a","@type":"City","name":"Warsaw"}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+
+    % Same branch, second commit tightens the Person schema.
+    open_string('{"@id":"Person","@type":"Class","@inherits":"Named","occupation":"xsd:string","address":"xsd:string","parent":{"@type":"Optional","@class":"Person"},"birthday":{"@type":"Optional","@class":"xsd:dateTime"}}', SS),
+    api_replace_documents(SystemDB, Auth, Path, SS, no_data_version,
+                          data_version(branch,Head), _, _,
+                          [create(false), graph_type(schema)|Options]),
+
+    Commit_Info = commit_info{author:"gavin", message:"merge"},
+    catch(api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                  Commit1, Head, []),
+          E, true),
+    E = error(apply_schema_delta(Commit1, Head), _),
+
+    % The dry run refuses identically — the preview must share the
+    % commit path's verdict.
+    catch(api_check_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                        Commit1, Head, [], _),
+          E2, true),
+    E2 = error(apply_schema_delta(Commit1, Head), _).
 
 test(commits_changed_id_enumerates_over_a_layerless_base,
      [setup((setup_temp_store(State),
