@@ -30,6 +30,7 @@
               ]).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
+:- use_module(library(pairs)).
 :- use_module(library(ordsets)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).

@@ -11,7 +11,7 @@
           ]).
 
 :- use_module(library(yall)).
-:- use_module(library(lists), [reverse/2, union/3, member/2]).
+:- use_module(library(lists), [append/3, reverse/2, member/2]).
 :- use_module(library(apply), [maplist/3]).
 :- use_module(library(lazy_lists)).
 :- use_module(library(solution_sequences)).
