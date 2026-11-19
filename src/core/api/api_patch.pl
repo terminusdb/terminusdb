@@ -5,7 +5,8 @@
               api_diff_id/8,
               api_diff_id_document/8,
               api_diff_all_documents/7,
-              api_apply_squash_commit/7
+              api_apply_squash_commit/7,
+              api_check_apply_squash_commit/8
           ]).
 
 :- use_module(core(util)).
@@ -19,6 +20,8 @@
                   compress_doc_ids/4
               ]).
 :- use_module(core(document/apply), [apply_diff_ids_captures/7]).
+:- use_module(core(transaction/database),
+              [pre_transaction_tabling/0, post_transaction_tabling/0]).
 :- use_module(core(document/history),
               [changed_document_id/2,
                commits_changed_id/5
@@ -243,6 +246,55 @@ api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Dif
            ).
 
 api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, After_Version, Options) :-
+    squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
+                       After_Version, Options, Context, Branch_Descriptor,
+                       Before_Commit_Id, After_Commit_Id, Resolution,
+                       Merged_Options),
+    with_transaction(
+        Context,
+        (   squash_merge_witnesses(Context, Branch_Descriptor,
+                                   Before_Commit_Id, After_Commit_Id,
+                                   Resolution, Merged_Options, Witnesses),
+            (   Witnesses = []
+            ->  true
+            ;   throw(error(apply_squash_witnesses(Witnesses)))
+            )
+        ),
+        _
+    ).
+
+/* api_check_apply_squash_commit — dry-run for POST /api/apply.
+ *
+ *  Runs the same merge against a context whose transaction is never run:
+ *  the uncommitted layer is discarded when the call returns, so the
+ *  branch head does not move. Witnesses carry @expected/@found so a
+ *  caller can render both sides of a conflict before committing.
+ */
+api_check_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, After_Version, Options, Result) :-
+    squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
+                       After_Version, Options, Context, Branch_Descriptor,
+                       Before_Commit_Id, After_Commit_Id, Resolution,
+                       Merged_Options),
+    setup_call_cleanup(
+        pre_transaction_tabling,
+        squash_merge_witnesses(Context, Branch_Descriptor,
+                               Before_Commit_Id, After_Commit_Id,
+                               Resolution,
+                               Merged_Options.put(_{dry_run:true}),
+                               Witnesses),
+        post_transaction_tabling),
+    (   Witnesses = []
+    ->  Result = json{'@type':'api:CheckResponse',
+                      'api:valid':true,
+                      'api:witnesses':[]}
+    ;   Result = json{'@type':'api:CheckResponse',
+                      'api:valid':false,
+                      'api:witnesses':Witnesses}).
+
+squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
+                   After_Version, Options, Context, Branch_Descriptor,
+                   Before_Commit_Id, After_Commit_Id, Resolution,
+                   Merged_Options) :-
     resolve_descriptor_auth(write, System_DB, Auth, Path, instance, Branch_Descriptor),
     option(type(Type), Options, squash),
     do_or_die(Type = squash,
@@ -254,37 +306,35 @@ api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, Afte
     normalize_conflict_resolution(Raw_Resolution, Context, Resolution),
     merge_options(Options, options{keep:json{'@id':true, '@type':true},
                                    count:inf,
-                                   start:0}, Merged_Options),
-    with_transaction(
-        Context,
-        (   findall(Witness,
-                    (   document_diffs_from_commits(Branch_Descriptor,
-                                                    Before_Commit_Id,
-                                                    After_Commit_Id,
-                                                    Diff,
-                                                    Merged_Options),
-                        apply_diff(Context,Diff,Witness0,Merged_Options),
-                        resolve_squash_conflict(Context, Branch_Descriptor,
-                                                After_Commit_Id, Diff,
-                                                Witness0, Resolution, Witness),
-                        \+ Witness = null
-                    ),
-                    Witnesses),
-            (   Witnesses = []
-            ->  true
-            ;   throw(error(apply_squash_witnesses(Witnesses)))
-            )
-        ),
-        _
-    ).
+                                   start:0}, Merged_Options).
+
+squash_merge_witnesses(Context, Branch_Descriptor, Before_Commit_Id,
+                       After_Commit_Id, Resolution, Merged_Options,
+                       Witnesses) :-
+    findall(Witness,
+            (   document_diffs_from_commits(Branch_Descriptor,
+                                            Before_Commit_Id,
+                                            After_Commit_Id,
+                                            Diff,
+                                            Merged_Options),
+                apply_diff(Context,Diff,Witness0,Merged_Options),
+                resolve_squash_conflict(Context, Branch_Descriptor,
+                                        After_Commit_Id, Diff,
+                                        Witness0, Resolution, Witness),
+                \+ Witness = null
+            ),
+            Witnesses).
 
 %% normalize_conflict_resolution(+Raw, +Context, -Resolution) is det.
 %
 % Accepts a bare winner atom/string ("error", "ours", "theirs") or a dict
-% with `default` and `documents` keys whose values are winner strings.
-% Documents keys may be @base-compressed, prefixed or absolute IRIs; all
-% are expanded against the context prefixes so lookup always happens in
-% the expanded form the diffs carry.
+% with `default` and `documents` keys. `documents` maps each winner atom
+% to a list of document ids — `{"theirs": ["Person/Jane"], "ours": [...]}` —
+% so arbitrary document ids never sit in JSON object keys. Ids may be
+% @base-compressed, prefixed or absolute IRIs; all are expanded against
+% the context prefixes and stored id->winner so lookup happens in the
+% expanded form the diffs carry. An id listed under two winners is
+% ambiguous and rejected.
 normalize_conflict_resolution(Raw, Context, resolution{default:Default, documents:Documents}) :-
     (   is_dict(Raw)
     ->  (   get_dict(default, Raw, Default0)
@@ -295,18 +345,31 @@ normalize_conflict_resolution(Raw, Context, resolution{default:Default, document
         ->  do_or_die(is_dict(Documents0),
                       error(bad_conflict_resolution(Raw), _)),
             get_dict(prefixes, Context, Prefixes),
-            dict_pairs(Documents0, json, Pairs),
-            maplist({Raw, Prefixes}/[K-V,KA-VA]>>(
-                        (   resolution_winner_value(V, VA),
-                            catch(prefix_expand(K, Prefixes, KX),
-                                  error(_, _),
-                                  fail),
-                            atom_string(KA, KX)
-                        ->  true
+            dict_pairs(Documents0, json, Winner_Pairs),
+            findall(Id-Winner,
+                    (   member(Win_Raw-Ids, Winner_Pairs),
+                        (   resolution_winner_value(Win_Raw, Winner)
+                        ->  do_or_die(is_list(Ids),
+                                      error(bad_conflict_resolution(Raw), _)),
+                            member(Id0, Ids),
+                            (   catch((atom_string(Id_Atom, Id0),
+                                       prefix_expand(Id_Atom, Prefixes, Id)),
+                                      error(_, _), fail)
+                            ->  true
+                            ;   throw(error(bad_conflict_resolution(Raw), _)))
                         ;   throw(error(bad_conflict_resolution(Raw), _))
-                        )),
-                    Pairs, Pairs2),
-            dict_create(Documents, json, Pairs2)
+                        )
+                    ),
+                    Doc_Pairs0),
+            keysort(Doc_Pairs0, Sorted_Pairs),
+            group_pairs_by_key(Sorted_Pairs, Grouped),
+            (   member(_-Winners, Grouped),
+                sort(Winners, Distinct_Winners),
+                length(Distinct_Winners, N), N > 1
+            ->  throw(error(bad_conflict_resolution(Raw), _))
+            ;   true),
+            maplist([Id-[W|_], Id-W]>>true, Grouped, Doc_Pairs),
+            dict_create(Documents, json, Doc_Pairs)
         ;   Documents = json{}
         ),
         (   resolution_winner_value(Default0, Default)
@@ -590,6 +653,9 @@ test(apply_delete_edit_conflict_diff_deletes,
     json{'@op':'DeleteEditConflict',
          '@id':"item/a",
          '@deleted_by':"theirs"} :< W,
+    % witnesses are identities only — @expected/@found belong to dry_run
+    \+ get_dict('@expected', W, _),
+    \+ get_dict('@found', W, _),
 
     % nothing was written: ours' edit survives
     resolve_absolute_string_descriptor(Path, Main_Desc),
@@ -735,7 +801,7 @@ test(apply_delete_edit_resolution_per_document,
                             Commit1, Dev_Head,
                             [conflict_resolution(
                                  json{default:"ours",
-                                      documents:json{'item/a':"theirs"}})]),
+                                      documents:json{theirs:["item/a"]}})]),
 
     resolve_absolute_string_descriptor(Path, Main_Desc),
     open_descriptor(Main_Desc, Main_T),
@@ -1036,6 +1102,98 @@ test(apply_delete_edit_conflict_reports_all_witnesses,
           json{'@op':'DeleteEditConflict',
                '@id':"item/b",
                '@deleted_by':"theirs"} :< W_B)).
+
+test(apply_dry_run_reports_conflict_without_committing,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+                      '[{"@id":"item/a","name":"alpha","n":1}]',
+                      edit_doc_body, delete_doc_body),
+
+    Commit_Info = commit_info{author:"gavin", message:"preview"},
+    api_check_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                  Commit1, Dev_Head, [], Result),
+    json{'@type':'api:CheckResponse',
+         'api:valid':false} :< Result,
+    [W] = Result.'api:witnesses',
+    json{'@op':'DeleteEditConflict',
+         '@id':"item/a",
+         '@deleted_by':"theirs"} :< W,
+    get_dict('@expected', W, Expected),
+    get_dict(n, Expected, 1),
+    get_dict('@found', W, Found),
+    get_dict(n, Found, 2),
+
+    % the dry run wrote nothing: ours' edit is still the live state
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'item/a', Doc_A),
+    get_dict(n, Doc_A, 2).
+
+test(apply_dry_run_clean_merge_reports_valid,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(
+        SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+        '[{"@id":"item/a","name":"alpha","n":1}]',
+        edit_doc_body,
+        {SystemDB, Auth}/[_, _, Dev_Path_In, Dev_Head_Out, Options]>>(
+            open_string('[{"@id":"item/b","name":"beta"}]', S),
+            api_insert_documents(SystemDB, Auth, Dev_Path_In, S,
+                                 no_data_version,
+                                 data_version(branch,Dev_Head_Out), _, _,
+                                 Options))),
+
+    Commit_Info = commit_info{author:"gavin", message:"preview"},
+    api_check_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                  Commit1, Dev_Head, [], Result),
+    json{'@type':'api:CheckResponse',
+         'api:valid':true,
+         'api:witnesses':[]} :< Result,
+
+    % nothing committed: item/b does not exist on main
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    \+ get_document(Main_T, 'item/b', _).
+
+test(apply_dry_run_resolution_reports_verdict,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+                      '[{"@id":"item/a","name":"alpha","n":1}]',
+                      edit_doc_body, delete_doc_body),
+
+    Commit_Info = commit_info{author:"gavin", message:"preview"},
+    api_check_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                  Commit1, Dev_Head,
+                                  [conflict_resolution(theirs)], Result),
+    json{'@type':'api:CheckResponse',
+         'api:valid':true,
+         'api:witnesses':[]} :< Result,
+
+    % still nothing committed: ours' edit survives
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'item/a', Doc_A),
+    get_dict(n, Doc_A, 2).
 
 :- end_tests(apply).
 

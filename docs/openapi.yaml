@@ -2989,17 +2989,40 @@ paths:
                   type: boolean
                   default: true
                   description: "Allow conflicting patch to apply if it would yield the same final state"
+                "conflict_resolution":
+                  description: "How to resolve conflicts: a winner string (\"error\" reports, \"ours\" keeps the target state, \"theirs\" applies the incoming state), or an object with a `default` winner and a `documents` map from winner to a list of document ids for per-document overrides. Document ids may be @base-compressed, prefixed, or absolute IRIs."
+                  oneOf:
+                    - type: string
+                      enum: [error, ours, theirs]
+                    - type: object
+                      properties:
+                        "default":
+                          type: string
+                          enum: [error, ours, theirs]
+                        "documents":
+                          type: object
+                          additionalProperties:
+                            type: array
+                            items:
+                              type: string
+                      example: { "default" : "error", "documents" : { "theirs" : ["Person/Jane"], "ours" : ["Person/Alex"] } }
+                "dry_run":
+                  type: boolean
+                  default: false
+                  description: "Preview the merge without committing. Returns an api:CheckResponse reporting api:valid and the conflict witnesses; witnesses carry @expected/@found document bodies so a caller can render both sides."
                 "keep":
                   type: object
                   example: { "@id" : true, "@type" : true }
       responses:
         200:
-          description: "Successful Patch Application"
+          description: "Successful Patch Application, or an api:CheckResponse when dry_run is set"
           content:
             application/json:
               schema:
                 type: object
                 example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+        400:
+          description: "Bad apply type (only squash is supported) or malformed conflict_resolution"
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
@@ -3012,7 +3035,7 @@ paths:
             application/json:
               schema:
                 type: object
-                example: { "@type" : "api:ApplyError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
+                example: { "@type" : "api:ApplyError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}, {"@op" : "DeleteEditConflict", "@id" : "Person/Jane", "@deleted_by" : "theirs"}]}
   /log/{path}:
     get:
       operationId: getCommitLog

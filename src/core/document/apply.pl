@@ -50,20 +50,22 @@ apply_diff(Context, Diff, Conflict, Options) :-
             % the diff, so the other side edited it since the merge
             % base: delete-versus-edit conflict.
             ;   compressed_document_id(Context, Delete_ID, ID_String),
-                Conflict = json{ '@op' : 'DeleteEditConflict',
-                                 '@id' : ID_String,
-                                 '@deleted_by' : "theirs",
-                                 '@expected' : Normalized_Delete,
-                                 '@found' : Current }
+                Conflict0 = json{ '@op' : 'DeleteEditConflict',
+                                  '@id' : ID_String,
+                                  '@deleted_by' : "theirs" },
+                (   option(dry_run(true), Options)
+                ->  Conflict = Conflict0.put(_{ '@expected' : Normalized_Delete,
+                                                '@found' : Current })
+                ;   Conflict = Conflict0 )
             )
-        ;   missing_delete_conflict(Delete_ID, Options, Conflict)
+        ;   missing_delete_conflict(Context, Delete_ID, Options, Conflict)
         )
     ;   catch(
             (   delete_document(Context, Delete_ID),
                 Conflict = null
             ),
             error(document_not_found(ID), _),
-            missing_delete_conflict(ID, Options, Conflict))
+            missing_delete_conflict(Context, ID, Options, Conflict))
     ).
 apply_diff(Context, Diff, Conflict, Options) :-
     get_dict('@insert', Diff, Insert),
@@ -79,8 +81,9 @@ apply_diff(Context, Diff, Conflict, Options) :-
             get_document(Context,Id,Document),
             Document = Normalized_Insert
         ->  Conflict = null
-        ;   Conflict = json{ '@op' : 'InsertConflict',
-                             '@id_already_exists' : Id }
+        ;   compressed_document_id(Context, Id, ID_String),
+            Conflict = json{ '@op' : 'InsertConflict',
+                             '@id_already_exists' : ID_String }
         )
     ).
 apply_diff(Context, Diff, Conflict, Options) :-
@@ -95,7 +98,8 @@ apply_diff(Context, Diff, Conflict, Options) :-
         ->  apply_replace_document(Context, JSON_In, JSON_Out, _),
             Conflict = null
         ;   Result = conflict(Conflict_Prototype),
-            put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
+            compressed_document_id(Context, ID, ID_String),
+            put_dict(_{ '@id' : ID_String }, Conflict_Prototype, Conflict)
         )
     % The document is absent at target but edited in the diff: the
     % target side deleted it — edit-versus-delete conflict.
@@ -114,11 +118,12 @@ compressed_document_id(Context, Id, Id_Str) :-
     ->  atom_string(Compressed, Id_Str)
     ;   Id_Str = Compressed ).
 
-missing_delete_conflict(ID, Options, Conflict) :-
+missing_delete_conflict(Context, ID, Options, Conflict) :-
     (   option(match_final_state(true), Options)
     ->  Conflict = null
-    ;   Conflict = json{ '@op' : 'DeleteConflict',
-                         '@id_does_not_exists' : ID
+    ;   compressed_document_id(Context, ID, Id_Str),
+        Conflict = json{ '@op' : 'DeleteConflict',
+                         '@id_does_not_exists' : Id_Str
                        }
     ).
 
@@ -165,8 +170,9 @@ apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Capt
         ->  Conflict = null,
             Ids = [],
             Captures_Out = Captures_In
-        ;   Conflict = json{ '@op' : 'DeleteConflict',
-                             '@id_does_not_exists' : ID },
+        ;   compressed_document_id(Context, ID, Id_Str),
+            Conflict = json{ '@op' : 'DeleteConflict',
+                             '@id_does_not_exists' : Id_Str },
             Ids = [],
             Captures_Out = Captures_In
         )
@@ -189,8 +195,9 @@ apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Capt
         ->  Conflict = null,
             Ids = [],
             Captures_Out = Captures_In
-        ;   Conflict = json{ '@op' : 'InsertConflict',
-                             '@id_already_exists' : Id },
+        ;   compressed_document_id(Context, Id, Id_Str),
+            Conflict = json{ '@op' : 'InsertConflict',
+                             '@id_already_exists' : Id_Str },
             Ids = [],
             Captures_Out = Captures_In
         )
@@ -213,7 +220,8 @@ apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Capt
     ;   Result = conflict(Conflict_Prototype),
         Ids = [],
         Captures_Out = Captures_In,
-        put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
+        compressed_document_id(Context, ID, ID_String),
+        put_dict(_{ '@id' : ID_String }, Conflict_Prototype, Conflict)
     ).
 
 normalize_diff(Prefixes, Diff, Normalized),

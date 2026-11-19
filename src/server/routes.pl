@@ -3124,19 +3124,35 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
     ;   Resolution_Options = []
     ),
 
+    (   _{ dry_run: Dry_Run } :< Document
+    ->  do_or_die(member(Dry_Run, [true, false]),
+                  error(bad_api_document(Document, [dry_run]), _))
+    ;   Dry_Run = false
+    ),
+
     api_report_errors(
         apply,
         Request,
         catch(
-            (   api_apply_squash_commit(System_DB, Auth, Path, Commit_Info,
-                                        Before_Commit, After_Commit,
-                                        [type(Type_Atom),
-                                         match_final_state(Match_Final_State),
-                                         keep(Keep)
-                                         | Resolution_Options]),
-                cors_reply_json(Request,
-                                json{'@type' : "api:ApplyResponse",
-                                     'api:status' : "api:success"})),
+            (   (   Dry_Run = true
+                ->  api_check_apply_squash_commit(System_DB, Auth, Path,
+                                                  Commit_Info,
+                                                  Before_Commit, After_Commit,
+                                                  [type(Type_Atom),
+                                                   match_final_state(Match_Final_State),
+                                                   keep(Keep)
+                                                   | Resolution_Options],
+                                                  Result)
+                ;   api_apply_squash_commit(System_DB, Auth, Path, Commit_Info,
+                                            Before_Commit, After_Commit,
+                                            [type(Type_Atom),
+                                             match_final_state(Match_Final_State),
+                                             keep(Keep)
+                                             | Resolution_Options]),
+                    Result = json{'@type' : "api:ApplyResponse",
+                                  'api:status' : "api:success"}
+                ),
+                cors_reply_json(Request, Result)),
             error(apply_squash_witnesses(Witnesses)),
             (   cors_reply_json(Request,
                                 json{'@type' : "api:ApplyError",

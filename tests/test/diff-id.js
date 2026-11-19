@@ -690,7 +690,7 @@ describe('diff-id', function () {
 
       expect(r4.status).to.equal(409)
       expect(r4.body['api:witnesses'][0]['@op']).to.equal('InsertConflict')
-      expect(r4.body['api:witnesses'][0]['@id_already_exists']).to.equal(docId2Long)
+      expect(r4.body['api:witnesses'][0]['@id_already_exists']).to.equal(docId2)
     })
 
     it('apply squash commit to obtain a read conflict', async function () {
@@ -922,6 +922,70 @@ describe('diff-id', function () {
       expect(r5.body.n).to.equal(2)
     })
 
+    it('apply squash commit dry_run reports witnesses without committing', async function () {
+      const docId = 'item/' + util.randomString()
+      const r1 = await document
+        .insert(agent, {
+          instance: { '@id': docId, name: 'Socrates', n: 1 },
+          raw_json: true,
+        })
+      const dv1 = r1.header['terminusdb-data-version']
+
+      const branchName = util.randomString()
+      const origin = api.path.branchOrigin(agent)
+      await branch.create(agent, branchName, { origin })
+      const branchDocPath = api.path.document(agent) + '/local/branch/' + branchName
+
+      // theirs: the branch deletes the document
+      await document
+        .delete(agent, {
+          path: branchDocPath,
+          query: { id: docId },
+        })
+
+      // ours: main edits the document after the fork
+      await document
+        .replace(agent, {
+          instance: { '@id': docId, name: 'Socrates', n: 2 },
+          raw_json: true,
+        })
+
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: dv1,
+          after_commit: branchName,
+          commit_info: { author: 'gavin', message: 'preview' },
+          type: 'squash',
+          dry_run: true,
+        })
+
+      expect(r4.status).to.equal(200)
+      expect(r4.body['@type']).to.equal('api:CheckResponse')
+      expect(r4.body['api:valid']).to.equal(false)
+      const witness = r4.body['api:witnesses'][0]
+      expect(witness['@op']).to.equal('DeleteEditConflict')
+      expect(witness['@id']).to.equal(docId)
+      expect(witness['@deleted_by']).to.equal('theirs')
+      expect(witness['@expected'].n).to.equal(1)
+      expect(witness['@found'].n).to.equal(2)
+
+      // the dry run wrote nothing: the real apply still reports the conflict
+      const r5 = await agent.post(path)
+        .send({
+          before_commit: dv1,
+          after_commit: branchName,
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+        })
+      expect(r5.status).to.equal(409)
+      expect(r5.body['api:witnesses'][0]['@expected']).to.not.exist
+
+      const r6 = await document.get(agent, { query: { id: docId } })
+      expect(r6.body.n).to.equal(2)
+    })
+
     it('apply squash commit resolves a delete-edit conflict with the recipe', async function () {
       const docId = 'item/' + util.randomString()
       const r1 = await document
@@ -957,7 +1021,7 @@ describe('diff-id', function () {
           before_commit: dv1,
           after_commit: branchName,
           commit_info: { author: 'gavin', message: 'something' },
-          conflict_resolution: { default: 'ours', documents: { [docId]: 'theirs' } },
+          conflict_resolution: { default: 'ours', documents: { theirs: [docId] } },
         })
 
       expect(r4.status).to.equal(200)
