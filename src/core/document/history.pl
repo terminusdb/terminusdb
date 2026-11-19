@@ -206,16 +206,19 @@ commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed
         member(Changed, Sorted_Changed)
     ;   % No shared base — an endpoint is the initial commit — scan the
         % commits on the reported paths one by one.
-        distinct(Changed,
-                 (   append(Commit1_Path, Commit2_Path, All_Commits),
-                     member(Commit_Id, All_Commits),
-                     resolve_relative_descriptor(Branch_Descriptor,
-                                                 ["commit", Commit_Id],
-                                                 Commit_Descriptor),
-                     do_or_die(
-                         open_descriptor(Commit_Descriptor, Transaction),
-                         error(unresolvable_collection(Commit_Descriptor), _)),
-                     changed_document_id(Transaction, Changed, Options)))
+        findall(Changed_Id,
+                (   append(Commit1_Path, Commit2_Path, All_Commits),
+                    member(Commit_Id, All_Commits),
+                    resolve_relative_descriptor(Branch_Descriptor,
+                                                ["commit", Commit_Id],
+                                                Commit_Descriptor),
+                    do_or_die(
+                        open_descriptor(Commit_Descriptor, Transaction),
+                        error(unresolvable_collection(Commit_Descriptor), _)),
+                    changed_document_id(Transaction, Changed_Id, Options)),
+                Raw_Changed),
+        sort(Raw_Changed, Sorted_Changed),
+        member(Changed, Sorted_Changed)
     ).
 
 commit_generator(Repo, state(name(Branch_Name)), state(commit(Head_Commit)), Commit_Id) :-
