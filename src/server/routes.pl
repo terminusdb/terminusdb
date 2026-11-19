@@ -3092,12 +3092,28 @@ changes_handler(get, Path, Request, System_DB, Auth) :-
 apply_handler(post, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
     do_or_die((   _{ before_commit: Before_Commit,
-                     after_commit: After_Commit,
-                     commit_info: Commit_Info0
+                     after_commit: After_Commit
                    } :< Document
               ),
               error(bad_api_document(Document, [before_commit,after_commit,commit_info,type]))
              ),
+
+    (   _{ dry_run: Dry_Run } :< Document
+    ->  do_or_die(member(Dry_Run, [true, false]),
+                  error(bad_api_document(Document, [dry_run]), _))
+    ;   Dry_Run = false
+    ),
+
+    % A dry run commits nothing, so commit_info is optional on previews.
+    (   Dry_Run = true
+    ->  (   _{ commit_info: Commit_Info0 } :< Document
+        ->  true
+        ;   Commit_Info0 = commit_info{}
+        )
+    ;   do_or_die(_{ commit_info: Commit_Info0 } :< Document,
+                  error(bad_api_document(Document,
+                                         [before_commit,after_commit,commit_info,type]), _))
+    ),
     maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
 
     (   _{ match_final_state: Match_Final_State } :< Document
@@ -3122,12 +3138,6 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
     (   _{ conflict_resolution: Conflict_Resolution } :< Document
     ->  Resolution_Options = [conflict_resolution(Conflict_Resolution)]
     ;   Resolution_Options = []
-    ),
-
-    (   _{ dry_run: Dry_Run } :< Document
-    ->  do_or_die(member(Dry_Run, [true, false]),
-                  error(bad_api_document(Document, [dry_run]), _))
-    ;   Dry_Run = false
     ),
 
     api_report_errors(

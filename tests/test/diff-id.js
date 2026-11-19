@@ -937,6 +937,18 @@ describe('diff-id', function () {
       expect(witness['@expected'].n).to.equal(1)
       expect(witness['@found'].n).to.equal(2)
 
+      // a preview commits nothing, so commit_info is not required
+      const r4b = await agent.post(path)
+        .send({
+          before_commit: dv1,
+          after_commit: branchName,
+          type: 'squash',
+          dry_run: true,
+        })
+      expect(r4b.status).to.equal(200)
+      expect(r4b.body['@type']).to.equal('api:CheckResponse')
+      expect(r4b.body['api:valid']).to.equal(false)
+
       // the dry run wrote nothing: the real apply still reports the conflict
       const r5 = await agent.post(path)
         .send({

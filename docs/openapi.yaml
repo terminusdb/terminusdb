@@ -2968,7 +2968,6 @@ paths:
               required:
                 - "before_commit"
                 - "after_commit"
-                - "commit_info"
               properties:
                 "before_commit":
                   type: string
@@ -3009,7 +3008,7 @@ paths:
                 "dry_run":
                   type: boolean
                   default: false
-                  description: "Preview the merge without committing. Returns an api:CheckResponse reporting api:valid and the conflict witnesses; witnesses carry @expected/@found document bodies so a caller can render both sides."
+                  description: "Preview the merge without committing. Returns an api:CheckResponse reporting api:valid and the conflict witnesses; witnesses carry @expected/@found document bodies so a caller can render both sides. When true, commit_info may be omitted."
                 "keep":
                   type: object
                   example: { "@id" : true, "@type" : true }
