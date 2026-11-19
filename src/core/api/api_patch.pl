@@ -1398,6 +1398,43 @@ test(commits_changed_id_enumerates_touched_documents,
     \+ diff_id_in(Diffs, 'revert/a', _),
     \+ diff_id_in(Diffs, 'untouched/a', _).
 
+test(commits_changed_id_enumerates_over_a_layerless_base,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema(admin, X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [author("gavin"), message("test.")],
+
+    % The schema commit has no instance layer — the squash anchor below
+    % the merge base is absent, so enumeration must squash the head
+    % segment fully instead of stopping at a base layer.
+    open_string('[{"@type":"City","name":"one"},{"@type":"City","name":"two"}]',
+                S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Head), _, Ids, Options),
+
+    resolve_absolute_string_descriptor(Path, Desc),
+    create_context(Desc.repository_descriptor, Repo_Ctx),
+    ref_entity:commit_id_to_parent_uri(Repo_Ctx, Head, Parent_Uri),
+    ref_entity:commit_id_uri(Repo_Ctx, Base_Id, Parent_Uri),
+    % Fixture sanity: the base commit really has no instance layer.
+    \+ 'document/history':commit_graph_layer(Repo_Ctx, Base_Id, instance, _),
+
+    findall(C, commits_changed_id(Desc, Base_Id, Head, C,
+                                  options{start:0, count:inf}),
+            Changed),
+    sort(Changed, Sorted_Changed),
+    maplist([Compressed, Expanded]>>(
+                atomic_list_concat(
+                    ['http://example.com/data/world/', Compressed],
+                    Expanded)),
+            Ids, Expected_Changed),
+    sort(Expected_Changed, Expected_Sorted),
+    ord_subset(Expected_Sorted, Sorted_Changed).
+
 test(document_diffs_throw_when_a_document_cannot_be_diffed,
      [setup((setup_temp_store(State),
              random_string(X),

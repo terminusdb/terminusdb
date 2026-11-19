@@ -159,7 +159,12 @@ squashed_delta_transaction(Context, Branch_Descriptor, Base_Layer,
                            Head_Commit_Id, Transaction) :-
     commit_graph_layer(Context, Head_Commit_Id, instance, Head_Layer),
     commit_graph_layer(Context, Head_Commit_Id, schema, Schema_Layer),
-    squash_upto(Head_Layer, Base_Layer, Delta_Layer),
+    % A base commit with no instance layer gives squash_upto no anchor —
+    % the whole head segment then squashes to the bottom, which is the
+    % base→head delta anyway since nothing existed instance-wise at base.
+    (   Base_Layer = none
+    ->  squash(Head_Layer, Delta_Layer)
+    ;   squash_upto(Head_Layer, Base_Layer, Delta_Layer)),
     open_read_write_obj(Delta_Layer, Delta_Object, [], _),
     open_read_write_obj(Schema_Layer, Schema_Object, [], _),
     Transaction = transaction_object{
@@ -187,7 +192,9 @@ commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed
                                 Before_Commit_Id, After_Commit_Id,
                                 Shared_Commit_Id, Commit1_Path, Commit2_Path),
     (   Shared_Commit_Id = some(Base_Commit_Id)
-    ->  commit_graph_layer(Context, Base_Commit_Id, instance, Base_Layer),
+    ->  (   commit_graph_layer(Context, Base_Commit_Id, instance, Base_Layer)
+        ->  true
+        ;   Base_Layer = none),
         % Each segment head squashes down to the shared base — one delta
         % scan per non-empty segment. The Rust collector iterates a hash
         % map, so its order is non-deterministic — sorted ids keep paging
