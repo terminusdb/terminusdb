@@ -1059,9 +1059,12 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
     ->  time_string(Val,S)
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#string'),_))).
 %%% xsd:string => xsd:date
+%%% The Rust lexical grammar validates calendar bounds; the DCG only
+%%% marshals the term.
 typecast_switch('http://www.w3.org/2001/XMLSchema#date', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#date') :-
     !,
-    (   date_string(Cast,Val)
+    (   date_string(Cast,Val),
+        '$xdd':interval_parse(Val,_)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#date'),_))).
 %%% xsd:date => xsd:string
