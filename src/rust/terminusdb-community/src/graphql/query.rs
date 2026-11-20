@@ -115,6 +115,16 @@ enum FilterValue {
     Relation(String, String),
     Enum { op: EnumOperation, value: IriName },
     Foreign(IdOperation, String),
+    // several operators on one property conjoin
+    AllOf(Vec<FilterValue>),
+}
+
+fn conjoin(mut filters: Vec<FilterValue>) -> FilterValue {
+    match filters.len() {
+        0 => panic!("Unable to compile input value to a filter"),
+        1 => filters.pop().unwrap(),
+        _ => FilterValue::AllOf(filters),
+    }
 }
 
 fn ordering_matches_op(ord: Ordering, op: GenericOperation) -> bool {
@@ -161,141 +171,342 @@ fn compile_safe_regex(pattern: &str) -> Result<Regex, regex::Error> {
 }
 
 fn compile_string_input_value(string_type: &str, value: StringFilterInputObject) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::String(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::String(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::String(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::String(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::String(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::String(GenericOperation::Ge, val, string_type.to_string())
-    } else if let Some(val) = value.relationship {
-        FilterValue::Relation(val.rel, val.value)
-    } else if let Some(val) = value.regex {
+        filters.push(FilterValue::String(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::String(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::String(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::String(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::String(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::String(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.relationship {
+        filters.push(FilterValue::Relation(val.rel, val.value))
+    }
+    if let Some(val) = value.regex {
         let regex = compile_safe_regex(&val)
             .expect("Could not compile regex (pattern rejected by size limit or invalid syntax)");
-        FilterValue::Text(TextOperation::Regex(regex), string_type.to_string())
-    } else if let Some(val) = value.startsWith {
-        FilterValue::Text(TextOperation::StartsWith(val), string_type.to_string())
-    } else if let Some(val) = value.allOfTerms {
-        FilterValue::Text(TextOperation::AllOfTerms(val), string_type.to_string())
-    } else if let Some(val) = value.anyOfTerms {
-        FilterValue::Text(TextOperation::AnyOfTerms(val), string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::Text(
+            TextOperation::Regex(regex),
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.startsWith {
+        filters.push(FilterValue::Text(
+            TextOperation::StartsWith(val),
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.allOfTerms {
+        filters.push(FilterValue::Text(
+            TextOperation::AllOfTerms(val),
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.anyOfTerms {
+        filters.push(FilterValue::Text(
+            TextOperation::AnyOfTerms(val),
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_big_int_input_value(string_type: &str, value: BigIntFilterInputObject) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::BigInt(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::BigInt(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::BigInt(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::BigInt(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::BigInt(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::BigInt(GenericOperation::Ge, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_datetime_input_value(
     string_type: &str,
     value: DateTimeFilterInputObject,
 ) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::DateTime(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::DateTime(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::DateTime(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::DateTime(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::DateTime(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::DateTime(GenericOperation::Ge, val, string_type.to_string())
-    } else if let Some(val) = value.relationship {
-        FilterValue::Relation(val.rel, val.value)
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.relationship {
+        filters.push(FilterValue::Relation(val.rel, val.value))
+    }
+    conjoin(filters)
 }
 
 fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::Float(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::Float(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::Float(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::Float(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::Float(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::Float(GenericOperation::Ge, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::Float(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::Float(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::Float(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::Float(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::Float(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::Float(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_decimal_input_value(string_type: &str, value: BigFloatFilterInputObject) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::BigFloat(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::BigFloat(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::BigFloat(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::BigFloat(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::BigFloat(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::BigFloat(GenericOperation::Ge, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_small_integer_input_value(
     string_type: &str,
     value: IntFilterInputObject,
 ) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::SmallInt(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::SmallInt(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::SmallInt(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::SmallInt(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::SmallInt(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::SmallInt(GenericOperation::Ge, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_boolean_input_value(string_type: &str, value: BooleanFilterInputObject) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::Boolean(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::Boolean(GenericOperation::Ne, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::Boolean(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::Boolean(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_typed_filter(
@@ -609,6 +820,9 @@ fn object_type_filter<'a>(
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
     match filter_type {
+        FilterValue::AllOf(filters) => filters
+            .iter()
+            .fold(iter, |iter, f| object_type_filter(g, f, iter)),
         FilterValue::Text(operation, _) => match operation {
             TextOperation::Regex(regex) => {
                 let regex = regex.clone();
@@ -1168,6 +1382,7 @@ fn filter_value_to_entry(value: &FilterValue) -> Option<TypedDictEntry> {
         FilterValue::BigFloat(GenericOperation::Eq, val, _) => Decimal::new(val.0.clone())
             .ok()
             .map(|parsed| Decimal::make_entry(&parsed)),
+        FilterValue::AllOf(filters) => filters.iter().find_map(filter_value_to_entry),
         _ => None,
     }
 }

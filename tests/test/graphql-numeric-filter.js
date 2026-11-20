@@ -113,6 +113,27 @@ describe('GraphQL numeric filters', function () {
     expect(names(result)).to.deep.equal(['b', 'c', 'd'])
   })
 
+  it('conjoins several operators on one xsd:int field', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { smallValue: { ge: 5, lt: 10 } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['b', 'c'])
+  })
+
+  it('conjoins several operators on one xsd:long field', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { bigValue: { ge: "5", lt: "10" } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['b', 'c'])
+  })
+
+  it('conjoins several operators on one xsd:decimal field', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { decimalValue: { ge: 5.5, lt: 9.5 } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['b'])
+  })
+
   it('filters an xsd:long field', async function () {
     const result = await client.query({
       query: gql`{ Measure(filter: { bigValue: { ge: 5 } }) { name } }`,
