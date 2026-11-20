@@ -3,7 +3,9 @@
               appserver_route/4,
               appserver_static_path/2,
               appserver_static_path/3,
-              appserver_stream/3
+              appserver_stream/3,
+              appserver_stream_closed/1,
+              stream_closed/1
           ]).
 
 :- use_module(library(lists)).
@@ -16,6 +18,22 @@
 :- multifile appserver_static_path/3.
 :- multifile appserver_stream/3.
 :- dynamic appserver_stream/3.
+:- multifile appserver_stream_closed/1.
+:- dynamic appserver_stream_closed/1.
+
+%% stream_closed(+StreamId) is det.
+%
+%  Called by the webserver dispatcher when a streaming response ends —
+%  client disconnect, server-initiated close, or a subscriber task that
+%  timed out or was evicted. Runs every registered
+%  appserver_stream_closed/1 clause so each plugin can release the state
+%  it registered for the stream (subscription rows, per-user limiter
+%  slots).
+%
+%  Hook clauses must not throw; a throwing clause prevents the clauses
+%  behind it from running.
+stream_closed(StreamId) :-
+    forall(appserver_hooks:appserver_stream_closed(StreamId), true).
 
 :- dynamic appserver_hooks:appserver_static_path_normalized/3.
 :- multifile appserver_hooks:appserver_static_path_normalized/3.

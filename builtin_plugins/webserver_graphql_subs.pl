@@ -34,12 +34,22 @@
 %% comment in routes.pl (near graphql_handler) for the full dispatch diagram.
 %% ---------------------------------------------------------------------------
 :- multifile appserver_hooks:appserver_stream/3.
+:- multifile appserver_hooks:appserver_stream_closed/1.
 appserver_hooks:appserver_stream(post, '/api/graphql/*path',
                                   webserver_graphql_subs:graphql_sse_handler).
 appserver_hooks:appserver_stream(get, '/api/graphql/*path',
                                   webserver_graphql_subs:graphql_get_handler).
 appserver_hooks:appserver_stream(options, '/api/graphql/*path',
                                   webserver_graphql_subs:graphql_sse_options_handler).
+
+%% Stream teardown hook — runs when the response stream ends for any
+%% reason (client disconnect, server close, subscriber eviction or idle
+%% timeout). Releases the subscription's cohort membership and per-user
+%% limiter slot through cleanup_sse_stream/1.
+appserver_hooks:appserver_stream_closed(StreamId) :-
+    catch(cleanup_sse_stream(StreamId), Error,
+          json_log:json_log_error_formatted(
+              "[graphql-sse] stream_closed cleanup error: ~q", [Error])).
 
 %% ---------------------------------------------------------------------------
 %% Dynamic predicates
@@ -56,7 +66,9 @@ appserver_hooks:appserver_stream(options, '/api/graphql/*path',
 :- dynamic graphql_broadcast_sent/2.
 
 %% graphql_sse_subscription(StreamId, CohortKey, RawChannel, Auth)
-%% Asserted on connect, retracted on disconnect.
+%% Asserted on connect, retracted by cleanup_sse_stream/1 when the
+%% stream dies — the webserver calls appserver_hooks:stream_closed/1
+%% on every stream teardown, which reaches the clause above.
 :- dynamic graphql_sse_subscription/4.
 
 %% Fixed SSE idle timeout in seconds. Replaces the previous sse_parse_timeout
@@ -113,10 +125,10 @@ register_subscription_parsed(_, _, _, _, _, _, _, _) :-
     throw(error(subscription_registration_failed, _)).
 
 %% ---------------------------------------------------------------------------
-%% unregister_subscription(+CohortKey, +StreamId) is det.
+%% unregister_subscription(+CohortKey) is det.
 %% ---------------------------------------------------------------------------
 
-unregister_subscription(CohortKey, _StreamId) :-
+unregister_subscription(CohortKey) :-
     with_mutex(graphql_cohort_registry,
         (   (   retract(graphql_cohort(CohortKey, Descriptor, RawChannel, Count))
             ->  NewCount is Count - 1,
@@ -133,7 +145,7 @@ unregister_subscription(CohortKey, _StreamId) :-
 %% ---------------------------------------------------------------------------
 
 decrement_cohort(CohortKey) :-
-    unregister_subscription(CohortKey, _).
+    unregister_subscription(CohortKey).
 
 %% ---------------------------------------------------------------------------
 %% broadcast_graphql_events(+Validation_Objects, +Meta_Data) is det.
@@ -173,7 +185,6 @@ send_graphql_events(Validation_Object, Descriptor, CommitIdAtom) :-
 
 %% do_broadcast_graphql_events(+Validation_Object, +Descriptor, +CommitIdAtom) is det.
 do_broadcast_graphql_events(Validation_Object, Descriptor, CommitIdAtom) :-
-    sweep_stale_sse_streams,
     (   graphql_cohort(_, Descriptor, _, _)
     ->  open_descriptor(Descriptor, Transaction),
         api_graphql:get_or_create_graphql_context(Transaction, GraphqlContext),
@@ -781,62 +792,67 @@ register_sse_subscription_parsed(Request, StreamId, Mode, Descriptor,
             sse_json_response(Request, 429, ErrJson, Response)
         )
     ),
+    %% The slot acquired above is released only through
+    %% graphql_sse_subscription/4 retraction (cleanup_sse_stream/1), so a
+    %% throw between acquisition and the assertz must hand it back —
+    %% otherwise the user's count drifts permanently.
     (   nonvar(Response)
     ->  true
-    ;   register_subscription_parsed(Descriptor, ClassName, Operation,
-                                     FilterJson, SelectionHash, Mode,
-                                     CohortKey, RawChannel),
-        with_mutex(graphql_cohort_registry,
-            (   graphql_cohort_selection(CohortKey, _, _, _)
-            ->  true
-            ;   assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionSetGraphql, IncludeChildren))
-            )),
-        assertz(graphql_sse_subscription(StreamId, CohortKey, RawChannel, Auth)),
-        sse_idle_timeout(Timeout),
-        sse_build_streaming_response(Request, StreamId, Mode, CohortKey, RawChannel, Timeout, Response)
+    ;   catch(
+            (   register_subscription_parsed(Descriptor, ClassName, Operation,
+                                             FilterJson, SelectionHash, Mode,
+                                             CohortKey, RawChannel),
+                with_mutex(graphql_cohort_registry,
+                    (   graphql_cohort_selection(CohortKey, _, _, _)
+                    ->  true
+                    ;   assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionSetGraphql, IncludeChildren))
+                    )),
+                assertz(graphql_sse_subscription(StreamId, CohortKey, RawChannel, Auth)),
+                sse_idle_timeout(Timeout),
+                sse_build_streaming_response(Request, StreamId, Mode, CohortKey, RawChannel, Timeout, Response)
+            ),
+            RegisterError,
+            (   (   graphql_sse_subscription(StreamId, _, _, _)
+                ->  %% The row is asserted — its own teardown path cleans
+                    %% it: retract, decrement cohort, release the slot.
+                    catch(cleanup_sse_stream(StreamId), _, true)
+                ;   %% No row: roll the two acquisitions back by hand —
+                    %% the cohort increment and the limiter slot.
+                    (   nonvar(CohortKey)
+                    ->  catch(unregister_subscription(CohortKey), _, true)
+                    ;   true
+                    ),
+                    catch('$appserver':appserver_release_subscription(Auth), _, true)
+                ),
+                throw(RegisterError)
+            ))
     ).
 
 %% sse_post_response(+StreamId, +CohortKey, +RawChannel, +Timeout, +Mode) is det.
 %%
-%% Subscribes the stream to the broadcast channel after headers are sent,
-%% then sends the non-standard "connected" event so the client knows the
-%% subscription is registered and ready to receive events.
+%% Subscribes the stream to the broadcast channel after headers are sent.
+%% The "connected" event rides on the Subscribe command: the forwarder
+%% delivers it only after registering the subscriber, so receiving it
+%% proves the subscription is live — a client may commit immediately and
+%% still be counted for the broadcast. NOT part of the graphql-sse
+%% protocol (https://github.com/enisdenjo/graphql-sse/blob/master/PROTOCOL.md);
+%% strict clients ignore unknown event types.
+%%
+%% Format (SSE):   event: connected\ndata: null\n\n
+%% Format (NDJSON): null\n\n
 sse_post_response(StreamId, _CohortKey, RawChannel, Timeout, Mode) :-
     (   Timeout == 0
     ->  TimeoutSecs = 0
     ;   Timeout = TimeoutSecs
     ),
-    catch('$appserver':appserver_broadcast_subscribe(RawChannel, StreamId, TimeoutSecs), _, true),
-    send_connected_event(Mode, RawChannel).
-
-%% send_connected_event(+Mode, +RawChannel) is det.
-%%
-%% Non-standard extension: sends a "connected" event to the client after
-%% the subscription is accepted. This is NOT part of the graphql-sse
-%% protocol (https://github.com/enisdenjo/graphql-sse/blob/master/PROTOCOL.md).
-%% Strict graphql-sse clients ignore unknown event types per the SSE spec.
-%%
-%% Purpose: signals subscription readiness, solving the race condition
-%% between subscribe and the first event. Without this, a client cannot
-%% know when it is safe to trigger data operations that should produce
-%% subscription events.
-%%
-%% Format (SSE):   event: connected\ndata: null\n\n
-%% Format (NDJSON): null\n
-send_connected_event(sse, RawChannel) :-
-    broadcast_raw_or_log(RawChannel, "event: connected\ndata: null\n").
-send_connected_event(ndjson, RawChannel) :-
-    broadcast_raw_or_log(RawChannel, "null\n").
-
-%% send_complete_event(+Mode, +RawChannel) is det.
-%%
-%% Sends the graphql-sse protocol "complete" event when a subscription
-%% stream ends. SSE uses the event stream format with an empty data field;
-%% NDJSON sends an empty line.
-send_complete_event(sse, RawChannel) :-
-    broadcast_raw_or_log(RawChannel, "event: complete\ndata: \n").
-send_complete_event(ndjson, RawChannel) :-
-    broadcast_raw_or_log(RawChannel, "\n").
+    (   Mode == ndjson
+    ->  FirstMessage = "null\n\n"
+    ;   FirstMessage = "event: connected\ndata: null\n\n"
+    ),
+    catch('$appserver':appserver_broadcast_subscribe_with_first_message(RawChannel, StreamId, TimeoutSecs, FirstMessage),
+          SubError,
+          json_log:json_log_error_formatted(
+              "[graphql-sse] broadcast subscribe failed for ~w: ~q", [RawChannel, SubError])).
 
 %% sse_validation_error_response(+Request, +StreamId, +Mode, +ErrorJson, -Response) is det.
 %%
@@ -1239,35 +1255,28 @@ graphql_escape_string(Raw, Escaped) :-
 %% SSE Cleanup
 %% ===========================================================================
 
-%% sweep_stale_sse_streams is det.
-%%
-%% Retract graphql_sse_subscription/4 entries whose Rust stream no longer
-%% exists. Mirrors webserver_commits:sweep_stale_streams/0. Called at
-%% the start of do_broadcast_graphql_events.
-sweep_stale_sse_streams :-
-    (   \+ graphql_sse_subscription(_, _, _, _)
-    ->  true
-    ;   findall(StreamId, graphql_sse_subscription(StreamId, _, _, _), StreamIds),
-        forall(
-            (   member(StreamId, StreamIds),
-                \+ catch('$appserver':appserver_stream_exists(StreamId), _, fail)
-            ),
-            cleanup_sse_stream(StreamId)
-        )
-    ).
-
 %% cleanup_sse_stream(+StreamId) is det.
 %%
-%% Sends the graphql-sse "complete" event, then retracts the SSE
-%% subscription, unregisters the cohort, and unsubscribes from the
-%% broadcast channel. Idempotent.
+%% Retracts the SSE subscription, unregisters the cohort, unsubscribes
+%% from the broadcast channel, and returns the per-user limiter slot.
+%% Idempotent — the retract guard makes repeat calls no-ops, which
+%% matters because the Rust teardown path and any Prolog-side closes
+%% can both reach it for the same stream.
+%%
+%% The dead stream gets no "complete" event: it is gone and cannot hear
+%% it, and the cohort channel is shared — broadcasting complete would
+%% wrongly tell live sibling subscribers their subscription ended.
 cleanup_sse_stream(StreamId) :-
     (   retract(graphql_sse_subscription(StreamId, CohortKey, RawChannel, Auth))
-    ->  cohort_mode(CohortKey, Mode),
-        send_complete_event(Mode, RawChannel),
-        unregister_subscription(CohortKey, StreamId),
-        catch('$appserver':appserver_broadcast_unsubscribe(RawChannel, StreamId), _, true),
-        catch('$appserver':appserver_release_subscription(Auth), _, true)
+    ->  unregister_subscription(CohortKey),
+        catch('$appserver':appserver_broadcast_unsubscribe(RawChannel, StreamId),
+              UnsubError,
+              json_log:json_log_error_formatted(
+                  "[graphql-sse] broadcast unsubscribe failed for ~w: ~q", [RawChannel, UnsubError])),
+        catch('$appserver':appserver_release_subscription(Auth),
+              ReleaseError,
+              json_log:json_log_error_formatted(
+                  "[graphql-sse] release_subscription failed for ~w: ~q", [Auth, ReleaseError]))
     ;   true
     ).
 
@@ -1294,7 +1303,7 @@ test(register_and_unregister, [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]
     CohortKey == CohortKey2,
     RawChannel1 == RawChannel2,
     webserver_graphql_subs:graphql_cohort(CohortKey, TestDesc, RawChannel1, 2),
-    unregister_subscription(CohortKey, stream1),
+    unregister_subscription(CohortKey),
     webserver_graphql_subs:graphql_cohort(CohortKey, TestDesc, RawChannel1, 1).
 
 test(register_different_selection_different_cohort,
@@ -1387,7 +1396,7 @@ test(unregister_without_gql_subscription_decrements_cohort,
     register_subscription_parsed(TestDesc, 'Person', added,
                                  '{}', 'hash1', sse, CohortKey, _),
     webserver_graphql_subs:graphql_cohort(CohortKey, _, _, 1),
-    unregister_subscription(CohortKey, fake_stream),
+    unregister_subscription(CohortKey),
     \+ webserver_graphql_subs:graphql_cohort(CohortKey, _, _, _).
 
 %% graphql_cohort_selection is stored when a cohort is created and
@@ -1399,7 +1408,7 @@ test(cohort_selection_stored_and_cleaned_up,
                                  '{}', 'hash1', sse, CohortKey, _),
     assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}", "_id", true)),
     webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}", "_id", true),
-    unregister_subscription(CohortKey, fake_stream),
+    unregister_subscription(CohortKey),
     \+ webserver_graphql_subs:graphql_cohort_selection(CohortKey, _, _, _).
 
 %% graphql_cohort_selection is NOT cleaned up while cohort still has members.
@@ -1412,7 +1421,7 @@ test(cohort_selection_survives_partial_unregister,
     register_subscription_parsed(TestDesc, 'Person', added,
                                  '{}', 'hash1', sse, _, _),
     graphql_cohort(CohortKey, _, _, 2),
-    unregister_subscription(CohortKey, stream1),
+    unregister_subscription(CohortKey),
     webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}", "_id name", true).
 
 %% Dedup rows asserted during a broadcast must be retracted when the
@@ -1531,17 +1540,15 @@ test(sse_data_line_format) :-
     %% Must NOT contain two trailing newlines — broadcast adds the second.
     \+ sub_string(Line, _, _, _, "\n\n").
 
-%% sweep_stale_sse_streams retracts graphql_sse_subscription entries
-%% whose Rust stream no longer exists. Uses a fake stream id that
-%% does not exist in the appserver registry.
-test(sweep_stale_sse_streams_removes_dead,
+%% appserver_hooks:stream_closed/1 retracts a dead stream's
+%% graphql_sse_subscription entry through the appserver_stream_closed
+%% hook clause — the same call the dispatcher makes on stream teardown.
+test(stream_closed_retracts_dead_subscription,
      [setup(setup_sse_test_streams), cleanup(cleanup_cohorts)]) :-
-    %% dead_stream does not exist in the appserver registry, so it
-    %% should be retracted. alive_stream also does not exist in a unit
-    %% test context (no running server), so both will be swept.
-    sweep_stale_sse_streams,
-    %% After sweeping, no graphql_sse_subscription entries remain.
-    \+ webserver_graphql_subs:graphql_sse_subscription(_, _, _, _).
+    appserver_hooks:stream_closed(dead_stream),
+    \+ webserver_graphql_subs:graphql_sse_subscription(dead_stream, _, _, _),
+    %% The other stream's entry is untouched.
+    webserver_graphql_subs:graphql_sse_subscription(alive_stream, _, _, _).
 
 %% cleanup_sse_stream retracts a single SSE subscription and
 %% unregisters the cohort.
