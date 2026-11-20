@@ -128,10 +128,12 @@ expand_query_document_for_type(optional(Type), DB, Query, Query_Ex) :-
 expand_query_document_for_type(enum(Type, Values), _Db, Query, Query_Ex) :-
     atomic(Query),
     !,
-    atomic_list_concat([Type, '/', Query], Expanded_Enum_Value),
-    do_or_die(memberchk(Expanded_Enum_Value, Values),
-              error(query_error(value_not_in_enum(Type, Query)), _)),
-    Query_Ex = match_value(Expanded_Enum_Value).
+    (   member(Expanded_Enum_Value, Values),
+        enum_value(_,Lexical,Expanded_Enum_Value),
+        atom_string(Lexical, Query)
+    ->  Query_Ex = match_value(Expanded_Enum_Value)
+    ;   throw(error(query_error(value_not_in_enum(Type, Query)), _))
+    ).
 expand_query_document_for_type(enum(_Type, _Values), _Db, Query, _Query_Ex) :-
     throw(error(query_error(unknown_query_format_for_enum(Query)), _)).
 expand_query_document_for_type(Type, _Db, _Query, _Query_Ex) :-

@@ -9,13 +9,8 @@
 :- use_module(core(util)).
 
 :- use_module(library(option)).
-:- use_module(library(date), [parse_time/3]).
 :- use_module(library(lists), [append/2]).
 :- use_module(library(json), [json_write_dict/3]).
-
-iso8601_to_rational_epoch(ISO8601, Epoch) :-
-    parse_time(ISO8601, iso_8601, FloatEpoch),
-    Epoch is rationalize(FloatEpoch).
 
 api_document_history(System_DB, Auth, Path, Id, Response, Options) :-
     do_or_die(
@@ -49,13 +44,13 @@ api_document_history(System_DB, Auth, Path, Id, Response, Options) :-
 build_history_options(Options, History_Options) :-
     (   option(before(Before_ISO), Options),
         ground(Before_ISO)
-    ->  iso8601_to_rational_epoch(Before_ISO, Before_Epoch),
+    ->  iso8601_to_epoch(Before_ISO, Before_Epoch),
         Before_Opts = [before(Before_Epoch)]
     ;   Before_Opts = []
     ),
     (   option(after(After_ISO), Options),
         ground(After_ISO)
-    ->  iso8601_to_rational_epoch(After_ISO, After_Epoch),
+    ->  iso8601_to_epoch(After_ISO, After_Epoch),
         After_Opts = [after(After_Epoch)]
     ;   After_Opts = []
     ),

@@ -35,7 +35,7 @@ jobs:
           ref: ${{ inputs.test_ref }}
 
       - name: Download Docker image
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -55,6 +55,10 @@ jobs:
         # server store and per-suite test stores in RAM (no fsync cost).
         # TERMINUSDB_ENABLE_OPTIMIZER=false: the probabilistic post-commit
         # optimize/GC breaks tests that assert on deterministic data versions.
+        # There is no Ollama (or any other embedding provider) in this
+        # environment: suites that exercise vector indexing must spin up a
+        # suite-local fake OpenAI-compatible endpoint on 127.0.0.1 and point
+        # VECTORLINK_EMBED_URL at it, and must not require a real provider.
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
           docker build --platform ${{ inputs.image_platform }} \
@@ -64,9 +68,13 @@ jobs:
           mkdir -p test-logs
           # terminus_config.pl is read by lib/info.js for version checks;
           # TERMINUSDB_GIT_HASH replaces `git rev-parse` (no .git inside).
+          # builtin_plugins is mounted because tests that spawn sibling
+          # servers resolve TERMINUSDB_BUILTIN_PLUGINS_PATH against
+          # /app/terminusdb; the image ships them at /builtin_plugins.
           docker run --platform ${{ inputs.image_platform }} \
             --volume "${PWD}/tests:/app/terminusdb/tests" \
             --volume "${PWD}/src/config/terminus_config.pl:/app/terminusdb/src/config/terminus_config.pl:ro" \
+            --volume "${PWD}/builtin_plugins:/app/terminusdb/builtin_plugins:ro" \
             --volume "${PWD}/test-logs:/logs" \
             --tmpfs /tmp:rw,exec \
             --tmpfs /app/terminusdb/storage \
@@ -87,7 +95,7 @@ jobs:
 
       - name: Upload TerminusDB server logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: terminusdb-server-logs-${{ inputs.image_artifact }}
           path: terminusdb-server.log

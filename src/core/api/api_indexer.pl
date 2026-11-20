@@ -308,7 +308,8 @@ io_index_branch(System_DB, Auth, Path) :-
     do_or_die(
         push_indexer_backend,
         error(indexer_backend_not_vectorlink(io_index_branch), _)),
-    resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+    resolve_descriptor_action_auth('@schema':'Action/reindex_write',
+                                   System_DB, Auth, Path, Descriptor),
     do_or_die(
         branch_descriptor{branch_name: Branch_Name} :< Descriptor,
         error(push_requires_branch_descriptor(Path), _)),
@@ -390,6 +391,61 @@ plugins:post_commit_hook(Validations, _Meta_Data) :-
         format(user_error,
                "[ERROR] Auto-push hook generator failed: ~q~n",
                [Hook_Error])
+    ).
+
+% ==========================================================================
+% Fast-forward hook
+%
+% Clone and pull apply commits through fast_forward_branch/3, bypassing the
+% transaction commit path — post_commit_hook never fires for them. Without
+% this hook a freshly cloned database is invisible to the indexer.
+%
+% GATE: same guards as post_commit_hook — push_indexer_backend and
+% plugin_api:indexer_available.
+%
+% FLAG SEMANTICS: mirror the schema-commit path — has_embeddings is true
+% exactly when the branch's current schema sets store_indices, which also
+% clears the engine-side no_embedding_cache (a pull can introduce
+% store_indices into a domain that was previously skipped).
+%
+% FIRE-AND-FORGET: notify failures are logged and never propagated —
+% indexing must not break clone/pull.
+% ==========================================================================
+
+:- multifile plugins:post_fast_forward_hook/2.
+
+plugins:post_fast_forward_hook(Branch_Descriptor, _Applied_Commit_Ids) :-
+    catch(
+        (   push_indexer_backend,
+            plugin_api:indexer_available,
+            branch_descriptor{branch_name: Branch_Name} :< Branch_Descriptor,
+            descriptor_graphspec(Branch_Descriptor, Path),
+            indexer_branch_flags(Branch_Descriptor,
+                                 Store_Clustering, Has_Embeddings),
+            plugin_api:indexer_notify(Path, Branch_Name,
+                                      Store_Clustering, Has_Embeddings)
+        ),
+        Fast_Forward_Notify_Error,
+        format(user_error,
+               "[WARN] indexer notify after fast-forward failed: ~q~n",
+               [Fast_Forward_Notify_Error])).
+
+/**
+ * indexer_branch_flags(+Branch_Descriptor, -Store_Clustering,
+ *                      -Has_Embeddings) is det.
+ *
+ * Reads store_indices/store_clustering from the branch's current
+ * (post-application) schema. Has_Embeddings mirrors the schema-commit
+ * path in post_commit_hook: true exactly when store_indices is set.
+ */
+indexer_branch_flags(Branch_Descriptor, Store_Clustering, Has_Embeddings) :-
+    schema_store_indices_for_descriptor(Branch_Descriptor, Store_Indices),
+    (   Store_Indices == true
+    ->  schema_store_clustering_for_descriptor(Branch_Descriptor,
+                                               Store_Clustering),
+        Has_Embeddings = true
+    ;   Store_Clustering = false,
+        Has_Embeddings = false
     ).
 
 /**
@@ -557,6 +613,17 @@ indexer_next_commit(Path, BranchNameRaw, CommitIdRaw, NextCommit) :-
                                      History_Oldest_First),
     (   append(_, [CommitId, NextCommitId|_], History_Oldest_First)
     ->  text_to_string(NextCommitId, NextCommit)
+    ;   memberchk(CommitId, History_Oldest_First)
+    ->  % In history with no successor — genuinely at HEAD.
+        NextCommit = 'None'
+    ;   History_Oldest_First = [ReanchorId|_]
+    ->  % The anchor commit dropped out of history entirely — routine
+        % history rewrites do this (InitialCommit replacement, squash,
+        % rebase, reset), and the operation itself is already logged.
+        % Reporting 'None' here would declare the task at HEAD and skip
+        % every real commit, so re-anchor at the first commit instead —
+        % pushes are dedup-guarded engine-side.
+        text_to_string(ReanchorId, NextCommit)
     ;   NextCommit = 'None'
     ).
 
@@ -709,7 +776,7 @@ mark_fresh(Id) :-
     (   get_assoc(Key, Seen, _)
     ->  fail
     ;   put_assoc(Key, Seen, t, Seen2),
-        nb_setval(commit_ops_seen_ids, Seen2)
+        nb_linkval(commit_ops_seen_ids, Seen2)
     ).
 
 %% purge_id_of_type(+Transaction, +Descriptor, +Maybe_Previous, +Type, -Id)
@@ -954,15 +1021,44 @@ test(process_commit_writes_ndjson_to_stream,
     close(WriteStream),
     delete_file(TmpFile).
 
-test(next_commit_returns_none_for_nonexistent_commit,
+test(next_commit_reanchors_for_commit_not_in_history,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "foo"))),
       cleanup(teardown_temp_store(State))
      ]) :-
-    %% A commit ID not in the branch history yields 'None'.
+    %% A commit ID outside the branch history (a stale anchor, e.g. a
+    %% replaced InitialCommit) re-anchors at the first commit — 'None'
+    %% would declare the chain at HEAD and skip every real commit.
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Head_Uri),
+    commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
     indexer_next_commit("admin/foo/local/branch/main", "main",
                         "nonexistent_commit_id_xyz", Next),
-    assertion(Next == 'None').
+    text_to_string(Head_Commit_Id, Head_Str),
+    assertion(Next == Head_Str).
+
+test(next_commit_reanchors_replaced_initial_commit,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    %% The second commit on a fresh db replaces the InitialCommit object
+    %% in the parent chain: the initial commit id then resolves as "not
+    %% in history". Catch-up anchored at it must re-anchor at the first
+    %% real commit instead of reporting at-HEAD.
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Initial_Uri),
+    commit_id_uri(Repo_Desc, Initial_Commit_Id, Initial_Uri),
+    create_context(Desc, commit_info{author:"test",message:"first"}, Ctx),
+    with_transaction(Ctx, ask(Ctx, insert(a,b,c)), _),
+    branch_head_commit(Repo_Desc, "main", Head_Uri),
+    commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
+    indexer_next_commit("admin/foo/local/branch/main", "main",
+                        Initial_Commit_Id, Next),
+    text_to_string(Head_Commit_Id, Head_Str),
+    assertion(Next == Head_Str).
 
 test(count_indexable_documents_returns_zero_for_no_embedding_schema,
      [setup((setup_temp_store(State),
@@ -1734,6 +1830,118 @@ test(refresh_and_doc_change_dedup_on_same_id,
     sort(Ids, UniqueIds),
     length(UniqueIds, NU),
     assertion(NU == 4).
+
+%% 20k ids insert in ~0.1 s when the seen set is linked; copied it is
+%% quadratic and measures ~12 s.
+
+test(mark_fresh_does_not_copy_the_seen_set_per_insert,
+     [cleanup(nb_delete(commit_ops_seen_ids))]) :-
+    commit_ops_begin,
+    statistics(cputime, Before),
+    forall(between(1, 20000, I),
+           (number_string(I, S), mark_fresh(S))),
+    statistics(cputime, After),
+    assertion(\+ mark_fresh("1")),
+    assertion(mark_fresh("20001")),
+    CPU is After - Before,
+    assertion(CPU < 2.0).
+
+%% indexer_branch_flags/3 — decides what indexer_notify receives after a
+%% fast-forward (clone/pull), where no commit validation objects exist to
+%% inspect. Reads the branch's post-application schema.
+
+test(indexer_branch_flags_both_options,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffflagdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#",
+    "@metadata": {
+      "terminusdb": {
+        "options": ["store_indices", "store_clustering"]
+      }
+    }
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }",
+        "template": "{{title}} {{body}}"
+      }
+    }
+  }
+]
+', SchemaStream),
+    Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
+    api_insert_documents(System, Auth, "admin/ffflagdb", SchemaStream, no_data_version, _, _, _, Options),
+    resolve_absolute_string_descriptor("admin/ffflagdb/local/branch/main", Desc),
+    indexer_branch_flags(Desc, Store_Clustering, Has_Embeddings),
+    assertion(Store_Clustering == true),
+    assertion(Has_Embeddings == true).
+
+test(indexer_branch_flags_no_options,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffnodb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string"
+  }
+]
+', SchemaStream),
+    Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
+    api_insert_documents(System, Auth, "admin/ffnodb", SchemaStream, no_data_version, _, _, _, Options),
+    resolve_absolute_string_descriptor("admin/ffnodb/local/branch/main", Desc),
+    indexer_branch_flags(Desc, Store_Clustering, Has_Embeddings),
+    assertion(Store_Clustering == false),
+    assertion(Has_Embeddings == false).
+
+test(indexer_branch_flags_schemaless_db,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffschemadb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/ffschemadb/local/branch/main", Desc),
+    indexer_branch_flags(Desc, Store_Clustering, Has_Embeddings),
+    assertion(Store_Clustering == false),
+    assertion(Has_Embeddings == false).
+
+%% The hook implementation must never throw: a non-branch descriptor or a
+%% missing backend degrade to failure, which forall/2 turns into a no-op.
+
+test(post_fast_forward_hook_noop_without_backend,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffnobe"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+    config:clear_indexer_backend_config,
+    resolve_absolute_string_descriptor("admin/ffnobe/local/branch/main", Desc),
+    assertion(\+ plugins:post_fast_forward_hook(Desc, [anything])).
 
 :- end_tests(indexer_predicates).
 

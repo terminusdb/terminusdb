@@ -44,16 +44,111 @@ describe('document-interval', function () {
       const doc = {
         '@type': 'Event',
         name: 'Q1-2025',
-        // end date is always inclusive if just a date
-        // uses convention from XBRL JSON
+        // both dates are inclusive — the stored end is the exclusive
+        // day after, and the literal renders the supplied spellings
         interval: '2025-01-01/2025-03-31',
       }
       await document.insert(agent, { instance: doc })
 
       const r = await document.get(agent, { query: { id: 'Event/Q1-2025', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      // Date-only start normalizes to T00:00:00Z; date-only end bumps to next day (exclusive)
-      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/2025-04-01T00:00:00Z')
+      expect(r.body[0].interval).to.equal('2025-01-01/2025-03-31')
+    })
+  })
+
+  describe('literal spelling representations', function () {
+    // The same period can be written several ways. Each spelling is its
+    // own literal: stored as supplied, read back as supplied.
+    const spellings = [
+      ['date pair (inclusive ends)', '2025-01-01/2025-03-31'],
+      ['zoneless datetime pair (same period)', '2025-01-01T00:00:00/2025-04-01T00:00:00'],
+      ['date start, datetime end', '2025-01-01/2025-04-01T00:00:00'],
+      ['datetime start, date end', '2025-01-01T00:00:00/2025-04-01'],
+      ['duration end with date', 'P3M/2025-03-31'],
+      ['date start with duration', '2025-01-01/P3M'],
+      ['bare date (whole day)', '2026-10-01'],
+      ['bare instant with offset', '2025-03-15T00:00:00+02:00'],
+      ['bare instant with Z', '2025-03-15T00:00:00Z'],
+      ['bare zoneless instant', '2025-03-15T00:00:00'],
+    ]
+    spellings.forEach(([label, spelling], i) => {
+      it(`round-trips ${label}: ${spelling}`, async function () {
+        const name = `rep-${i}`
+        await document.insert(agent, { instance: { '@type': 'Event', name, interval: spelling } })
+        const r = await document.get(agent, { query: { id: `Event/${name}`, as_list: true } })
+        expect(r.body).to.have.lengthOf(1)
+        expect(r.body[0].interval).to.equal(spelling)
+      })
+    })
+  })
+
+  describe('bare date roundtrip (as-of instant)', function () {
+    it('inserts a single date and reads it back as a single date', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'as-of',
+        interval: '2025-04-01',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/as-of', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-04-01')
+    })
+  })
+
+  describe('single instant literals (issue #2626)', function () {
+    it('inserts a bare instant with offset and reads it back as the single timestamp', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'instant-offset',
+        interval: '2025-03-15T00:00:00+02:00',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/instant-offset', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-03-15T00:00:00+02:00')
+    })
+
+    it('inserts a bare instant with Z and reads it back as the single timestamp', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'instant-z',
+        interval: '2025-03-15T00:00:00Z',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/instant-z', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-03-15T00:00:00Z')
+    })
+
+    it('inserts a bare zoneless instant and reads it back as the single timestamp', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'instant-local',
+        interval: '2025-03-15T00:00:00',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/instant-local', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-03-15T00:00:00')
+    })
+
+    it('inserts an explicit zero-duration pair and reads it back as a pair', async function () {
+      const v = '2025-03-15T00:00:00+02:00/2025-03-15T00:00:00+02:00'
+      const doc = {
+        '@type': 'Event',
+        name: 'zero-pair',
+        interval: v,
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/zero-pair', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal(v)
     })
   })
 
@@ -68,8 +163,8 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'Event/Q1-duration', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      // Date-only start normalizes to T00:00:00Z; duration preserved
-      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/P3M')
+      // the supplied spelling is kept verbatim
+      expect(r.body[0].interval).to.equal('2025-01-01/P3M')
     })
   })
 
@@ -84,8 +179,9 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'Event/Q1-durend', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      // Date-only end bumps to start of next day (exclusive); duration preserved
-      expect(r.body[0].interval).to.equal('P3M/2025-04-01T00:00:00Z')
+      // the date end is inclusive — stored as the exclusive day after,
+      // rendered back as the supplied date
+      expect(r.body[0].interval).to.equal('P3M/2025-03-31')
     })
   })
 
@@ -107,8 +203,8 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'Event/updatable', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      // Date-only start normalizes to T00:00:00Z; date-only end bumps to next day (exclusive)
-      expect(r.body[0].interval).to.equal('2025-04-01T00:00:00Z/2025-07-01T00:00:00Z')
+      // both dates are inclusive; the literal renders the supplied spellings
+      expect(r.body[0].interval).to.equal('2025-04-01/2025-06-30')
     })
   })
 
@@ -135,8 +231,8 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'MaybeEvent/has-interval', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      // Date-only start normalizes to T00:00:00Z; duration preserved
-      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/P1Y')
+      // the supplied spelling is kept verbatim
+      expect(r.body[0].interval).to.equal('2025-01-01/P1Y')
     })
   })
 
@@ -167,8 +263,8 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'Event/hour-dur', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      // Date-only start normalizes to T00:00:00Z; duration preserved
-      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/PT1H')
+      // the supplied spelling is kept verbatim
+      expect(r.body[0].interval).to.equal('2025-01-01/PT1H')
     })
 
     it('preserves nanosecond precision in datetime and duration', async function () {
@@ -186,35 +282,205 @@ describe('document-interval', function () {
     })
   })
 
-  describe('timezone offset normalization to UTC', function () {
-    it('normalizes positive offset to UTC', async function () {
+  describe('timezone preservation (XBRL OIM)', function () {
+    it('preserves positive offset', async function () {
       const doc = {
         '@type': 'Event',
         name: 'tz-pos',
-        // +02:00 means local time is 2 hours ahead of UTC, so 09:00 local = 07:00 UTC
         interval: '2025-01-01T09:00:00+02:00/2025-03-31T18:30:00+02:00',
       }
       await document.insert(agent, { instance: doc })
 
       const r = await document.get(agent, { query: { id: 'Event/tz-pos', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      // Both endpoints normalized to UTC: +02:00 subtracted from local time
-      expect(r.body[0].interval).to.equal('2025-01-01T07:00:00Z/2025-03-31T16:30:00Z')
+      // Supplied offset round-trips instead of normalizing to Z
+      expect(r.body[0].interval).to.equal('2025-01-01T09:00:00+02:00/2025-03-31T18:30:00+02:00')
     })
 
-    it('normalizes negative offset to UTC', async function () {
+    it('preserves negative offset', async function () {
       const doc = {
         '@type': 'Event',
         name: 'tz-neg',
-        // -05:00 means local time is 5 hours behind UTC, so 09:00 local = 14:00 UTC
         interval: '2025-01-01T09:00:00-05:00/2025-03-31T20:00:00-05:00',
       }
       await document.insert(agent, { instance: doc })
 
       const r = await document.get(agent, { query: { id: 'Event/tz-neg', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      // Both endpoints normalized to UTC: -05:00 added to local time
-      expect(r.body[0].interval).to.equal('2025-01-01T14:00:00Z/2025-04-01T01:00:00Z')
+      expect(r.body[0].interval).to.equal('2025-01-01T09:00:00-05:00/2025-03-31T20:00:00-05:00')
+    })
+
+    it('preserves zone-less local time without a designator', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'tz-none',
+        // No zone designator: local time per XBRL OIM, must not render as Z
+        interval: '2025-01-01T09:00:00/2025-03-31T18:30:00',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/tz-none', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-01-01T09:00:00/2025-03-31T18:30:00')
+    })
+
+    it('preserves mixed offsets on start and end', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'tz-mixed',
+        interval: '2025-01-01T09:00:00-05:00/2025-03-31T18:30:00+05:30',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/tz-mixed', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-01-01T09:00:00-05:00/2025-03-31T18:30:00+05:30')
+    })
+  })
+
+  describe('ISO 8601-2 open and unknown endpoints', function () {
+    it('inserts and reads back an open end', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'open-end',
+        interval: '2025-01-01T00:00:00Z/..',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/open-end', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/..')
+    })
+
+    it('inserts and reads back an open start', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'open-start',
+        interval: '../2025-03-31T23:59:59Z',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/open-start', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('../2025-03-31T23:59:59Z')
+    })
+
+    it('inserts and reads back the unbounded interval', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'forever',
+        interval: '../..',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/forever', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('../..')
+    })
+
+    it('inserts and reads back an unknown end', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'unknown-end',
+        interval: '2025-01-01T00:00:00Z/',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/unknown-end', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/')
+    })
+
+    it('inserts and reads back both endpoints unknown', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'both-unknown',
+        interval: '/',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/both-unknown', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('/')
+    })
+
+    it('rejects a duration form with an open end', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'bad-open-dur',
+        interval: 'P1Y/..',
+      }
+      const r = await document.insert(agent, { instance: doc }).unverified()
+      expect(r.status).to.equal(400)
+    })
+  })
+
+  describe('wide day counts (beyond legacy u8)', function () {
+    it('inserts and reads back a duration longer than 255 days', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'P300D',
+        interval: '2025-01-01/P300D',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/P300D', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-01-01/P300D')
+    })
+
+    it('inserts and reads back an explicit interval spanning more than 255 days', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'long-span',
+        interval: '2025-01-20/2025-10-31',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/long-span', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      // both dates are inclusive; the literal renders the supplied spellings
+      expect(r.body[0].interval).to.equal('2025-01-20/2025-10-31')
+    })
+
+    it('rejects a malformed interval instead of dropping the field', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'bad-interval',
+        interval: '2025-01-01/Fnord',
+      }
+      const r = await document.insert(agent, { instance: doc }).unverified()
+      expect(r.status).to.equal(400)
+    })
+  })
+
+  describe('ISO 8601 week durations', function () {
+    // P2W and P14D are equal durations but distinct values — the supplied
+    // denomination is part of the literal and must survive end to end.
+    it('inserts and reads back a week-denominated duration', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'P2W',
+        interval: '2025-01-01/P2W',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/P2W', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-01-01/P2W')
+    })
+
+    it('keeps a day-denominated equivalent distinct', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'P14D',
+        interval: '2025-01-01/P14D',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/P14D', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-01-01/P14D')
     })
   })
 })

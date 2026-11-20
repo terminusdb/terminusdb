@@ -67,6 +67,9 @@
  | xsd:NMTOKEN |	XML NMTOKENs |
  | xsd:Name |	XML Names |
  | xsd:NCName |	XML NCNames |
+ | xsd:QName |	Expanded names `{ns}local` (NCName localname) |
+# XBRL types
+ | xbrl:SQName |	OIM simplified QName `{ns}local` (any non-whitespace localname) |
  */
 base_type('http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type('http://www.w3.org/2001/XMLSchema#string').
@@ -109,7 +112,8 @@ base_type('http://www.w3.org/2001/XMLSchema#NMTOKEN').
 base_type('http://www.w3.org/2001/XMLSchema#Name').
 base_type('http://www.w3.org/2001/XMLSchema#NCName').
 base_type('http://www.w3.org/2001/XMLSchema#NOTATION'). % unimplemented.
-base_type('http://www.w3.org/2001/XMLSchema#QName'). % unimplemented.
+base_type('http://www.w3.org/2001/XMLSchema#QName').
+base_type('https://xbrl.org/2021SQName').
 base_type('http://www.w3.org/2001/XMLSchema#ID'). % unimplemented.
 base_type('http://www.w3.org/2001/XMLSchema#IDREF'). % unimplemented.
 base_type('http://www.w3.org/2001/XMLSchema#ENTITY'). % unimplemented.
@@ -178,7 +182,8 @@ base_type_parent('http://www.w3.org/2001/XMLSchema#decimal','http://www.w3.org/2
             base_type_parent('http://www.w3.org/2001/XMLSchema#unsignedByte','http://www.w3.org/2001/XMLSchema#unsignedShort').
       base_type_parent('http://www.w3.org/2001/XMLSchema#positiveInteger','http://www.w3.org/2001/XMLSchema#nonNegativeInteger').
 base_type_parent('http://www.w3.org/2001/XMLSchema#NOTATION','http://www.w3.org/2001/XMLSchema#anySimpleType'). % unimplemented.
-base_type_parent('http://www.w3.org/2001/XMLSchema#QName','http://www.w3.org/2001/XMLSchema#anySimpleType'). % unimplemented.
+base_type_parent('http://www.w3.org/2001/XMLSchema#QName','http://www.w3.org/2001/XMLSchema#anySimpleType').
+base_type_parent('https://xbrl.org/2021SQName','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://www.w3.org/2001/XMLSchema#double','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://www.w3.org/2001/XMLSchema#float','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://www.w3.org/2001/XMLSchema#boolean','http://www.w3.org/2001/XMLSchema#anySimpleType').

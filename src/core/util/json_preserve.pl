@@ -192,16 +192,16 @@ test(integer_values) :-
 test(float_values) :-
     JSON = '{"x": 3.14, "y": -2.5, "z": 0.0}',
     json_read_dict(JSON, DictRust, []),
-    % Rust parser converts decimals to rationals for precision
+    % Decimals arrive as NrD^^xsd:decimal - exact rationals carrying
+    % the decimal type tag for the inference ladder.
     get_dict(x, DictRust, X),
     get_dict(y, DictRust, Y),
     get_dict(z, DictRust, Z),
-    % Decimals become rationals
-    assertion(rational(X)),
-    assertion(rational(Y)),
-    % 0.0 becomes integer 0
-    assertion(integer(Z)),
-    assertion(Z == 0).
+    assertion(X = XVal^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    assertion(rational(XVal)),
+    assertion(Y = _^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    % 0.0 keeps an integer value under the decimal tag
+    assertion(Z = 0^^'http://www.w3.org/2001/XMLSchema#decimal').
 
 test(large_integer) :-
     JSON = '{"big": 9007199254740991}',
@@ -252,9 +252,10 @@ test(scientific_notation) :-
     json_read_dict(JSON, DictRust, []),
     get_dict(sci, DictRust, Sci),
     get_dict(neg, DictRust, Neg),
-    % Scientific notation produces rationals after expansion
-    assertion((rational(Sci) ; float(Sci))),
-    assertion((rational(Neg) ; float(Neg))).
+    % Scientific notation: serde's Display may expand 1.23e10 to
+    % 12300000000.0, which then takes the NrD^^xsd:decimal path
+    assertion(once((rational(Sci) ; float(Sci) ; Sci = _^^_))),
+    assertion(once((rational(Neg) ; float(Neg) ; Neg = _^^_))).
 
 test(dict_tag) :-
     JSON = '{"test": 1}',
@@ -348,11 +349,12 @@ test(mixed_types_in_nested_arrays) :-
     assertion(integer(Item0Rust.value)),
     nth0(1, ItemsRust, Item1Rust),
     nth0(1, ItemsStd, Item1Std),
-    % Rust converts 2.5 to rational 5r2
-    assertion(rational(Item1Rust.value)),
+    % Rust converts 2.5 to rational 5r2 tagged as xsd:decimal
+    assertion(Item1Rust.value = V1^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    assertion(rational(V1)),
     assertion(float(Item1Std.value)),
     % Verify they're numerically equal
-    assertion(Item1Rust.value =:= Item1Std.value),
+    assertion(V1 =:= Item1Std.value),
     nth0(2, ItemsRust, Item2Rust),
     nth0(2, ItemsStd, Item2Std),
     assertion(Item2Rust.value == Item2Std.value),
@@ -480,9 +482,11 @@ test(large_integers) :-
 test(float_values) :-
     JSON = '{"pi":3.14159,"e":2.71828}',
     json_read_dict(JSON, Dict, []),
-    % Rust parser converts decimals to rationals for precision
-    rational(Dict.pi),
-    rational(Dict.e).
+    % Decimals arrive as NrD^^xsd:decimal - exact rationals
+    Dict.pi = Pi^^'http://www.w3.org/2001/XMLSchema#decimal',
+    rational(Pi),
+    Dict.e = E^^'http://www.w3.org/2001/XMLSchema#decimal',
+    rational(E).
 
 % Test boolean and null
 test(special_values) :-

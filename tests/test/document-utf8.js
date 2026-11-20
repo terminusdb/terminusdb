@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, api, db, document } = require('../lib')
+const { Agent, api, db, document, woql } = require('../lib')
 
 // Regression tests for: non-ASCII characters silently rejected by document API.
 //
@@ -134,5 +134,61 @@ describe('document-utf8', function () {
     expect(getResponse.status).to.equal(200)
     const doc = Array.isArray(getResponse.body) ? getResponse.body[0] : getResponse.body
     expect(doc).to.have.property('note', noteValue)
+  })
+
+  it('round-trips an enum whose @id and members contain emoji and a slash', async function () {
+    // Enum lexicals are arbitrary strings — '/' and unicode are legal.
+    // The member IRI percent-encodes the segment, so the stored node is
+    // a legal IRI while every lexical surface keeps the verbatim value.
+    const enumId = 'Hot🔥'
+    const coldMember = 'Cold❄️'
+    const warmMember = 'Warm/Mild🌡'
+    const schemaDocs = [
+      { '@type': 'Enum', '@id': enumId, '@value': [coldMember, warmMember] },
+      {
+        '@id': 'WeirdHolder',
+        '@type': 'Class',
+        '@key': { '@type': 'Random' },
+        w: enumId,
+        w2: enumId,
+      },
+    ]
+    const schemaResponse = await agent
+      .post(api.path.document(agent))
+      .query({ graph_type: 'schema', author: 'test', message: 'utf8-enum-schema' })
+      .send(schemaDocs)
+    expect(schemaResponse.status, 'enum schema insert should succeed').to.equal(200)
+
+    const insertResponse = await document.insert(agent, {
+      instance: { '@type': 'WeirdHolder', w: coldMember, w2: warmMember },
+    })
+    expect(insertResponse.body, 'instance insert should return one id').to.be.an('array').with.lengthOf(1)
+    const insertedId = insertResponse.body[0]
+
+    const getResponse = await agent
+      .get(api.path.document(agent))
+      .query({ id: insertedId })
+    expect(getResponse.status).to.equal(200)
+    const doc = Array.isArray(getResponse.body) ? getResponse.body[0] : getResponse.body
+    expect(doc).to.have.property('w', coldMember)
+    expect(doc).to.have.property('w2', warmMember)
+
+    // The stored member IRI keeps the enum @id verbatim and
+    // percent-encodes only the member segment
+    // (…/Hot🔥/Warm%2FMild%F0%9F%8C%A1). WOQL bindings lexicalize enum
+    // members, so a full-IRI node literal in the object position is how
+    // the stored IRI is asserted.
+    const memberIri = `terminusdb:///schema#${enumId}/${encodeURIComponent(warmMember)}`
+    const query = {
+      '@type': 'Triple',
+      subject: { '@type': 'NodeValue', node: insertedId },
+      predicate: { '@type': 'NodeValue', node: 'w2' },
+      object: { '@type': 'NodeValue', node: memberIri },
+    }
+    const woqlResponse = await woql.post(agent, query)
+    expect(
+      woqlResponse.body.bindings,
+      'the stored member IRI is the percent-encoded segment under the enum @id',
+    ).to.have.lengthOf(1)
   })
 })

@@ -90,6 +90,25 @@ describe('GraphQL', function () {
     '@type': 'Class',
     '@inherits': ['Parent'],
     number: 'xsd:byte',
+  }, {
+    '@id': 'Mixin',
+    '@type': 'Class',
+    tag: 'xsd:string',
+  }, {
+    '@id': 'GrandChild',
+    '@type': 'Class',
+    '@inherits': ['Child', 'Mixin'],
+    depth: 'xsd:byte',
+  }, {
+    '@id': 'Holder',
+    '@type': 'Class',
+    '@key': {
+      '@type': 'Lexical',
+      '@fields': ['name'],
+    },
+    name: 'xsd:string',
+    members: { '@type': 'Set', '@class': 'Parent' },
+    member: { '@type': 'Optional', '@class': 'Parent' },
   },
   {
     '@id': 'Source',
@@ -1351,7 +1370,7 @@ query EverythingQuery {
       const members = [{ '@type': 'Child', name: 'FragChild', number: 9 }]
       await document.insert(agent, { instance: members })
       const PARENT_QUERY = gql`
- fragment ParentFields on Parent {
+ fragment ParentFields on Parent_Possible {
     name
  }
  query ParentQuery {
@@ -1364,6 +1383,309 @@ query EverythingQuery {
         [
           {
             name: 'FragChild',
+          },
+        ])
+    })
+
+    it('graphql inline fragment on subclass resolves subclass fields', async function () {
+      const members = [
+        { '@type': 'Parent', name: 'SubParent' },
+        { '@type': 'Child', name: 'SubChild', number: 7 },
+      ]
+      await document.insert(agent, { instance: members })
+      const PARENT_QUERY = gql`
+ query ParentQuery {
+    Parent(filter: {name: {startsWith: "Sub"}}, orderBy: {name : ASC}){
+        name
+        __typename
+        ... on Child {
+            number
+        }
+    }
+}`
+      const result = await client.query({ query: PARENT_QUERY, fetchPolicy: 'no-cache' })
+      expect(result.data.Parent).to.deep.equal(
+        [
+          {
+            name: 'SubChild',
+            __typename: 'Child',
+            number: 7,
+          },
+          {
+            name: 'SubParent',
+            __typename: 'Parent',
+          },
+        ])
+    })
+
+    it('graphql named fragment on subclass resolves subclass fields', async function () {
+      const members = [{ '@type': 'Child', name: 'NamedFragChild', number: 11 }]
+      await document.insert(agent, { instance: members })
+      const CHILD_QUERY = gql`
+ fragment ChildFields on Child {
+    number
+ }
+ query ChildQuery {
+    Parent(filter: {name: {eq: "NamedFragChild"}}){
+        name
+        ...ChildFields
+    }
+}`
+      const result = await client.query({ query: CHILD_QUERY, fetchPolicy: 'no-cache' })
+      expect(result.data.Parent).to.deep.equal(
+        [
+          {
+            name: 'NamedFragChild',
+            number: 11,
+          },
+        ])
+    })
+
+    it('graphql subclass fragments on a base-typed link field', async function () {
+      const members = [
+        { '@id': 'Parent/LinkedParent', '@type': 'Parent', name: 'LinkedParent' },
+        { '@id': 'Child/LinkedChild', '@type': 'Child', name: 'LinkedChild', number: 13 },
+        {
+          '@type': 'Holder',
+          name: 'LinkHolder',
+          members: ['Parent/LinkedParent', 'Child/LinkedChild'],
+        },
+      ]
+      await document.insert(agent, { instance: members })
+      const HOLDER_QUERY = gql`
+ query HolderQuery {
+    Holder(filter: {name: {eq: "LinkHolder"}}){
+        members(orderBy: {name : ASC}){
+            name
+            __typename
+            ... on Child {
+                number
+            }
+        }
+    }
+}`
+      const result = await client.query({ query: HOLDER_QUERY, fetchPolicy: 'no-cache' })
+      expect(result.data.Holder).to.deep.equal(
+        [
+          {
+            members: [
+              {
+                name: 'LinkedChild',
+                __typename: 'Child',
+                number: 13,
+              },
+              {
+                name: 'LinkedParent',
+                __typename: 'Parent',
+              },
+            ],
+          },
+        ])
+    })
+
+    it('graphql introspection exposes possible types on base classes', async function () {
+      const INTROSPECTION = gql`
+ query IntrospectionQuery {
+    __type(name: "Parent_Possible") {
+        kind
+        name
+        possibleTypes { name }
+    }
+}`
+      const result = await client.query({ query: INTROSPECTION, fetchPolicy: 'no-cache' })
+      expect(result.data.__type).to.not.equal(null)
+      expect(result.data.__type.kind).to.equal('INTERFACE')
+      expect(result.data.__type.possibleTypes.map((t) => t.name))
+        .to.have.members(['Parent', 'Child', 'GrandChild'])
+    })
+
+    it('graphql subclass field is not selectable on the base-typed position', async function () {
+      // `number` is declared on Child only — selecting it without a
+      // fragment is a validation error, not a crash.
+      const QUERY = gql`
+ query ParentQuery {
+    Parent {
+        number
+    }
+}`
+      try {
+        await client.query({ query: QUERY, fetchPolicy: 'no-cache' })
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        expect(String(error.message))
+          .to.include('Unknown field "number" on type "Parent_Possible"')
+      }
+    })
+
+    it('graphql field of an unrelated class is rejected on a link field', async function () {
+      // `capabilities` is declared on Dog (under Animal), not on the
+      // Parent hierarchy — it must not resolve through the interface.
+      const QUERY = gql`
+ query HolderQuery {
+    Holder {
+        members {
+            capabilities
+        }
+    }
+}`
+      try {
+        await client.query({ query: QUERY, fetchPolicy: 'no-cache' })
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        expect(String(error.message))
+          .to.include('Unknown field "capabilities" on type "Parent_Possible"')
+      }
+    })
+
+    it('graphql unrelated class field inside a subclass fragment is rejected', async function () {
+      const QUERY = gql`
+ query HolderQuery {
+    Holder {
+        members {
+            ... on Child {
+                capabilities
+            }
+        }
+    }
+}`
+      try {
+        await client.query({ query: QUERY, fetchPolicy: 'no-cache' })
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        expect(String(error.message))
+          .to.include('Unknown field "capabilities" on type "Child"')
+      }
+    })
+
+    it('graphql fragment on a non-possible type is rejected', async function () {
+      const QUERY = gql`
+ query HolderQuery {
+    Holder {
+        members {
+            ... on Dog {
+                capabilities
+            }
+        }
+    }
+}`
+      try {
+        await client.query({ query: QUERY, fetchPolicy: 'no-cache' })
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        expect(String(error.message)).to.include('Fragment cannot be spread')
+      }
+    })
+
+    it('graphql subclass fragment on a single-valued link field', async function () {
+      const members = [
+        { '@id': 'Child/SingleChild', '@type': 'Child', name: 'SingleChild', number: 17 },
+        { '@type': 'Holder', name: 'SingleHolder', member: 'Child/SingleChild' },
+      ]
+      await document.insert(agent, { instance: members })
+      const HOLDER_QUERY = gql`
+ query HolderQuery {
+    Holder(filter: {name: {eq: "SingleHolder"}}){
+        member {
+            name
+            __typename
+            ... on Child {
+                number
+            }
+        }
+    }
+}`
+      const result = await client.query({ query: HOLDER_QUERY, fetchPolicy: 'no-cache' })
+      expect(result.data.Holder).to.deep.equal(
+        [
+          {
+            member: {
+              name: 'SingleChild',
+              __typename: 'Child',
+              number: 17,
+            },
+          },
+        ])
+    })
+
+    it('graphql grandchild resolves through a transitive interface', async function () {
+      const members = [{ '@type': 'GrandChild', name: 'DeepChild', number: 19, tag: 'mixed', depth: 4 }]
+      await document.insert(agent, { instance: members })
+      const PARENT_QUERY = gql`
+ query ParentQuery {
+    Parent(filter: {name: {eq: "DeepChild"}}){
+        name
+        __typename
+        ... on GrandChild {
+            number
+            tag
+            depth
+        }
+    }
+}`
+      const result = await client.query({ query: PARENT_QUERY, fetchPolicy: 'no-cache' })
+      expect(result.data.Parent).to.deep.equal(
+        [
+          {
+            name: 'DeepChild',
+            __typename: 'GrandChild',
+            number: 19,
+            tag: 'mixed',
+            depth: 4,
+          },
+        ])
+    })
+
+    it('graphql grandchild declares every ancestor interface', async function () {
+      const INTROSPECTION = gql`
+ query IntrospectionQuery {
+    __type(name: "GrandChild") {
+        interfaces { name }
+    }
+}`
+      const result = await client.query({ query: INTROSPECTION, fetchPolicy: 'no-cache' })
+      expect(result.data.__type.interfaces.map((t) => t.name))
+        .to.have.members(['Parent_Possible', 'Child_Possible', 'Mixin_Possible'])
+    })
+
+    it('graphql inline fragment on the interface name is skipped', async function () {
+      // Juniper's executor only matches inline fragment conditions against
+      // the concrete type name, so `... on Parent_Possible` selects nothing
+      // (a named fragment on Parent_Possible does resolve — see the named
+      // fragment tests). This test pins the limitation so a future juniper
+      // fix surfaces here deliberately.
+      const members = [
+        { '@id': 'Parent/IfaceParent', '@type': 'Parent', name: 'IfaceParent' },
+        { '@id': 'Child/IfaceChild', '@type': 'Child', name: 'IfaceChild', number: 23 },
+        {
+          '@type': 'Holder',
+          name: 'IfaceHolder',
+          members: ['Parent/IfaceParent', 'Child/IfaceChild'],
+        },
+      ]
+      await document.insert(agent, { instance: members })
+      const HOLDER_QUERY = gql`
+ query HolderQuery {
+    Holder(filter: {name: {eq: "IfaceHolder"}}){
+        members(orderBy: {name : ASC}){
+            ... on Parent_Possible {
+                name
+            }
+            __typename
+        }
+    }
+}`
+      const result = await client.query({ query: HOLDER_QUERY, fetchPolicy: 'no-cache' })
+      expect(result.data.Holder).to.deep.equal(
+        [
+          {
+            members: [
+              {
+                __typename: 'Child',
+              },
+              {
+                __typename: 'Parent',
+              },
+            ],
           },
         ])
     })

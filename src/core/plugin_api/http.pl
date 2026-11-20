@@ -8,16 +8,22 @@
     plugin_json_response/3,
     write_cors_headers/1,
     api_report_errors/3,
-    resolve_descriptor_auth/6
+    resolve_descriptor_auth/6,
+    resolve_descriptor_action_auth/5,
+    check_descriptor_auth/4
 ]).
 
 :- use_module(server(routes)).
 :- use_module(server(routes/tdb_http_handler)).
-:- use_module(core(account/capabilities), [resolve_descriptor_auth/6]).
+:- use_module(core(account/capabilities), [resolve_descriptor_auth/6,
+                                           resolve_descriptor_action_auth/5,
+                                           check_descriptor_auth/4]).
 
 :- reexport(server(routes), [cors_handler/3, cors_handler/4, authenticate/3,
                              write_cors_headers/1, api_report_errors/3]).
-:- reexport(core(account/capabilities), [resolve_descriptor_auth/6]).
+:- reexport(core(account/capabilities), [resolve_descriptor_auth/6,
+                                         resolve_descriptor_action_auth/5,
+                                         check_descriptor_auth/4]).
 
 %% register_route(+Path, +Handler, +Options) is det.
 %

@@ -16,6 +16,8 @@
               xrdf_value_range_count/6,
               xrdf_value_range_rev/6,
               xquad_value_range_rev/7,
+              xrdf_interval_relation/6,
+              xquad_interval_relation/7,
               xrdf_value_next/5,
               xquad_value_next/6,
               xrdf_value_previous/5,
@@ -494,6 +496,57 @@ xquad_value_range_rev(Gs, G, Low, High, X, Y, Z) :-
     post_convert_node(A, X),
     post_convert_node(B, Y),
     storage_object(S, Z).
+
+/**
+ * xrdf_interval_relation(+Gs,+Rel,+Ref,?X,?Y,?Z) is nondet.
+ *
+ * Triples whose object can satisfy the Allen relation Rel against the
+ * reference value Ref. When Rel and Ref are ground the candidate objects
+ * come from the start-order and end-rank indexes — a superset the caller
+ * verifies semantically. An unbound Rel or Ref falls back to the ordered
+ * triple scan so classification queries still enumerate.
+ */
+xrdf_interval_relation(Gs, Rel, Ref, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    member(G, Gs),
+    read_write_obj_reader(G, Layer),
+    (   ground(Rel), ground(Ref)
+    ->  pre_convert_node(X, A),
+        pre_convert_node(Y, B),
+        ground_object_storage(Rel, RelS),
+        ground_object_storage(Ref, RefS),
+        triple_interval_relation(Layer, RelS, RefS, A, B, S),
+        storage_object(S, Z),
+        post_convert_node(A, X),
+        post_convert_node(B, Y)
+    ;   pre_convert_node(X, A),
+        pre_convert_node(Y, B),
+        xrdf_db(Layer, A, B, S),
+        storage_object(S, Z),
+        post_convert_node(A, X),
+        post_convert_node(B, Y)
+    ).
+
+xquad_interval_relation(Gs, G, Rel, Ref, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    memberchk(G, Gs),
+    read_write_obj_reader(G, Layer),
+    (   ground(Rel), ground(Ref)
+    ->  pre_convert_node(X, A),
+        pre_convert_node(Y, B),
+        ground_object_storage(Rel, RelS),
+        ground_object_storage(Ref, RefS),
+        triple_interval_relation(Layer, RelS, RefS, A, B, S),
+        storage_object(S, Z),
+        post_convert_node(A, X),
+        post_convert_node(B, Y)
+    ;   pre_convert_node(X, A),
+        pre_convert_node(Y, B),
+        xrdf_db(Layer, A, B, S),
+        storage_object(S, Z),
+        post_convert_node(A, X),
+        post_convert_node(B, Y)
+    ).
 
 xrdf_value_next(Gs, X, Y, Ref, Z) :-
     assertion(is_list(Gs)),

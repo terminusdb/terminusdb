@@ -2,6 +2,7 @@
               pre_commit_hook/2,
               post_commit_hook/2,
               post_delete_db_hook/2,
+              post_fast_forward_hook/2,
               enrich_commit_info/3,
               fast_document_history/6,
               fast_document_history_entries/5,
@@ -39,6 +40,8 @@
 :- multifile pre_commit_hook/2.
 :- multifile post_commit_hook/2.
 :- multifile post_delete_db_hook/2.
+:- multifile post_fast_forward_hook/2.
+:- dynamic post_fast_forward_hook/2.
 :- multifile enrich_commit_info/3.
 :- multifile fast_document_history/6.
 :- multifile fast_document_history_entries/5.
@@ -253,7 +256,7 @@ perform_shared_cascade(Validation, Result) :-
     % Convert validation to transaction (gets a fresh builder)
     validation_objects_to_transaction_objects([Validation], [Transaction]),
     % Get document context from the transaction (reflects current committed layer)
-    '$doc':get_document_context(Transaction, true, Context),
+    '$doc':get_document_context(Transaction, true, false, Context),
     % Ensure the transaction has an instance builder
     ensure_transaction_has_builder(instance, Transaction),
     % Call Rust fast path: collects candidates from layer removals and deletes orphans
@@ -417,6 +420,14 @@ vectorlink_admin_user(_) :- fail.
 %  Multifile hook provided by the vectorlink plugin.
 %  Returns the admin secret for HTTP Basic auth to the search backend.
 vectorlink_admin_secret(_) :- fail.
+
+%% post_fast_forward_hook(+Branch_Descriptor, +Applied_Commit_Ids)
+%
+%  Multifile hook fired after commits are applied to a branch outside
+%  the regular transaction commit path — clone and pull apply their
+%  commits via fast_forward_branch/3, which post_commit_hook never sees.
+%  Declared dynamic so tests can assert recorder clauses.
+post_fast_forward_hook(_, _) :- fail.
 
 %% readiness_component(-Component) is nondet.
 %

@@ -2,13 +2,10 @@ DIST ?= community
 # Default was 9.2.9
 SWIPL_VERSION ?= 10.0.2
 
-# Version-tagged release of tdb-admin to download for the embedded admin panel.
-# Must match a tag in https://github.com/terminusdb-org/tdb-admin/releases
-TDB_ADMIN_VERSION ?= v0.1.1-rc3
-
-# Version-tagged release of tdb-data to download for the embedded data explorer.
-# Must match a tag in https://github.com/terminusdb-org/tdb-data/releases
-TDB_DATA_VERSION ?= v0.1.0-rc2
+# Embedded web UI versions (tdb-admin / tdb-data) are pinned in UI_VERSIONS,
+# the single source of truth also read by CI — see docs/release-steps.md.
+# Override on the command line: make docker TDB_ADMIN_VERSION=vX.Y.Z
+include UI_VERSIONS
 
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
@@ -161,6 +158,12 @@ else
 	cargo clippy --message-format=json --all-features --manifest-path=src/rust/Cargo.toml
 endif
 
+# Format gate for the Rust workspace: committed code must match
+# src/rust/rustfmt.toml under the stable toolchain.
+.PHONY: lint-fmt
+lint-fmt:
+	cargo fmt --all --check --manifest-path=src/rust/Cargo.toml
+
 .PHONY: lint-mocha
 lint-mocha:
 	sh -c "cd tests; npx npm run check"
@@ -233,8 +236,40 @@ ifdef SUITE
 else ifdef MOCHA_IGNORE
 	sh -c "cd tests ; npx mocha $(shell echo '$(MOCHA_IGNORE)' | sed 's/,/ --ignore /g' | sed 's/^/--ignore /')"
 else
-	sh -c "cd tests ; rc=0 ; npx mocha --exclude 'test/cli-*.js' || rc=1 ; MOCHA_PARALLEL=true npx mocha 'test/cli-*.js' || rc=1 ; exit \$$rc"
+	sh -c "cd tests ; npx mocha --exclude 'test/cli-*.js' && MOCHA_PARALLEL=true npx mocha 'test/cli-*.js'"
 endif
+
+# Formal ACID verification of the atomic commit path (tests/acid/README.md).
+# ALICE enumerates every legal crash state of the store from a syscall trace
+# and checks each one; Jepsen runs elle-checked append transactions under
+# kill/pause nemeses. Both run in Linux containers against the :local image —
+# too slow for the regular gates, so they stay opt-in.
+.PHONY: test-acid
+test-acid: test-acid-alice test-acid-jepsen
+
+.PHONY: test-acid-alice
+test-acid-alice: docker
+	mkdir -p tests/acid/traces
+	docker build -f tests/acid/alice/Dockerfile -t terminusdb-acid-alice:local .
+	docker run --rm \
+		-v "$(CURDIR)/tests/acid/traces:/acid-work/traces_dir" \
+		terminusdb-acid-alice:local
+
+# Docker Compose ships either as the `docker compose` plugin or the
+# standalone `docker-compose` binary — pick whichever exists.
+COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+
+# Throwaway SSH keypair for the Jepsen run — generated on demand, never
+# committed (tests/acid/jepsen/secret/ is gitignored).
+tests/acid/jepsen/secret/id_rsa:
+	mkdir -p tests/acid/jepsen/secret
+	ssh-keygen -t rsa -b 3072 -f $@ -N "" -C jepsen-acid-throwaway
+
+.PHONY: test-acid-jepsen
+test-acid-jepsen: docker tests/acid/jepsen/secret/id_rsa
+	cd tests/acid/jepsen && $(COMPOSE) build
+	cd tests/acid/jepsen && $(COMPOSE) up --abort-on-container-exit --exit-code-from control
+	cd tests/acid/jepsen && $(COMPOSE) down
 
 # Start Docker container for integration testing (no plugins).
 # Rebuilds the docker image and recreates the container.
@@ -322,7 +357,7 @@ test-e2e:
 	./tests/run-e2e.sh $(ARGS)
 
 .PHONY: pr-light
-pr-light: lint lint-mocha lint-openapi clippy dev restart test test-int
+pr-light: lint lint-mocha lint-openapi lint-fmt clippy dev restart test test-int
 
 .PHONY: pr
 pr: dashboard lint lint-mocha lint-openapi clippy dev restart test test-int

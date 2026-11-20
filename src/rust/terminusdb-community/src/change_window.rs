@@ -112,7 +112,9 @@ impl ChangeWindow {
     }
 
     fn branch_window_mut(&mut self, branch_key: &str) -> &mut BranchWindow {
-        self.branches.entry(branch_key.to_string()).or_insert_with(BranchWindow::new)
+        self.branches
+            .entry(branch_key.to_string())
+            .or_insert_with(BranchWindow::new)
     }
 
     fn register_commit(
@@ -206,12 +208,14 @@ impl ChangeWindow {
                 active_count: 0,
             });
         }
-        let commit = branch.get_commit_mut(&parent_id)
+        let commit = branch
+            .get_commit_mut(&parent_id)
             .expect("parent commit just inserted or already present");
         commit.active_count += 1;
 
         let guard_id = self.next_guard_id.fetch_add(1, Ordering::SeqCst);
-        self.guards.insert(guard_id, (branch_key, Some(parent_id.clone())));
+        self.guards
+            .insert(guard_id, (branch_key, Some(parent_id.clone())));
         Some((guard_id, Some(parent_id)))
     }
 
@@ -236,8 +240,10 @@ impl ChangeWindow {
             if commit.active_count == 0 {
                 commit.active_count += 1;
                 let guard_id = self.next_guard_id.fetch_add(1, Ordering::SeqCst);
-                self.guards
-                    .insert(guard_id, (branch_key.clone(), Some(initial_commit_id.clone())));
+                self.guards.insert(
+                    guard_id,
+                    (branch_key.clone(), Some(initial_commit_id.clone())),
+                );
                 return Some((guard_id, initial_commit_id));
             }
         }
@@ -245,11 +251,7 @@ impl ChangeWindow {
         // The initial commit is already locked. Wait until the first real
         // commit has been registered.
         if branch.len() == 1
-            && branch
-                .commits
-                .back()
-                .map(|c| c.commit_id.as_str())
-                == Some(&initial_commit_id)
+            && branch.commits.back().map(|c| c.commit_id.as_str()) == Some(&initial_commit_id)
         {
             return None;
         }
@@ -458,7 +460,13 @@ pub fn verify_contracts(
     let must_exist: HashSet<String> = must_exist.iter().cloned().collect();
     let must_not_exist: HashSet<String> = must_not_exist.iter().cloned().collect();
     let window = ChangeWindow::lock();
-    window.intersects(branch_key, pre_commit_id, current_commit_id, &must_exist, &must_not_exist)
+    window.intersects(
+        branch_key,
+        pre_commit_id,
+        current_commit_id,
+        &must_exist,
+        &must_not_exist,
+    )
 }
 
 fn layer_subject_changes(layer: &WrappedLayer) -> io::Result<(HashSet<String>, HashSet<String>)> {

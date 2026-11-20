@@ -13,19 +13,20 @@
 //! - `indexer_progress(+Path, +BranchName, -Progress)`: query progress
 //! - `indexer_abort_domain(+Domain)`: abort all tasks for a domain
 
+use crate::index_handoff::{self, IndexTaskKind, TaskFileState};
+use axum::body::Bytes;
+use axum::http::{HeaderMap, Method};
+use futures::future::BoxFuture;
+use futures::{FutureExt, StreamExt};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::os::fd::IntoRawFd;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 use swipl::prelude::*;
-use futures::future::BoxFuture;
-use futures::{FutureExt, StreamExt};
-use axum::body::Bytes;
-use axum::http::{HeaderMap, Method};
-use tokio::sync::mpsc;
 use tokio::io::AsyncReadExt;
 use tokio::net::unix::pipe::Receiver as PipeReceiver;
+use tokio::sync::mpsc;
 
 // ───────────────────────── Engine transport ─────────────────────────
 
@@ -93,10 +94,24 @@ pub struct EngineResponse {
 ///   active (`TERMINUSDB_INDEXER_BACKEND=vectorlink`). It routes the same
 ///   requests through vectorlink's own axum router without a socket.
 pub trait EngineTransport: Send + Sync + 'static {
-    fn execute<'a>(
-        &'a self,
-        req: EngineRequest,
-    ) -> BoxFuture<'a, Result<EngineResponse, String>>;
+    fn execute<'a>(&'a self, req: EngineRequest) -> BoxFuture<'a, Result<EngineResponse, String>>;
+
+    /// True when the engine behind this transport cannot accept index
+    /// writes locally — the vectorlink data dir is write-locked by
+    /// another process, so this instance answers reads only. Only the
+    /// embedded vectorlink transport can report this; remote transports
+    /// are read/write by definition.
+    fn is_read_only(&self) -> bool {
+        false
+    }
+
+    /// Directory shared with other TerminusDB instances for index-task
+    /// handoff files (`<data_dir>/index_tasks`). `Some` only for engines
+    /// on this filesystem — the embedded vectorlink transport. A remote
+    /// engine shares no directory and returns `None`.
+    fn index_task_dir(&self) -> Option<std::path::PathBuf> {
+        None
+    }
 
     /// Downcast support for tests and diagnostics.
     fn as_any(&self) -> &dyn std::any::Any;
@@ -113,8 +128,8 @@ struct HttpTransport {
 impl EngineTransport for HttpTransport {
     fn execute<'a>(&'a self, req: EngineRequest) -> BoxFuture<'a, Result<EngineResponse, String>> {
         Box::pin(async move {
-            use http_body_util::StreamBody;
             use http_body::Frame;
+            use http_body_util::StreamBody;
 
             let method = req.method.clone();
             let url = format!("{}{}", self.base_url, req.path);
@@ -142,9 +157,7 @@ impl EngineTransport for HttpTransport {
             Ok(EngineResponse {
                 status: resp.status().as_u16(),
                 headers: resp.headers().clone(),
-                body: boxed_sync_stream(
-                    resp.bytes_stream().map(|r| r.map_err(|e| e.to_string())),
-                ),
+                body: boxed_sync_stream(resp.bytes_stream().map(|r| r.map_err(|e| e.to_string()))),
             })
         })
     }
@@ -365,7 +378,15 @@ impl BranchProgress {
         let processed_docs = self.processed_documents.load(Ordering::SeqCst);
         let total_docs = self.total_documents.load(Ordering::SeqCst);
         let docs_sent = self.documents_sent.load(Ordering::SeqCst);
-        (completed, total, status, current_commit, processed_docs, total_docs, docs_sent)
+        (
+            completed,
+            total,
+            status,
+            current_commit,
+            processed_docs,
+            total_docs,
+            docs_sent,
+        )
     }
 }
 
@@ -396,6 +417,28 @@ struct BranchTask {
 }
 
 /// The global indexer registry.
+/// Dead man's switch decision: is a task stalled past the deadline?
+/// Pure so the rule is unit-testable — the abort itself stays in
+/// check_dead_mans_switch.
+///
+/// A task is stalled only when it is mid-push (`has_current_commit`,
+/// armed by set_current_commit), it has not finished its expected
+/// documents (a task waiting for the terminal line is not stuck), and
+/// the engine has reported no batch progress or heartbeat within the
+/// deadline. `progress_age` is None between a pending commit and the
+/// push start — that is not a stall.
+fn dead_man_violation(
+    has_current_commit: bool,
+    processed_docs: u64,
+    total_docs: u64,
+    progress_age: Option<Duration>,
+    deadline: Duration,
+) -> bool {
+    has_current_commit
+        && !(total_docs > 0 && processed_docs >= total_docs)
+        && matches!(progress_age, Some(age) if age > deadline)
+}
+
 pub struct IndexerRegistry {
     tasks: StdMutex<HashMap<BranchKey, Arc<BranchTask>>>,
     pending_queue: StdMutex<VecDeque<BranchKey>>,
@@ -411,6 +454,23 @@ pub struct IndexerRegistry {
     /// notify() is called with has_embeddings=true (e.g. from post_commit_hook
     /// which has already verified embedding metadata exists).
     no_embedding_cache: StdMutex<HashSet<String>>,
+    /// Notifies received while no engine transport is installed (embedded
+    /// engine still initializing, or indexer_set_config pending). A notify
+    /// is one-shot intent: dropping it here means the commit it carried is
+    /// never indexed, so entries are parked and replayed by set_transport
+    /// the moment an engine lands. Keyed by branch so repeated notifies
+    /// merge instead of queueing unboundedly.
+    pending_notifies: StdMutex<HashMap<BranchKey, PendingNotify>>,
+}
+
+/// A notify that arrived before the engine transport existed. Replayed
+/// verbatim through notify() on transport install so handoff, cache and
+/// scheduling semantics stay identical to a live notify.
+#[derive(Default)]
+struct PendingNotify {
+    notify_count: u64,
+    store_clustering: bool,
+    has_embeddings: bool,
 }
 
 impl IndexerRegistry {
@@ -421,6 +481,7 @@ impl IndexerRegistry {
             current_branch: StdMutex::new(None),
             transport: StdMutex::new(None),
             no_embedding_cache: StdMutex::new(HashSet::new()),
+            pending_notifies: StdMutex::new(HashMap::new()),
         }
     }
 
@@ -438,6 +499,7 @@ impl IndexerRegistry {
                 task.cancel.cancel();
             }
             self.pending_queue.lock().unwrap().clear();
+            self.pending_notifies.lock().unwrap().clear();
             *self.current_branch.lock().unwrap() = None;
             return;
         }
@@ -445,7 +507,7 @@ impl IndexerRegistry {
             .timeout(std::time::Duration::from_secs(300))
             .build()
             .expect("failed to build reqwest client");
-        *self.transport.lock().unwrap() = Some(Arc::new(HttpTransport {
+        self.install_transport(Arc::new(HttpTransport {
             client,
             base_url: url.trim_end_matches('/').to_string(),
             auth_header: auth,
@@ -455,7 +517,38 @@ impl IndexerRegistry {
     /// Install an engine transport directly. Used by the embedded
     /// vectorlink backend (see the terminusdb-vectorlink crate).
     fn set_transport(&self, transport: Arc<dyn EngineTransport>) {
+        self.install_transport(transport);
+    }
+
+    /// Install the transport and replay every notify parked while no
+    /// engine existed. Each parked entry re-enters notify() so cache,
+    /// handoff and scheduling semantics match a live notify; the merged
+    /// repeat count is restored onto the spawned task afterwards.
+    fn install_transport(&self, transport: Arc<dyn EngineTransport>) {
         *self.transport.lock().unwrap() = Some(transport);
+        let parked: Vec<(BranchKey, PendingNotify)> =
+            self.pending_notifies.lock().unwrap().drain().collect();
+        for (key, pending) in parked {
+            crate::log::log_info(format!(
+                "[indexer] engine installed — replaying parked notify for {}",
+                key.path
+            ));
+            if self
+                .notify(
+                    key.path.clone(),
+                    key.branch.clone(),
+                    pending.store_clustering,
+                    pending.has_embeddings,
+                )
+                .is_ok()
+                && pending.notify_count > 1
+            {
+                if let Some(task) = self.tasks.lock().unwrap().get(&key) {
+                    task.notify_count
+                        .fetch_add(pending.notify_count - 1, Ordering::SeqCst);
+                }
+            }
+        }
     }
 
     fn get_transport(&self) -> Result<Arc<dyn EngineTransport>, String> {
@@ -474,16 +567,37 @@ impl IndexerRegistry {
     /// for domains without embedding metadata nearly cost-free.
     /// When has_embeddings=true, clears the no_embedding cache for this domain
     /// (embeddings were just added to the schema).
-    fn notify(&self, path: String, branch: String, store_clustering: bool, has_embeddings: bool) -> Result<(), String> {
-        // No engine transport installed — indexing is unconfigured, so a
-        // commit notify is a cheap no-op rather than a spawn+fail cycle.
+    fn notify(
+        &self,
+        path: String,
+        branch: String,
+        store_clustering: bool,
+        has_embeddings: bool,
+    ) -> Result<(), String> {
+        let key = BranchKey {
+            path: path.clone(),
+            branch,
+        };
+
+        // No engine transport installed — the embedded engine may still be
+        // initializing, so park the notify instead of dropping it: a notify
+        // is one-shot intent and a dropped one is indexing work that is
+        // silently never done. install_transport replays these the moment
+        // an engine lands.
         if self.transport.lock().unwrap().is_none() {
+            let mut pendings = self.pending_notifies.lock().unwrap();
+            let pending = pendings.entry(key.clone()).or_default();
+            pending.notify_count += 1;
+            if has_embeddings {
+                pending.has_embeddings = true;
+                pending.store_clustering = store_clustering;
+            }
             crate::log::log_debug(format!(
-                "[indexer] notify skipped for {} — engine transport not configured", path));
+                "[indexer] notify for {} parked — engine transport not installed yet",
+                key.path
+            ));
             return Ok(());
         }
-
-        let key = BranchKey { path: path.clone(), branch };
 
         // Fast path: if the caller doesn't know whether embeddings exist
         // (has_embeddings=false, e.g. from maybe_nudge_push), check the cache.
@@ -502,6 +616,18 @@ impl IndexerRegistry {
             drop(cache);
         }
 
+        // Read-only engine: this instance cannot write to the shared data
+        // dir — hand the request to the lock holder via the task queue.
+        if self.handoff_if_read_only(
+            &key.path,
+            &key.branch,
+            store_clustering,
+            IndexTaskKind::Index,
+            "auto:notify",
+        )? {
+            return Ok(());
+        }
+
         let mut tasks = self.tasks.lock().unwrap();
 
         if let Some(task) = tasks.get(&key) {
@@ -512,18 +638,21 @@ impl IndexerRegistry {
             // (has_embeddings=false), keep the existing value — the CGI
             // header X-Store-Clustering from the worker will update it.
             if has_embeddings {
-                task.store_clustering.store(store_clustering, Ordering::SeqCst);
+                task.store_clustering
+                    .store(store_clustering, Ordering::SeqCst);
                 // Clear the no_embedding flag on the existing task (schema
                 // was updated to add store_indices).
                 task.progress.set_no_embedding(false);
             }
-            // If the task is already Completed, re-enqueue it for
-            // scheduling so the new commits get processed.
-            let is_completed = matches!(
+            // A task at rest — Completed or dead from an earlier Error —
+            // is re-enqueued for scheduling so the new commits get
+            // processed. Without the Error arm a failed task would stay
+            // dead no matter how many notifies arrive.
+            let at_rest = matches!(
                 *task.progress.status.lock().unwrap(),
-                IndexStatus::Completed
+                IndexStatus::Completed | IndexStatus::Error(_)
             );
-            if is_completed {
+            if at_rest {
                 task.progress.set_status_indexing();
                 *task.next_commit.lock().unwrap() = None;
                 drop(tasks);
@@ -563,7 +692,23 @@ impl IndexerRegistry {
     /// and tags (so /last-indexed returns null), then creates a fresh task
     /// that will start from the oldest commit.
     fn reindex(&self, path: String, branch: String, store_clustering: bool) -> Result<(), String> {
-        let key = BranchKey { path: path.clone(), branch: branch.clone() };
+        // Read-only engine: hand the rebuild to the lock holder via the
+        // task queue instead of issuing doomed writes against the
+        // shared data dir.
+        if self.handoff_if_read_only(
+            &path,
+            &branch,
+            store_clustering,
+            IndexTaskKind::Reindex,
+            "api:index",
+        )? {
+            return Ok(());
+        }
+
+        let key = BranchKey {
+            path: path.clone(),
+            branch: branch.clone(),
+        };
 
         // 0. Clear no_embedding cache — reindex implies embeddings exist.
         self.no_embedding_cache.lock().unwrap().remove(&path);
@@ -606,10 +751,7 @@ impl IndexerRegistry {
                     // branch tags. Using /domain (not /branch-index) ensures
                     // old documents are wiped, so re-indexed pushes insert
                     // fresh data instead of silently upserting existing docs.
-                    let delete_path = format!(
-                        "/domain?domain={}",
-                        urlencoding::encode(&domain),
-                    );
+                    let delete_path = format!("/domain?domain={}", urlencoding::encode(&domain),);
                     crate::log::log_info(format!(
                         "[indexer] reindex: DELETE {} for {} {}",
                         delete_path, path_clone, branch_clone
@@ -633,8 +775,7 @@ impl IndexerRegistry {
                         Ok(r) => {
                             crate::log::log_error(format!(
                                 "[indexer] reindex: DELETE domain returned {}: {}",
-                                r.status,
-                                path_clone
+                                r.status, path_clone
                             ));
                         }
                         Err(e) => {
@@ -673,6 +814,71 @@ impl IndexerRegistry {
         }
 
         Ok(())
+    }
+
+    /// If the installed engine is read-only, write an index-task file
+    /// into the shared handoff directory for the lock holder to execute
+    /// and return `Ok(true)`. Returns `Ok(false)` when the engine is
+    /// writable (the caller proceeds with local indexing) or no
+    /// transport is installed. An engine that is read-only but exposes
+    /// no task dir is a configuration bug — logged loudly; the caller
+    /// then falls through to the local path which fails on its own
+    /// terms. A failed write returns `Err` — the requester must see the
+    /// failure, not a silent drop.
+    fn handoff_if_read_only(
+        &self,
+        path: &str,
+        branch: &str,
+        store_clustering: bool,
+        kind: IndexTaskKind,
+        requester: &str,
+    ) -> Result<bool, String> {
+        let transport = match self.transport.lock().unwrap().clone() {
+            Some(t) => t,
+            None => return Ok(false),
+        };
+        if !transport.is_read_only() {
+            return Ok(false);
+        }
+        let Some(dir) = transport.index_task_dir() else {
+            crate::log::log_error(format!(
+                "[indexer] engine is read-only but exposes no index task dir — \
+                 index request for {} {} has nowhere to go",
+                path, branch
+            ));
+            return Ok(false);
+        };
+        let task = index_handoff::IndexTask::new(path, branch, store_clustering, kind, requester);
+        match index_handoff::enqueue(&dir, &task) {
+            Ok(index_handoff::EnqueueOutcome::Enqueued) => crate::log::log_info(format!(
+                "[indexer] read-only: handed off {} task for {} {}",
+                kind.as_str(),
+                path,
+                branch
+            )),
+            Ok(index_handoff::EnqueueOutcome::Pending) => crate::log::log_info(format!(
+                "[indexer] read-only: {} task for {} {} already queued",
+                kind.as_str(),
+                path,
+                branch
+            )),
+            Ok(index_handoff::EnqueueOutcome::Underway) => crate::log::log_info(format!(
+                "[indexer] read-only: {} task for {} {} already underway",
+                kind.as_str(),
+                path,
+                branch
+            )),
+            Err(e) => {
+                return Err(format!(
+                    "read-only: failed to write {} handoff task for {} {}: {}",
+                    kind.as_str(),
+                    path,
+                    branch,
+                    e
+                ))
+            }
+        }
+        Ok(true)
     }
 
     /// Add a branch to the pending queue if not already queued.
@@ -721,7 +927,7 @@ impl IndexerRegistry {
         *self.current_branch.lock().unwrap() = Some(key.clone());
 
         // Get the task data.
-        let (progress, cancel, next_commit, store_clustering) = {
+        let (progress, cancel, next_commit, store_clustering, task) = {
             let tasks = self.tasks.lock().unwrap();
             match tasks.get(&key) {
                 Some(task) => {
@@ -731,8 +937,14 @@ impl IndexerRegistry {
                     // on_task_complete will set it from X-Next-Commit header.
                     *task.next_commit.lock().unwrap() = None;
                     let sc = task.store_clustering.load(Ordering::SeqCst);
-                    (task.progress.clone(), task.cancel.clone(), nc, sc)
-                },
+                    (
+                        task.progress.clone(),
+                        task.cancel.clone(),
+                        nc,
+                        sc,
+                        task.clone(),
+                    )
+                }
                 None => {
                     // Task was removed (e.g. by abort_domain) — skip.
                     *self.current_branch.lock().unwrap() = None;
@@ -783,16 +995,14 @@ impl IndexerRegistry {
                 let registry_clone = registry.clone();
                 let key_clone = key.clone();
                 h.spawn(async move {
-                    let result = std::panic::AssertUnwindSafe(
-                        run_commit_task(
-                            key_clone.clone(),
-                            transport,
-                            progress.clone(),
-                            cancel,
-                            next_commit,
-                            store_clustering,
-                        )
-                    )
+                    let result = std::panic::AssertUnwindSafe(run_commit_task(
+                        key_clone.clone(),
+                        transport,
+                        progress.clone(),
+                        cancel,
+                        next_commit,
+                        store_clustering,
+                    ))
                     .catch_unwind()
                     .await
                     .unwrap_or_else(|e| {
@@ -810,7 +1020,7 @@ impl IndexerRegistry {
                         progress.set_error(msg.clone());
                         TaskResult::Error(msg)
                     });
-                    registry_clone.on_task_complete(&key_clone, result);
+                    registry_clone.on_task_complete(&key_clone, result, &task);
                 });
             }
             None => {
@@ -823,8 +1033,40 @@ impl IndexerRegistry {
         }
     }
 
-    /// Called when a commit task completes.
-    fn on_task_complete(&self, key: &BranchKey, result: TaskResult) {
+    /// Called when a commit task completes. `task` is the BranchTask this
+    /// run was spawned with — a task evicted by the dead man's switch (or
+    /// abort_domain) can still complete afterwards, and by then its key may
+    /// have been re-registered by a new notify. Only the currently registered
+    /// task may mutate the registry or free the scheduler slot; a stale
+    /// completion would otherwise cancel or corrupt its replacement.
+    fn on_task_complete(&self, key: &BranchKey, result: TaskResult, task: &Arc<BranchTask>) {
+        let (registered_is_this_task, replacement_registered) = {
+            let tasks = self.tasks.lock().unwrap();
+            match tasks.get(key) {
+                Some(t) if Arc::ptr_eq(t, task) => (true, false),
+                Some(_) => (false, true),
+                None => (false, false),
+            }
+        };
+        if !registered_is_this_task {
+            crate::log::log_info(format!(
+                "[indexer] ignoring stale task completion for {} {}",
+                key.path, key.branch
+            ));
+            // No replacement for this key: the slot may still name it —
+            // free it so queued branches can run.
+            if !replacement_registered {
+                {
+                    let mut current = self.current_branch.lock().unwrap();
+                    if current.as_ref() == Some(key) {
+                        *current = None;
+                    }
+                }
+                self.try_spawn_next();
+            }
+            return;
+        }
+
         // Clear current branch.
         *self.current_branch.lock().unwrap() = None;
 
@@ -943,13 +1185,18 @@ impl IndexerRegistry {
                         task.progress.start_retry_timer();
                     }
 
-                    let elapsed = task.progress.retry_duration()
+                    let elapsed = task
+                        .progress
+                        .retry_duration()
                         .map(|d| d.as_secs())
                         .unwrap_or(0);
                     crate::log::log_info(format!(
                         "[indexer] task for {} {} will retry (503 from vectorlink, \
                          retry cycle {}s / {}s max)",
-                        key.path, key.branch, elapsed, MAX_RETRY_DURATION.as_secs()
+                        key.path,
+                        key.branch,
+                        elapsed,
+                        MAX_RETRY_DURATION.as_secs()
                     ));
 
                     // Refresh the dead man's switch timer so it doesn't fire
@@ -983,10 +1230,7 @@ impl IndexerRegistry {
         let mut tasks = self.tasks.lock().unwrap();
         let keys_to_remove: Vec<BranchKey> = tasks
             .keys()
-            .filter(|k| {
-                k.path == domain
-                    || k.path.starts_with(&format!("{}/", domain))
-            })
+            .filter(|k| k.path == domain || k.path.starts_with(&format!("{}/", domain)))
             .cloned()
             .collect();
         for key in &keys_to_remove {
@@ -998,19 +1242,43 @@ impl IndexerRegistry {
 
         // Also remove from pending queue.
         let mut queue = self.pending_queue.lock().unwrap();
-        queue.retain(|k| {
-            k.path != domain && !k.path.starts_with(&format!("{}/", domain))
-        });
+        queue.retain(|k| k.path != domain && !k.path.starts_with(&format!("{}/", domain)));
     }
 
     /// Get progress for a branch.
-    fn progress(&self, path: &str, branch: &str) -> Option<(u64, u64, IndexStatus, Option<String>, Option<String>, u64, u64, u64)> {
-        let key = BranchKey { path: path.to_string(), branch: branch.to_string() };
+    fn progress(
+        &self,
+        path: &str,
+        branch: &str,
+    ) -> Option<(
+        u64,
+        u64,
+        IndexStatus,
+        Option<String>,
+        Option<String>,
+        u64,
+        u64,
+        u64,
+    )> {
+        let key = BranchKey {
+            path: path.to_string(),
+            branch: branch.to_string(),
+        };
         let tasks = self.tasks.lock().unwrap();
         tasks.get(&key).map(|t| {
-            let (completed, total, status, current_commit, processed_docs, total_docs, docs_sent) = t.progress.snapshot();
+            let (completed, total, status, current_commit, processed_docs, total_docs, docs_sent) =
+                t.progress.snapshot();
             let next_commit = t.next_commit.lock().unwrap().clone();
-            (completed, total, status, current_commit, next_commit, processed_docs, total_docs, docs_sent)
+            (
+                completed,
+                total,
+                status,
+                current_commit,
+                next_commit,
+                processed_docs,
+                total_docs,
+                docs_sent,
+            )
         })
     }
 
@@ -1020,72 +1288,132 @@ impl IndexerRegistry {
     }
 
     /// Dead man's switch: check all active tasks for progress violations.
-    /// If any task has a current_commit set (actively processing) but no
-    /// document progress for longer than the deadline, crash the server
-    /// with a FATAL log message and a full stack trace.
+    /// A task with a current_commit (actively processing) that reports no
+    /// batch progress or heartbeat for longer than the deadline is stalled:
+    /// cancel it, mark it failed, evict it from the registry, and free the
+    /// scheduler slot so indexing for other branches continues. The commit
+    /// is never tagged, so a re-push re-attempts it; the branch reports the
+    /// error until a notify registers a fresh task.
     ///
-    /// ARCHITECTURAL INVARIANT: This fail-loud behaviour must NEVER be changed
-    /// to cancel-and-continue, log-and-swallow, or any non-aborting strategy
-    /// without explicit approval from a human architect. If this switch fires,
-    /// there is a serious correctness issue in the TerminusDB product — a
-    /// thread is stuck in a state that violates the indexing contract. Aborting
-    /// is the only safe response: it surfaces the bug immediately with a stack
-    /// trace rather than silently corrupting the index or leaking resources.
+    /// FATAL-level diagnostics (every task's snapshot plus the watchdog
+    /// backtrace) are emitted first — a stall means the engine wedged on a
+    /// call and the evidence must survive, but one stuck branch must not
+    /// take the server or the other branches' indexing down with it.
     ///
     /// The deadline is configurable via TERMINUSDB_INDEXER_WATCHDOG_DEADLINE
-    /// (default: 60 seconds). CPU-only embedding backends (e.g. Ollama)
-    /// can take >10s for the first document, so the default allows for
-    /// slow first-document processing.
+    /// (default: 300 seconds). Heartbeats keep a slow-but-healthy embed call
+    /// alive under it, so the deadline only needs to outlive a genuinely
+    /// stalled batch.
     fn check_dead_mans_switch(&self) {
         let deadline_secs = std::env::var("TERMINUSDB_INDEXER_WATCHDOG_DEADLINE")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(60);
+            .unwrap_or(300);
 
-        let deadline = Duration::from_secs(deadline_secs);
+        self.check_dead_mans_switch_with_deadline(Duration::from_secs(deadline_secs));
+    }
 
-        let tasks = self.tasks.lock().unwrap();
-        for (key, task) in tasks.iter() {
-            let (completed, total, _status, current_commit, processed_docs, total_docs, _docs_sent) =
-                task.progress.snapshot();
+    /// The deadline as a parameter so tests can exercise the switch without
+    /// racing on the process-global environment variable.
+    fn check_dead_mans_switch_with_deadline(&self, deadline: Duration) {
+        // Collect stalled tasks under the lock; eviction and rescheduling
+        // happen after it is dropped (try_spawn_next takes the same lock).
+        let mut stalled: Vec<(BranchKey, String)> = Vec::new();
+        {
+            let tasks = self.tasks.lock().unwrap();
+            for (key, task) in tasks.iter() {
+                let (
+                    completed,
+                    total,
+                    _status,
+                    current_commit,
+                    processed_docs,
+                    total_docs,
+                    _docs_sent,
+                ) = task.progress.snapshot();
 
-            // Only check tasks that are actively indexing (have a current_commit
-            // and have started the push — last_progress_at is set by
-            // set_current_commit, not set_pending_commit).
-            if let Some(ref commit) = current_commit {
-                // Skip if all documents have been processed — the task is
-                // waiting for the vectorlink response, not stuck.
-                if total_docs > 0 && processed_docs >= total_docs {
-                    continue;
-                }
-                if let Some(age) = task.progress.progress_age() {
-                    if age > deadline {
-                        // Dead man's switch violation! Crash the server.
+                // Only check tasks that are actively indexing (have a current_commit
+                // and have started the push — last_progress_at is set by
+                // set_current_commit, not set_pending_commit).
+                if let Some(ref commit) = current_commit {
+                    let age = task.progress.progress_age();
+                    if dead_man_violation(
+                        current_commit.is_some(),
+                        processed_docs,
+                        total_docs,
+                        age,
+                        deadline,
+                    ) {
+                        // Dead man's switch violation — abort the task, not the server.
+                        let age = age.unwrap_or_default();
                         let msg = format!(
                             "[FATAL] Indexer dead man's switch violation: \
                              branch {} {} commit {} \
-                             no document progress for {:?} (deadline {:?}) \
+                             no batch progress for {:?} (deadline {:?}) \
                              processed_documents={} total_documents={} \
                              commits_processed={} total_commits={} \
-                             — a single document should take < 5s, \
-                             this indicates a stuck task that must be investigated",
-                            key.path, key.branch, commit,
-                            age, deadline,
-                            processed_docs, total_docs,
-                            completed, total
+                             — the engine reports batch progress or heartbeats \
+                             while work is in flight; silence indicates a stuck \
+                             call. Aborting this indexing task; the server continues",
+                            key.path,
+                            key.branch,
+                            commit,
+                            age,
+                            deadline,
+                            processed_docs,
+                            total_docs,
+                            completed,
+                            total
                         );
                         eprintln!("{}", msg);
-
-                        // Print all thread stack traces for debugging.
-                        // On macOS, we use backtrace_symbols via signal.
-                        // The simplest cross-platform approach: send SIGABRT
-                        // which triggers the Prolog signal handler to print
-                        // all thread stacks before crashing.
-                        eprintln!("[FATAL] Aborting server for stack trace analysis...");
-                        std::process::abort();
+                        stalled.push((key.clone(), msg));
                     }
                 }
             }
+
+            // Dump every task's state while the lock is held — the snapshots
+            // are the evidence for which branch wedged and what ran beside it.
+            if !stalled.is_empty() {
+                for (other_key, other_task) in tasks.iter() {
+                    eprintln!(
+                        "[FATAL] task {} {}: {:?}",
+                        other_key.path,
+                        other_key.branch,
+                        other_task.progress.snapshot()
+                    );
+                }
+            }
+        }
+
+        if stalled.is_empty() {
+            return;
+        }
+        eprintln!(
+            "[FATAL] watchdog thread backtrace:\n{}",
+            std::backtrace::Backtrace::force_capture()
+        );
+
+        for (key, msg) in stalled {
+            {
+                let mut tasks = self.tasks.lock().unwrap();
+                if let Some(task) = tasks.remove(&key) {
+                    // Ask the task to exit at its next cancellation point.
+                    // A task wedged in a non-cancellable await leaves its
+                    // spawned tokio task behind, but eviction means it can
+                    // no longer block the scheduler or poison a replacement.
+                    task.cancel.cancel();
+                    task.progress.set_error(msg);
+                }
+            }
+            // Free the scheduler slot when the stalled task held it — the
+            // one-at-a-time pipeline stays jammed otherwise.
+            {
+                let mut current = self.current_branch.lock().unwrap();
+                if current.as_ref() == Some(&key) {
+                    *current = None;
+                }
+            }
+            self.try_spawn_next();
         }
     }
 }
@@ -1099,8 +1427,263 @@ static INDEXER_REGISTRY: std::sync::OnceLock<Arc<IndexerRegistry>> = std::sync::
 /// vectorlink backend initializes (`TERMINUSDB_INDEXER_BACKEND=vectorlink`).
 /// After this call, all indexer traffic (last-indexed, push, delete domain)
 /// flows through the given transport instead of a remote HTTP server.
+///
+/// When the transport exposes an index-task directory and this process is
+/// the write-lock holder, the handoff poller is started here — its first
+/// scan runs immediately, draining tasks that accumulated while the
+/// previous lock holder was down.
 pub fn set_engine_transport(transport: Arc<dyn EngineTransport>) {
-    indexer_registry().set_transport(transport);
+    indexer_registry().set_transport(transport.clone());
+    maybe_start_handoff_poller(&transport);
+}
+
+// ─────────────────────── Index-task handoff poller ───────────────────────
+
+/// Default interval for the index-task queue sweep. The directory is
+/// watched for events so tasks are normally claimed as they land; the
+/// interval remains as the fallback for platforms where the watcher
+/// drops or never delivers events.
+const HANDOFF_DEFAULT_POLL_SECS: u64 = 10;
+
+static HANDOFF_POLLER_STARTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Start the handoff poller when this transport shares a task directory
+/// and this process is the write-lock holder. Idempotent — one poller
+/// per process regardless of how often the transport is reinstalled.
+fn maybe_start_handoff_poller(transport: &Arc<dyn EngineTransport>) {
+    if transport.is_read_only() {
+        // This instance hands tasks off; it never executes them.
+        return;
+    }
+    let Some(dir) = transport.index_task_dir() else {
+        return;
+    };
+    if HANDOFF_POLLER_STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let Some(handle) = crate::dispatch::tokio_handle() else {
+        HANDOFF_POLLER_STARTED.store(false, Ordering::SeqCst);
+        crate::log::log_error(
+            "[indexer] index-task handoff unavailable: no tokio runtime".to_string(),
+        );
+        return;
+    };
+    crate::log::log_info(format!(
+        "[indexer] index-task handoff active: polling {}",
+        dir.display()
+    ));
+    let registry = indexer_registry().clone();
+    handle.spawn(handoff_poller_loop(dir, registry));
+}
+
+/// A task file signals by appearing, changing or disappearing: create,
+/// remove, and data or rename events wake the scan. Everything else must
+/// not — the poller's own claim_pending opens the watched directory on
+/// every scan, which inotify reports as Access(Open), and strictatime
+/// mounts can add atime Modify(Metadata) from the same reads. Waking on
+/// an event the scan itself emits loops forever.
+fn handoff_event_wakes(event: &notify::Event) -> bool {
+    match event.kind {
+        notify::EventKind::Create(_) | notify::EventKind::Remove(_) => true,
+        notify::EventKind::Modify(kind) => matches!(
+            kind,
+            notify::event::ModifyKind::Any
+                | notify::event::ModifyKind::Data(_)
+                | notify::event::ModifyKind::Name(_)
+        ),
+        _ => false,
+    }
+}
+
+/// Poll the handoff directory: claim pending task files and deliver each
+/// to the registry, deleting the file once the signal is accepted. The
+/// file is the signal and only the signal — like `indexer_notify`, once
+/// the registry has the task the requester is done, and the registry
+/// owns the task's lifecycle from there. A delivery error drops the
+/// claim so the file stays pending and is retried on the next scan. The
+/// first interval tick fires immediately — that is the startup drain, so
+/// tasks enqueued while no lock holder was alive start without waiting
+/// one interval. The engine transport is fetched from the registry per
+/// task so a reinstalled engine never leaves deletes hitting a stale
+/// router.
+async fn handoff_poller_loop(dir: std::path::PathBuf, registry: Arc<IndexerRegistry>) {
+    let poll_secs = std::env::var("TERMINUSDB_INDEXER_HANDOFF_POLL_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(HANDOFF_DEFAULT_POLL_SECS);
+    let mut interval = tokio::time::interval(Duration::from_secs(poll_secs));
+    // Only task-file mutations wake the scan early — handoff_event_wakes
+    // drops the access and metadata events the scan emits itself. The
+    // channel also absorbs bursts — a flood of events collapses into
+    // one scan.
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<()>(64);
+    // The closure gets a clone so event_tx outlives a failed watcher —
+    // a dropped sender would close the channel and spin the select loop.
+    let watcher_tx = event_tx.clone();
+    // The task dir may not exist until the first enqueue — create it so
+    // the watcher always has a path instead of degrading to sweep-only.
+    let _ = std::fs::create_dir_all(&dir);
+    let _watcher = match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        if let Ok(event) = res {
+            if handoff_event_wakes(&event) {
+                let _ = watcher_tx.try_send(());
+            }
+        }
+    }) {
+        Ok(mut w) => {
+            match notify::Watcher::watch(&mut w, &dir, notify::RecursiveMode::NonRecursive) {
+                Ok(()) => Some(w),
+                Err(e) => {
+                    crate::log::log_error(format!(
+                        "[indexer] handoff: cannot watch {}: {} — sweep interval only",
+                        dir.display(),
+                        e
+                    ));
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            crate::log::log_error(format!(
+                "[indexer] handoff: no filesystem watcher: {} — sweep interval only",
+                e
+            ));
+            None
+        }
+    };
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {}
+            _ = event_rx.recv() => {
+                while event_rx.try_recv().is_ok() {}
+            }
+        }
+        let fresh = match index_handoff::claim_pending(&dir, index_handoff::POISON_GRACE) {
+            Ok(f) => f,
+            Err(e) => {
+                crate::log::log_error(format!(
+                    "[indexer] handoff: failed to scan {}: {}",
+                    dir.display(),
+                    e
+                ));
+                continue;
+            }
+        };
+        if fresh.is_empty() {
+            continue;
+        }
+        // A reindex covers every pending index task for the same ref —
+        // once one starts, the cheaper incremental tasks can be dropped
+        // instead of executed.
+        let mut sorted = fresh;
+        index_handoff::sort_for_execution(&mut sorted);
+        let mut reindexed: HashSet<BranchKey> = HashSet::new();
+        for claimed in sorted {
+            let task = claimed.task;
+            let key = BranchKey {
+                path: task.path.clone(),
+                branch: task.branch.clone(),
+            };
+            if task.kind == IndexTaskKind::Index && reindexed.contains(&key) {
+                crate::log::log_info(format!(
+                    "[indexer] handoff: dropping {} task for {} {} — covered by reindex",
+                    task.kind.as_str(),
+                    key.path,
+                    key.branch
+                ));
+                if let Err(e) = std::fs::remove_file(&claimed.file_path) {
+                    crate::log::log_error(format!(
+                        "[indexer] handoff: failed to remove {}: {}",
+                        claimed.file_path.display(),
+                        e
+                    ));
+                }
+                continue;
+            }
+            crate::log::log_info(format!(
+                "[indexer] handoff: executing {} task for {} {} (requester {})",
+                task.kind.as_str(),
+                key.path,
+                key.branch,
+                task.requester
+            ));
+            let result = match task.kind {
+                IndexTaskKind::Index => registry.notify(
+                    task.path.clone(),
+                    task.branch.clone(),
+                    task.store_clustering,
+                    true,
+                ),
+                IndexTaskKind::Reindex => registry.reindex(
+                    task.path.clone(),
+                    task.branch.clone(),
+                    task.store_clustering,
+                ),
+                IndexTaskKind::Delete => {
+                    // task.path carries the domain (org/db). The delete runs
+                    // inline — it is a single local engine call, and the
+                    // claim flock is held for its duration so requesters
+                    // still see `underway`.
+                    match registry.get_transport() {
+                        Ok(t) => execute_domain_delete(&t, &task.path).await,
+                        Err(e) => Err(e),
+                    }
+                }
+            };
+            match result {
+                Ok(()) => {
+                    if task.kind == IndexTaskKind::Reindex {
+                        reindexed.insert(key.clone());
+                    }
+                    // Signal consumed — the registry owns the work now.
+                    if let Err(e) = std::fs::remove_file(&claimed.file_path) {
+                        crate::log::log_error(format!(
+                            "[indexer] handoff: failed to remove {}: {}",
+                            claimed.file_path.display(),
+                            e
+                        ));
+                    }
+                }
+                Err(e) => {
+                    crate::log::log_error(format!(
+                        "[indexer] handoff: failed to start {} task for {} {}: {} — \
+                         will retry next poll",
+                        task.kind.as_str(),
+                        key.path,
+                        key.branch,
+                        e
+                    ));
+                    // claimed.file drops here, releasing the lock; the file
+                    // stays pending for the next poll.
+                }
+            }
+        }
+    }
+}
+
+/// Issue DELETE /domain?domain=X through the engine transport — the same
+/// call a local DELETE /api/index makes on a writable engine. 404 counts
+/// as success: the domain being gone already satisfies the request.
+async fn execute_domain_delete(
+    transport: &Arc<dyn EngineTransport>,
+    domain: &str,
+) -> Result<(), String> {
+    let delete_path = format!("/domain?domain={}", urlencoding::encode(domain));
+    match transport
+        .execute(EngineRequest {
+            method: Method::DELETE,
+            path: delete_path.clone(),
+            body: None,
+            content_type: None,
+            timeout: Some(Duration::from_secs(30)),
+        })
+        .await
+    {
+        Ok(r) if (200..300).contains(&r.status) || r.status == 404 => Ok(()),
+        Ok(r) => Err(format!("DELETE {} returned {}", delete_path, r.status)),
+        Err(e) => Err(format!("DELETE {} failed: {}", delete_path, e)),
+    }
 }
 
 /// Get the global indexer registry, initializing it if needed.
@@ -1215,6 +1798,7 @@ async fn run_commit_task(
         output_worker_write_fd,
         binary: false,
         request_id: crate::dispatch::next_request_id("POST", &key.path),
+        indexer_worker: true,
     };
 
     // 4. Send to the dispatch queue (DispatchMessage::Pipe).
@@ -1223,7 +1807,11 @@ async fn run_commit_task(
         key.path, key.branch, commit_id, mode
     ));
     let queue = crate::dispatch::dispatch_queue();
-    if queue.send(crate::dispatch::DispatchMessage::Pipe(dispatch_req)).await.is_err() {
+    if queue
+        .send(crate::dispatch::DispatchMessage::Pipe(dispatch_req))
+        .await
+        .is_err()
+    {
         return TaskResult::Error("dispatch queue closed".to_string());
     }
     crate::log::log_info(format!(
@@ -1262,7 +1850,9 @@ async fn run_commit_task(
 
     crate::log::log_info(format!(
         "[indexer] CGI headers: status={}, leftover_body_len={}, headers={:?}",
-        status, leftover_body.len(), headers
+        status,
+        leftover_body.len(),
+        headers
     ));
 
     // Extract X-Commit-Id (the actual commit processed by Prolog) and
@@ -1278,10 +1868,7 @@ async fn run_commit_task(
 
     // Read X-Commit-Count (total commits in branch history) and update
     // the progress total so the status API reports meaningful progress.
-    if let Some(count_str) = headers
-        .get("x-commit-count")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(count_str) = headers.get("x-commit-count").and_then(|v| v.to_str().ok()) {
         if let Ok(count) = count_str.trim().parse::<u64>() {
             if count > 0 {
                 progress.set_total(count);
@@ -1316,7 +1903,11 @@ async fn run_commit_task(
         progress.set_no_embedding(true);
         // Add to the registry's no_embedding_cache so future nudges skip.
         if let Some(registry) = INDEXER_REGISTRY.get() {
-            registry.no_embedding_cache.lock().unwrap().insert(key.path.clone());
+            registry
+                .no_embedding_cache
+                .lock()
+                .unwrap()
+                .insert(key.path.clone());
         }
     }
 
@@ -1364,7 +1955,8 @@ async fn run_commit_task(
         &progress,
         store_clustering,
         new_doc_count,
-    ).await;
+    )
+    .await;
 
     // Clear the current commit marker — the task is done.
     progress.clear_current_commit();
@@ -1407,7 +1999,10 @@ async fn get_last_indexed(
     let body_bytes = collect_body(resp.body).await.unwrap_or_default();
     let body_text = String::from_utf8_lossy(&body_bytes).to_string();
     if !(200..300).contains(&status) {
-        return Err(format!("GET /last-indexed returned {}: {}", status, body_text));
+        return Err(format!(
+            "GET /last-indexed returned {}: {}",
+            status, body_text
+        ));
     }
 
     let body: serde_json::Value = serde_json::from_str(&body_text)
@@ -1477,7 +2072,11 @@ async fn post_push_stream(
 
     // Send leftover bytes first.
     if !leftover.is_empty() {
-        if body_tx.send(Ok(axum::body::Bytes::from(leftover))).await.is_err() {
+        if body_tx
+            .send(Ok(axum::body::Bytes::from(leftover)))
+            .await
+            .is_err()
+        {
             return Err("body channel closed before sending leftover".to_string());
         }
     }
@@ -1568,10 +2167,8 @@ async fn post_push_stream(
 
     if !(200..300).contains(&status) {
         // Non-streaming error response (e.g. 409, 422, 400, 503) — read as text.
-        let resp_body = String::from_utf8_lossy(
-            &collect_body(resp.body).await.unwrap_or_default(),
-        )
-        .to_string();
+        let resp_body =
+            String::from_utf8_lossy(&collect_body(resp.body).await.unwrap_or_default()).to_string();
         crate::log::log_info(format!(
             "[indexer] POST /push response status: {}, body: {}",
             status, resp_body
@@ -1600,6 +2197,8 @@ async fn post_push_stream(
     let mut ndjson_buf = String::new();
     let mut terminal_status: Option<String> = None;
     let mut terminal_error: Option<String> = None;
+    let mut terminal_indexed: u64 = 0;
+    let mut terminal_skipped: Option<(usize, String)> = None;
 
     while let Some(chunk_result) = resp_stream.next().await {
         match chunk_result {
@@ -1620,18 +2219,14 @@ async fn post_push_stream(
                                 .unwrap_or("unknown");
                             match status_val {
                                 "progress" => {
-                                    let indexed = json
-                                        .get("indexed")
-                                        .and_then(|v| v.as_u64())
-                                        .unwrap_or(0);
+                                    let indexed =
+                                        json.get("indexed").and_then(|v| v.as_u64()).unwrap_or(0);
                                     let total_seen = json
                                         .get("total_seen")
                                         .and_then(|v| v.as_u64())
                                         .unwrap_or(0);
-                                    let skipped = json
-                                        .get("skipped")
-                                        .and_then(|v| v.as_u64())
-                                        .unwrap_or(0);
+                                    let skipped =
+                                        json.get("skipped").and_then(|v| v.as_u64()).unwrap_or(0);
                                     // Update BranchProgress with the real
                                     // indexing progress from vectorlink.
                                     // This reflects actual embedding completion,
@@ -1654,6 +2249,21 @@ async fn post_push_stream(
                                     // Ensure processed_documents reflects the
                                     // final count from vectorlink.
                                     progress.set_processed_documents(indexed_documents);
+                                    terminal_indexed = indexed_documents;
+                                    // SkippedDoc[] — count + first reason, for
+                                    // surfacing a total-skip push as an error.
+                                    terminal_skipped = json
+                                        .get("skipped")
+                                        .and_then(|v| v.as_array())
+                                        .filter(|arr| !arr.is_empty())
+                                        .map(|arr| {
+                                            let first = arr[0]
+                                                .get("message")
+                                                .and_then(|m| m.as_str())
+                                                .unwrap_or("unknown")
+                                                .to_owned();
+                                            (arr.len(), first)
+                                        });
                                     terminal_status = Some("complete".to_owned());
                                 }
                                 "error" => {
@@ -1669,7 +2279,9 @@ async fn post_push_stream(
                                     terminal_error = Some(error.to_owned());
                                 }
                                 "aborted" => {
-                                    crate::log::log_info("[indexer] push aborted by client".to_string());
+                                    crate::log::log_info(
+                                        "[indexer] push aborted by client".to_string(),
+                                    );
                                     terminal_status = Some("aborted".to_owned());
                                 }
                                 _ => {
@@ -1697,7 +2309,23 @@ async fn post_push_stream(
     }
 
     match terminal_status.as_deref() {
-        Some("complete") => Ok(()),
+        Some("complete") => {
+            // The engine tags the commit even when every streamed doc was
+            // skipped (RISK-26: advance catch-up past empty commits). An
+            // all-skipped outcome with zero stored documents is not an
+            // empty commit — it is a systemic failure (dead endpoint,
+            // misconfigured provider) that would otherwise surface as a
+            // misleading status=completed with 0 searchable documents.
+            // Skips are failures only — delete ops do not land here.
+            match terminal_skipped {
+                Some((count, reason)) if terminal_indexed == 0 => Err(format!(
+                    "POST /push indexed no documents: all {} sent docs were skipped (first: {})",
+                    count.max(progress.documents_sent.load(Ordering::SeqCst) as usize),
+                    reason
+                )),
+                _ => Ok(()),
+            }
+        }
         Some("aborted") => Ok(()),
         Some("error") => Err(format!(
             "POST /push pipeline error: {}",
@@ -1706,11 +2334,15 @@ async fn post_push_stream(
         _ => {
             if (200..300).contains(&status) {
                 crate::log::log_info(
-                    "[indexer] response stream ended without terminal status, treating as success".to_string(),
+                    "[indexer] response stream ended without terminal status, treating as success"
+                        .to_string(),
                 );
                 Ok(())
             } else {
-                Err(format!("POST /push returned {} with no terminal status", status))
+                Err(format!(
+                    "POST /push returned {} with no terminal status",
+                    status
+                ))
             }
         }
     }
@@ -1779,7 +2411,33 @@ predicates! {
             error: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
             branch_processing: Option<BranchProcessing>,
+            /// True when this instance's engine is read-only — index
+            /// writes are handed off to the lock holder, so a local
+            /// not_found does not mean indexing was never requested.
+            read_only: bool,
+            /// Handoff queue state for this ref on a read-only instance:
+            /// "pending" (file queued, awaiting the lock holder) or
+            /// "underway" (claimed by the lock holder). Absent otherwise.
+            #[serde(skip_serializing_if = "Option::is_none")]
+            handoff: Option<&'static str>,
         }
+        let transport = registry.get_transport().ok();
+        let read_only = transport
+            .as_ref()
+            .map(|t| t.is_read_only())
+            .unwrap_or(false);
+        let handoff = if read_only {
+            transport
+                .as_ref()
+                .and_then(|t| t.index_task_dir())
+                .and_then(|dir| match index_handoff::probe_task_file(&dir, &path) {
+                    TaskFileState::Pending => Some("pending"),
+                    TaskFileState::Underway => Some("underway"),
+                    TaskFileState::Absent => None,
+                })
+        } else {
+            None
+        };
         let progress = match registry.progress(&path, &branch) {
             Some((completed, total, status, current_commit, next_commit, processed_docs, total_docs, docs_sent)) => {
                 let (s, e) = match status {
@@ -1799,9 +2457,11 @@ predicates! {
                         total_documents: total_docs,
                         documents_sent: docs_sent,
                     }),
+                    read_only,
+                    handoff,
                 }
             }
-            None => Progress { status: "not_found", error: None, branch_processing: None },
+            None => Progress { status: "not_found", error: None, branch_processing: None, read_only, handoff },
         };
 
         // Serialize to a JSON string (respects skip_serializing_if),
@@ -1822,6 +2482,53 @@ predicates! {
         let domain: PrologText = domain_term.get_ex()?;
         indexer_registry().abort_domain(&domain.into_inner());
         Ok(())
+    }
+
+    /// Succeeds when the installed engine transport is read-only —
+    /// the vectorlink data dir is write-locked by another process and
+    /// index requests are handed off via the task queue instead of
+    /// executing locally. Fails when no transport is installed or the
+    /// engine is writable.
+    /// Signature: indexer_engine_read_only
+    #[module("$appserver")]
+    pub semidet fn indexer_engine_read_only(_context) {
+        match indexer_registry().get_transport() {
+            Ok(t) if t.is_read_only() => Ok(()),
+            _ => Err(PrologError::Failure),
+        }
+    }
+
+    /// Enqueue a domain-index delete as a handoff task file for the
+    /// write-lock holder to execute. Only succeeds when the installed
+    /// transport is read-only and shares a task directory.
+    /// Signature: indexer_enqueue_delete(+Domain)
+    #[module("$appserver")]
+    pub semidet fn indexer_enqueue_delete(_context, domain_term) {
+        let domain: PrologText = domain_term.get_ex()?;
+        let transport = indexer_registry()
+            .get_transport()
+            .map_err(|_| PrologError::Failure)?;
+        if !transport.is_read_only() {
+            return Err(PrologError::Failure);
+        }
+        let dir = transport.index_task_dir().ok_or(PrologError::Failure)?;
+        let task = index_handoff::IndexTask::new(
+            &domain.into_inner(),
+            "",
+            false,
+            IndexTaskKind::Delete,
+            "api:index-delete",
+        );
+        match index_handoff::enqueue(&dir, &task) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                crate::log::log_error(format!(
+                    "[indexer] read-only: failed to write delete handoff task: {}",
+                    e
+                ));
+                Err(PrologError::Failure)
+            }
+        }
     }
 
     /// Re-index a branch from scratch. Aborts any running task, wipes the
@@ -1845,6 +2552,8 @@ pub fn register() {
     register_indexer_notify();
     register_indexer_progress();
     register_indexer_abort_domain();
+    register_indexer_engine_read_only();
+    register_indexer_enqueue_delete();
     register_indexer_reindex();
 }
 
@@ -1855,7 +2564,235 @@ mod tests {
     #[test]
     fn test_indexer_registry_new() {
         let registry = IndexerRegistry::new();
-        assert!(registry.get_transport().is_err(), "transport should be unset");
+        assert!(
+            registry.get_transport().is_err(),
+            "transport should be unset"
+        );
+    }
+
+    #[test]
+    fn test_dead_man_violation_idle_task_is_safe() {
+        // No current commit — the task is idle, the switch stays quiet.
+        assert!(!dead_man_violation(
+            false,
+            0,
+            0,
+            Some(Duration::from_secs(3600)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_pending_commit_is_safe() {
+        // current_commit set via set_pending_commit leaves last_progress_at
+        // unset — age None means the push has not started, not a stall.
+        assert!(!dead_man_violation(
+            true,
+            0,
+            0,
+            None,
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_fresh_progress_is_safe() {
+        assert!(!dead_man_violation(
+            true,
+            10,
+            100,
+            Some(Duration::from_secs(30)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_stalled_task_trips() {
+        assert!(dead_man_violation(
+            true,
+            1120,
+            23_000,
+            Some(Duration::from_secs(61)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_fully_processed_is_safe() {
+        // All documents embedded — the task waits for the terminal line,
+        // which is not a stall even past the deadline.
+        assert!(!dead_man_violation(
+            true,
+            100,
+            100,
+            Some(Duration::from_secs(3600)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_zero_total_still_trips() {
+        // No expected count yet: a silent push past the deadline is a stall.
+        assert!(dead_man_violation(
+            true,
+            0,
+            0,
+            Some(Duration::from_secs(61)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    fn stalled_branch_task(progress: &Arc<BranchProgress>) -> Arc<BranchTask> {
+        progress.set_total_documents(10);
+        progress.set_current_commit("commit1".to_string());
+        Arc::new(BranchTask {
+            progress: progress.clone(),
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(None),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        })
+    }
+
+    #[test]
+    fn test_dead_mans_switch_evicts_stalled_task_and_frees_scheduler() {
+        // A task silent past the deadline loses its registry entry, its
+        // cancellation token fires, its status goes Error, and the
+        // one-at-a-time scheduler slot is freed for other branches — the
+        // server itself keeps running.
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let progress = BranchProgress::new();
+        let task = stalled_branch_task(&progress);
+        // Backdate the last progress past any deadline — set_current_commit
+        // armed the timer at "now", the stall is the elapsed silence.
+        *progress.last_progress_at.lock().unwrap() = Some(Instant::now() - Duration::from_secs(1));
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
+        *registry.current_branch.lock().unwrap() = Some(key.clone());
+
+        registry.check_dead_mans_switch_with_deadline(Duration::ZERO);
+
+        assert!(registry.tasks.lock().unwrap().get(&key).is_none());
+        assert!(task.cancel.is_cancelled());
+        let (_, _, status, _, _, _, _) = progress.snapshot();
+        assert!(matches!(status, IndexStatus::Error(_)));
+        assert!(registry.current_branch.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_dead_mans_switch_keeps_task_with_recent_progress() {
+        // A task still reporting progress inside the deadline stays
+        // registered, uncancelled, and keeps the scheduler slot.
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let progress = BranchProgress::new();
+        let task = stalled_branch_task(&progress);
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
+        *registry.current_branch.lock().unwrap() = Some(key.clone());
+
+        registry.check_dead_mans_switch_with_deadline(Duration::from_secs(300));
+
+        assert!(registry.tasks.lock().unwrap().get(&key).is_some());
+        assert!(!task.cancel.is_cancelled());
+        assert_eq!(registry.current_branch.lock().unwrap().as_ref(), Some(&key));
+    }
+
+    #[test]
+    fn test_on_task_complete_ignores_stale_completion_with_replacement() {
+        // The dead man's switch evicted the old task and a notify already
+        // registered a replacement under the same key. The old task's late
+        // completion must not clear the replacement's scheduler slot, mark
+        // its progress, or remove it.
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let old_task = Arc::new(BranchTask {
+            progress: BranchProgress::new(),
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(None),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        });
+        let new_progress = BranchProgress::new();
+        let new_task = Arc::new(BranchTask {
+            progress: new_progress.clone(),
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(None),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        });
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), new_task.clone());
+        *registry.current_branch.lock().unwrap() = Some(key.clone());
+
+        registry.on_task_complete(&key, TaskResult::Error("late error".to_string()), &old_task);
+
+        assert!(
+            registry
+                .tasks
+                .lock()
+                .unwrap()
+                .get(&key)
+                .is_some_and(|t| Arc::ptr_eq(t, &new_task)),
+            "the replacement task must stay registered"
+        );
+        assert_eq!(
+            registry.current_branch.lock().unwrap().as_ref(),
+            Some(&key),
+            "the replacement's scheduler slot must not be freed"
+        );
+        let (_, _, status, _, _, _, _) = new_progress.snapshot();
+        assert!(
+            matches!(status, IndexStatus::Indexing),
+            "the replacement's status must not be overwritten by the stale error"
+        );
+    }
+
+    #[test]
+    fn test_on_task_complete_stale_without_replacement_frees_slot() {
+        // An evicted task completing late with no replacement still frees
+        // a scheduler slot left naming its key, so queued branches run.
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let old_task = Arc::new(BranchTask {
+            progress: BranchProgress::new(),
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(None),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        });
+        *registry.current_branch.lock().unwrap() = Some(key.clone());
+
+        registry.on_task_complete(&key, TaskResult::Error("late error".to_string()), &old_task);
+
+        assert!(registry.current_branch.lock().unwrap().is_none());
+        assert!(registry.tasks.lock().unwrap().get(&key).is_none());
     }
 
     #[test]
@@ -1930,7 +2867,10 @@ mod tests {
 
         progress.clear_current_commit();
         let (_, _, _, current, _, _, _) = progress.snapshot();
-        assert!(current.is_none(), "current_commit should be None after clear");
+        assert!(
+            current.is_none(),
+            "current_commit should be None after clear"
+        );
     }
 
     #[test]
@@ -1951,7 +2891,10 @@ mod tests {
         progress.increment_completed();
         let (completed, total, _, _, _, _, _) = progress.snapshot();
         assert_eq!(completed, 2);
-        assert_eq!(total, 5, "total should remain 5 after incrementing completed");
+        assert_eq!(
+            total, 5,
+            "total should remain 5 after incrementing completed"
+        );
     }
 
     #[test]
@@ -1974,9 +2917,18 @@ mod tests {
 
     #[test]
     fn test_branch_key_equality() {
-        let a = BranchKey { path: "admin/db".to_string(), branch: "main".to_string() };
-        let b = BranchKey { path: "admin/db".to_string(), branch: "main".to_string() };
-        let c = BranchKey { path: "admin/db".to_string(), branch: "dev".to_string() };
+        let a = BranchKey {
+            path: "admin/db".to_string(),
+            branch: "main".to_string(),
+        };
+        let b = BranchKey {
+            path: "admin/db".to_string(),
+            branch: "main".to_string(),
+        };
+        let c = BranchKey {
+            path: "admin/db".to_string(),
+            branch: "dev".to_string(),
+        };
         assert_eq!(a, b);
         assert_ne!(a, c);
     }
@@ -2001,7 +2953,10 @@ mod tests {
             path: "dummy".to_string(),
             branch: "dummy".to_string(),
         });
-        let key1 = BranchKey { path: "admin/db".to_string(), branch: "main".to_string() };
+        let key1 = BranchKey {
+            path: "admin/db".to_string(),
+            branch: "main".to_string(),
+        };
 
         registry.enqueue_for_scheduling(&key1);
         assert_eq!(registry.pending_queue.lock().unwrap().len(), 1);
@@ -2010,7 +2965,10 @@ mod tests {
         registry.enqueue_for_scheduling(&key1);
         assert_eq!(registry.pending_queue.lock().unwrap().len(), 1);
 
-        let key2 = BranchKey { path: "admin/db".to_string(), branch: "dev".to_string() };
+        let key2 = BranchKey {
+            path: "admin/db".to_string(),
+            branch: "dev".to_string(),
+        };
         registry.enqueue_for_scheduling(&key2);
         assert_eq!(registry.pending_queue.lock().unwrap().len(), 2);
     }
@@ -2022,9 +2980,18 @@ mod tests {
             path: "dummy".to_string(),
             branch: "dummy".to_string(),
         });
-        let key1 = BranchKey { path: "admin/db/local/branch/main".to_string(), branch: "main".to_string() };
-        let key2 = BranchKey { path: "admin/db/local/branch/dev".to_string(), branch: "dev".to_string() };
-        let key3 = BranchKey { path: "other/db/local/branch/main".to_string(), branch: "main".to_string() };
+        let key1 = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let key2 = BranchKey {
+            path: "admin/db/local/branch/dev".to_string(),
+            branch: "dev".to_string(),
+        };
+        let key3 = BranchKey {
+            path: "other/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
 
         registry.enqueue_for_scheduling(&key1);
         registry.enqueue_for_scheduling(&key2);
@@ -2044,9 +3011,18 @@ mod tests {
             path: "dummy".to_string(),
             branch: "dummy".to_string(),
         });
-        let key1 = BranchKey { path: "admin/db".to_string(), branch: "main".to_string() };
-        let key2 = BranchKey { path: "admin/db".to_string(), branch: "dev".to_string() };
-        let key3 = BranchKey { path: "admin/db".to_string(), branch: "feature".to_string() };
+        let key1 = BranchKey {
+            path: "admin/db".to_string(),
+            branch: "main".to_string(),
+        };
+        let key2 = BranchKey {
+            path: "admin/db".to_string(),
+            branch: "dev".to_string(),
+        };
+        let key3 = BranchKey {
+            path: "admin/db".to_string(),
+            branch: "feature".to_string(),
+        };
 
         registry.enqueue_for_scheduling(&key1);
         registry.enqueue_for_scheduling(&key2);
@@ -2112,7 +3088,10 @@ mod tests {
         progress.set_status_indexing();
 
         let (completed, total, status, _, _, _, _) = progress.snapshot();
-        assert_eq!(completed, 1, "completed must not be reset when re-scheduling");
+        assert_eq!(
+            completed, 1,
+            "completed must not be reset when re-scheduling"
+        );
         assert_eq!(total, 2);
         assert!(matches!(status, IndexStatus::Indexing));
     }
@@ -2163,7 +3142,11 @@ mod tests {
             store_clustering: std::sync::atomic::AtomicBool::new(false),
             reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
-        registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
 
         // Simulate commit 1 completes with NextCommit("commit2"):
         // (replicating what on_task_complete does for NextCommit, without try_spawn_next)
@@ -2172,7 +3155,10 @@ mod tests {
         progress.set_status_indexing();
 
         // Verify state after first commit.
-        assert_eq!(*task.next_commit.lock().unwrap(), Some("commit2".to_string()));
+        assert_eq!(
+            *task.next_commit.lock().unwrap(),
+            Some("commit2".to_string())
+        );
         assert_eq!(progress.completed.load(Ordering::Relaxed), 1);
         assert_eq!(progress.total.load(Ordering::Relaxed), 1);
         let (_, _, status, _, _, _, _) = progress.snapshot();
@@ -2208,7 +3194,11 @@ mod tests {
             store_clustering: std::sync::atomic::AtomicBool::new(false),
             reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
-        registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
 
         // Block try_spawn_next from actually spawning by setting current_branch.
         *registry.current_branch.lock().unwrap() = Some(BranchKey {
@@ -2216,7 +3206,7 @@ mod tests {
             branch: "dummy".to_string(),
         });
 
-        registry.on_task_complete(&key, TaskResult::NextCommit("next123".to_string()));
+        registry.on_task_complete(&key, TaskResult::NextCommit("next123".to_string()), &task);
 
         // on_task_complete clears current_branch, then try_spawn_next runs
         // and clears next_commit after reading it. We verify the side effects
@@ -2251,9 +3241,13 @@ mod tests {
             store_clustering: std::sync::atomic::AtomicBool::new(false),
             reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
-        registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
 
-        registry.on_task_complete(&key, TaskResult::NextCommit("next123".to_string()));
+        registry.on_task_complete(&key, TaskResult::NextCommit("next123".to_string()), &task);
 
         // try_spawn_next should have popped the key from the queue.
         assert!(
@@ -2263,8 +3257,11 @@ mod tests {
         // completed must be incremented.
         assert_eq!(progress.completed.load(Ordering::Relaxed), 1);
         // next_commit is cleared by try_spawn_next after reading it (Bug 9 fix).
-        assert_eq!(*task.next_commit.lock().unwrap(), None,
-            "next_commit must be cleared by try_spawn_next after reading it");
+        assert_eq!(
+            *task.next_commit.lock().unwrap(),
+            None,
+            "next_commit must be cleared by try_spawn_next after reading it"
+        );
     }
 
     #[test]
@@ -2284,7 +3281,11 @@ mod tests {
             store_clustering: std::sync::atomic::AtomicBool::new(false),
             reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
-        registry.tasks.lock().unwrap().insert(key.clone(), task);
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
 
         // Block try_spawn_next from actually spawning.
         *registry.current_branch.lock().unwrap() = Some(BranchKey {
@@ -2292,7 +3293,7 @@ mod tests {
             branch: "dummy".to_string(),
         });
 
-        registry.on_task_complete(&key, TaskResult::Error("test error".to_string()));
+        registry.on_task_complete(&key, TaskResult::Error("test error".to_string()), &task);
 
         assert!(registry.tasks.lock().unwrap().get(&key).is_none());
         let (_, _, status, _, _, _, _) = progress.snapshot();
@@ -2325,8 +3326,10 @@ mod tests {
 
         // Status should NOT be set to Completed (it stays Indexing).
         let (_, _, status, _, _, _, _) = progress.snapshot();
-        assert!(matches!(status, IndexStatus::Indexing),
-            "status should remain Indexing when re-enqueueing");
+        assert!(
+            matches!(status, IndexStatus::Indexing),
+            "status should remain Indexing when re-enqueueing"
+        );
     }
 
     #[test]
@@ -2352,7 +3355,11 @@ mod tests {
             store_clustering: std::sync::atomic::AtomicBool::new(false),
             reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
-        registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
 
         // Simulate what spawn_task does: read next_commit, then clear it.
         let next_commit_read = {
@@ -2371,15 +3378,20 @@ mod tests {
         assert_eq!(next_commit_read, Some("commitB".to_string()));
 
         // The task's next_commit is now cleared — progress() will see None.
-        assert_eq!(*task.next_commit.lock().unwrap(), None,
-            "next_commit must be cleared after spawn reads it");
+        assert_eq!(
+            *task.next_commit.lock().unwrap(),
+            None,
+            "next_commit must be cleared after spawn reads it"
+        );
 
         // progress() should report None for upcoming_commit while task runs.
         let prog = registry.progress(&key.path, &key.branch);
         assert!(prog.is_some());
         let (_, _, _, _, upcoming, _, _, _) = prog.unwrap();
-        assert_eq!(upcoming, None,
-            "progress() must not report stale next_commit while task is running");
+        assert_eq!(
+            upcoming, None,
+            "progress() must not report stale next_commit while task is running"
+        );
     }
 
     #[test]
@@ -2406,7 +3418,11 @@ mod tests {
             store_clustering: std::sync::atomic::AtomicBool::new(false),
             reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
-        registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
 
         // Simulate re-index while indexing: notify() sets reset_chain.
         task.reset_chain.store(true, Ordering::SeqCst);
@@ -2419,32 +3435,43 @@ mod tests {
 
         // on_task_complete with NextCommit should ignore "commit3" and
         // set next_commit = None because reset_chain is true.
-        registry.on_task_complete(&key, TaskResult::NextCommit("commit3".to_string()));
+        registry.on_task_complete(&key, TaskResult::NextCommit("commit3".to_string()), &task);
 
-        assert_eq!(progress.completed.load(Ordering::Relaxed), 1,
-            "completed should be incremented after NextCommit with reset_chain");
+        assert_eq!(
+            progress.completed.load(Ordering::Relaxed),
+            1,
+            "completed should be incremented after NextCommit with reset_chain"
+        );
 
         // reset_chain should be cleared after being consumed.
-        assert!(!task.reset_chain.load(Ordering::SeqCst),
-            "reset_chain should be cleared after on_task_complete consumes it");
+        assert!(
+            !task.reset_chain.load(Ordering::SeqCst),
+            "reset_chain should be cleared after on_task_complete consumes it"
+        );
     }
 
     #[test]
     fn test_no_embedding_flag_default_false() {
         let progress = BranchProgress::new();
-        assert!(!progress.is_no_embedding(),
-            "no_embedding should default to false");
+        assert!(
+            !progress.is_no_embedding(),
+            "no_embedding should default to false"
+        );
     }
 
     #[test]
     fn test_no_embedding_flag_set_and_clear() {
         let progress = BranchProgress::new();
         progress.set_no_embedding(true);
-        assert!(progress.is_no_embedding(),
-            "no_embedding should be true after set_no_embedding(true)");
+        assert!(
+            progress.is_no_embedding(),
+            "no_embedding should be true after set_no_embedding(true)"
+        );
         progress.set_no_embedding(false);
-        assert!(!progress.is_no_embedding(),
-            "no_embedding should be false after set_no_embedding(false)");
+        assert!(
+            !progress.is_no_embedding(),
+            "no_embedding should be false after set_no_embedding(false)"
+        );
     }
 
     #[test]
@@ -2460,13 +3487,19 @@ mod tests {
 
         // Manually add to the no_embedding cache (simulating what
         // run_commit_task does after reading X-Has-Embedding-Types: false).
-        registry.no_embedding_cache.lock().unwrap().insert(path.clone());
+        registry
+            .no_embedding_cache
+            .lock()
+            .unwrap()
+            .insert(path.clone());
 
         // notify with has_embeddings=false should skip.
         let result = registry.notify(path.clone(), branch.clone(), false, false);
         assert!(result.is_ok(), "notify should succeed (skip)");
-        assert!(registry.tasks.lock().unwrap().is_empty(),
-            "no task should be created when domain is in no_embedding_cache");
+        assert!(
+            registry.tasks.lock().unwrap().is_empty(),
+            "no task should be created when domain is in no_embedding_cache"
+        );
     }
 
     #[test]
@@ -2480,7 +3513,11 @@ mod tests {
         let branch = "main".to_string();
 
         // Add to cache, then clear with has_embeddings=true.
-        registry.no_embedding_cache.lock().unwrap().insert(path.clone());
+        registry
+            .no_embedding_cache
+            .lock()
+            .unwrap()
+            .insert(path.clone());
         assert!(registry.no_embedding_cache.lock().unwrap().contains(&path));
 
         // Block actual task spawning.
@@ -2489,9 +3526,148 @@ mod tests {
             branch: "dummy".to_string(),
         });
 
-        registry.notify(path.clone(), branch.clone(), false, true).unwrap();
-        assert!(!registry.no_embedding_cache.lock().unwrap().contains(&path),
-            "no_embedding_cache should be cleared when has_embeddings=true");
+        registry
+            .notify(path.clone(), branch.clone(), false, true)
+            .unwrap();
+        assert!(
+            !registry.no_embedding_cache.lock().unwrap().contains(&path),
+            "no_embedding_cache should be cleared when has_embeddings=true"
+        );
+    }
+
+    #[test]
+    fn test_notify_revives_errored_task() {
+        // A notify landing on a task dead from an earlier error must
+        // re-enqueue it — otherwise one transient failure kills indexing
+        // for the branch no matter how many commits follow.
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        registry.set_transport(Arc::new(WritableTransport {
+            task_dir: dir.path().to_path_buf(),
+        }));
+
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let progress = BranchProgress::new();
+        progress.set_error("earlier failure".to_string());
+        let task = Arc::new(BranchTask {
+            progress,
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(Some("stale".to_string())),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        });
+        registry
+            .tasks
+            .lock()
+            .unwrap()
+            .insert(key.clone(), task.clone());
+
+        // Keep try_spawn_next from dispatching — we only verify the task
+        // is re-armed and queued.
+        *registry.current_branch.lock().unwrap() = Some(BranchKey {
+            path: "dummy".to_string(),
+            branch: "dummy".to_string(),
+        });
+
+        registry
+            .notify(key.path.clone(), key.branch.clone(), false, true)
+            .unwrap();
+
+        let (_, _, status, _, _, _, _) = task.progress.snapshot();
+        assert!(
+            matches!(status, IndexStatus::Indexing),
+            "notify must re-arm an errored task, got {:?}",
+            status
+        );
+        assert!(
+            task.next_commit.lock().unwrap().is_none(),
+            "a revived task must re-derive its position from /last-indexed"
+        );
+        assert!(
+            registry.pending_queue.lock().unwrap().contains(&key),
+            "a revived task must be queued for scheduling"
+        );
+    }
+
+    #[test]
+    fn test_notify_parked_while_no_transport() {
+        // Embedded engine still initializing: a notify must be parked for
+        // replay, not dropped — a dropped notify is indexing work that is
+        // silently never done.
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+
+        registry
+            .notify(key.path.clone(), key.branch.clone(), false, true)
+            .unwrap();
+
+        assert!(
+            registry.tasks.lock().unwrap().is_empty(),
+            "no task can spawn before an engine exists"
+        );
+        let pendings = registry.pending_notifies.lock().unwrap();
+        let pending = pendings.get(&key).expect("notify must be parked");
+        assert_eq!(pending.notify_count, 1);
+        assert!(pending.has_embeddings);
+    }
+
+    #[test]
+    fn test_set_transport_replays_parked_notify() {
+        // The notify fired during engine init must produce a real task the
+        // moment the transport lands — replayed through notify() so cache
+        // and scheduling semantics match a live notify.
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+
+        registry
+            .notify(key.path.clone(), key.branch.clone(), false, true)
+            .unwrap();
+        registry
+            .notify(key.path.clone(), key.branch.clone(), false, true)
+            .unwrap();
+        assert!(registry.tasks.lock().unwrap().is_empty());
+
+        // Keep try_spawn_next from dispatching — we verify the task was
+        // created and queued, not that it ran.
+        *registry.current_branch.lock().unwrap() = Some(BranchKey {
+            path: "dummy".to_string(),
+            branch: "dummy".to_string(),
+        });
+        registry.set_transport(Arc::new(WritableTransport {
+            task_dir: dir.path().to_path_buf(),
+        }));
+
+        assert!(
+            registry.pending_notifies.lock().unwrap().is_empty(),
+            "parked notifies must drain on transport install"
+        );
+        let task = registry
+            .tasks
+            .lock()
+            .unwrap()
+            .get(&key)
+            .cloned()
+            .expect("replayed notify must spawn the task");
+        assert_eq!(
+            task.notify_count.load(Ordering::SeqCst),
+            2,
+            "merged repeat count must be restored on the spawned task"
+        );
+        assert!(
+            registry.pending_queue.lock().unwrap().contains(&key),
+            "replayed task must be queued for scheduling"
+        );
     }
 
     #[test]
@@ -2502,13 +3678,341 @@ mod tests {
         registry.set_config("http://localhost:8080".to_string(), "Basic abc".to_string());
 
         let path = "admin/db/local/branch/main".to_string();
-        registry.no_embedding_cache.lock().unwrap().insert(path.clone());
+        registry
+            .no_embedding_cache
+            .lock()
+            .unwrap()
+            .insert(path.clone());
         assert!(registry.no_embedding_cache.lock().unwrap().contains(&path));
 
         // reindex will fail because there's no real vectorlink, but it
         // should still clear the cache first.
         let _ = registry.reindex(path.clone(), "main".to_string(), false);
-        assert!(!registry.no_embedding_cache.lock().unwrap().contains(&path),
-            "no_embedding_cache should be cleared by reindex");
+        assert!(
+            !registry.no_embedding_cache.lock().unwrap().contains(&path),
+            "no_embedding_cache should be cleared by reindex"
+        );
+    }
+
+    /// Engine transport that mimics the embedded vectorlink engine on a
+    /// shared data dir whose write lock is held elsewhere: it reports
+    /// read-only, exposes a task dir for handoffs, and records every
+    /// engine call — handoff paths must not issue any index writes.
+    struct ReadOnlyTransport {
+        task_dir: std::path::PathBuf,
+        calls: StdMutex<Vec<String>>,
+    }
+
+    impl ReadOnlyTransport {
+        fn new(task_dir: std::path::PathBuf) -> Self {
+            Self {
+                task_dir,
+                calls: StdMutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl EngineTransport for ReadOnlyTransport {
+        fn execute<'a>(
+            &'a self,
+            req: EngineRequest,
+        ) -> BoxFuture<'a, Result<EngineResponse, String>> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("{} {}", req.method, req.path));
+            Box::pin(
+                async move { Err("read-only engine must not receive index writes".to_string()) },
+            )
+        }
+
+        fn is_read_only(&self) -> bool {
+            true
+        }
+
+        fn index_task_dir(&self) -> Option<std::path::PathBuf> {
+            Some(self.task_dir.clone())
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    /// Writable engine transport exposing a task dir — used to prove the
+    /// handoff only fires on read-only engines.
+    struct WritableTransport {
+        task_dir: std::path::PathBuf,
+    }
+
+    impl EngineTransport for WritableTransport {
+        fn execute<'a>(
+            &'a self,
+            _req: EngineRequest,
+        ) -> BoxFuture<'a, Result<EngineResponse, String>> {
+            Box::pin(async move { Err("no engine in unit test".to_string()) })
+        }
+
+        fn index_task_dir(&self) -> Option<std::path::PathBuf> {
+            Some(self.task_dir.clone())
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[test]
+    fn test_notify_on_read_only_engine_writes_index_task_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        let transport = Arc::new(ReadOnlyTransport::new(dir.path().to_path_buf()));
+        registry.set_transport(transport.clone());
+
+        let path = "admin/db/local/branch/main".to_string();
+        registry
+            .notify(path.clone(), "main".to_string(), false, true)
+            .unwrap();
+
+        assert_eq!(
+            index_handoff::probe_task_file(dir.path(), &path),
+            index_handoff::TaskFileState::Pending,
+            "notify on a read-only engine must enqueue a pending task file"
+        );
+        assert!(
+            registry.tasks.lock().unwrap().is_empty(),
+            "no local branch task may be created on a read-only engine"
+        );
+        assert!(
+            transport.calls.lock().unwrap().is_empty(),
+            "read-only engine must not receive engine calls for notify"
+        );
+    }
+
+    #[test]
+    fn test_reindex_on_read_only_engine_writes_reindex_task_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        let transport = Arc::new(ReadOnlyTransport::new(dir.path().to_path_buf()));
+        registry.set_transport(transport.clone());
+
+        let path = "admin/db/local/branch/main".to_string();
+        registry
+            .reindex(path.clone(), "main".to_string(), false)
+            .unwrap();
+
+        let file_path = dir
+            .path()
+            .join("admin%2Fdb%2Flocal%2Fbranch%2Fmain.reindex.json");
+        assert!(
+            file_path.exists(),
+            "reindex on a read-only engine must enqueue a reindex task file"
+        );
+        let body = std::fs::read_to_string(&file_path).unwrap();
+        let task: index_handoff::IndexTask = serde_json::from_str(&body).unwrap();
+        assert_eq!(task.kind, index_handoff::IndexTaskKind::Reindex);
+        assert_eq!(task.path, path);
+        assert_eq!(task.branch, "main");
+        assert_eq!(task.requester, "api:index");
+        assert!(
+            transport.calls.lock().unwrap().is_empty(),
+            "read-only engine must not receive engine calls for reindex"
+        );
+        assert!(
+            registry.tasks.lock().unwrap().is_empty(),
+            "no local branch task may be created on a read-only engine"
+        );
+    }
+
+    #[test]
+    fn test_duplicate_handoff_requests_collapse_to_one_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        registry.set_transport(Arc::new(ReadOnlyTransport::new(dir.path().to_path_buf())));
+
+        let path = "admin/db/local/branch/main".to_string();
+        registry
+            .notify(path.clone(), "main".to_string(), false, true)
+            .unwrap();
+        registry
+            .notify(path.clone(), "main".to_string(), false, true)
+            .unwrap();
+        registry
+            .reindex(path.clone(), "main".to_string(), false)
+            .unwrap();
+        registry
+            .reindex(path.clone(), "main".to_string(), false)
+            .unwrap();
+
+        let files: Vec<_> = std::fs::read_dir(dir.path()).unwrap().flatten().collect();
+        assert_eq!(
+            files.len(),
+            2,
+            "index and reindex requests must collapse onto one file each"
+        );
+    }
+
+    #[test]
+    fn test_notify_on_read_only_engine_propagates_enqueue_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        // A file where the task dir should be: create_dir_all inside
+        // enqueue must fail, and the failure must reach the caller —
+        // reporting success while dropping the request is not allowed.
+        let blocker = dir.path().join("blocker");
+        std::fs::write(&blocker, b"not a dir").unwrap();
+        let registry = IndexerRegistry::new();
+        registry.set_transport(Arc::new(ReadOnlyTransport::new(blocker)));
+
+        let err = registry.notify(
+            "admin/db/local/branch/main".to_string(),
+            "main".to_string(),
+            false,
+            true,
+        );
+        assert!(err.is_err(), "a failed handoff write must propagate");
+        assert!(
+            registry.tasks.lock().unwrap().is_empty(),
+            "no local branch task may be created on a read-only engine"
+        );
+    }
+
+    #[test]
+    fn test_notify_on_writable_engine_does_not_handoff() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        registry.set_transport(Arc::new(WritableTransport {
+            task_dir: dir.path().to_path_buf(),
+        }));
+        // Block try_spawn_next so no task actually runs.
+        *registry.current_branch.lock().unwrap() = Some(BranchKey {
+            path: "dummy".to_string(),
+            branch: "dummy".to_string(),
+        });
+
+        let path = "admin/db/local/branch/main".to_string();
+        registry
+            .notify(path.clone(), "main".to_string(), false, true)
+            .unwrap();
+
+        assert_eq!(
+            index_handoff::probe_task_file(dir.path(), &path),
+            index_handoff::TaskFileState::Absent,
+            "a writable engine must not produce handoff task files"
+        );
+        assert!(
+            registry.tasks.lock().unwrap().contains_key(&BranchKey {
+                path: path.clone(),
+                branch: "main".to_string(),
+            }),
+            "a writable engine must schedule a local branch task"
+        );
+    }
+
+    #[test]
+    fn test_handoff_events_from_own_scans_do_not_wake_poller() {
+        use notify::event::{AccessKind, AccessMode, EventKind, MetadataKind, ModifyKind};
+        // The poller's claim_pending opens and reads the watched directory
+        // on every scan — inotify reports that as Access(Open), and
+        // strictatime mounts add atime Modify(Metadata). Waking on either
+        // loops forever; the scan must never wake on events it emits itself.
+        for kind in [
+            EventKind::Access(AccessKind::Open(AccessMode::Any)),
+            EventKind::Access(AccessKind::Read),
+            EventKind::Access(AccessKind::Close(AccessMode::Write)),
+            EventKind::Access(AccessKind::Other),
+            EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any)),
+            EventKind::Modify(ModifyKind::Other),
+            EventKind::Any,
+            EventKind::Other,
+        ] {
+            let event = notify::Event::new(kind);
+            assert!(
+                !handoff_event_wakes(&event),
+                "{:?} must not wake the poller",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn test_handoff_task_file_mutations_wake_poller() {
+        use notify::event::{
+            CreateKind, DataChange, EventKind, ModifyKind, RemoveKind, RenameMode,
+        };
+        for kind in [
+            EventKind::Create(CreateKind::File),
+            EventKind::Create(CreateKind::Any),
+            EventKind::Remove(RemoveKind::File),
+            EventKind::Remove(RemoveKind::Any),
+            EventKind::Modify(ModifyKind::Data(DataChange::Any)),
+            EventKind::Modify(ModifyKind::Name(RenameMode::To)),
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            EventKind::Modify(ModifyKind::Any),
+        ] {
+            let event = notify::Event::new(kind);
+            assert!(
+                handoff_event_wakes(&event),
+                "{:?} must wake the poller",
+                kind
+            );
+        }
+    }
+
+    /// Engine transport returning a canned status for delete execution.
+    struct StubTransport {
+        status: u16,
+        calls: StdMutex<Vec<String>>,
+    }
+
+    impl EngineTransport for StubTransport {
+        fn execute<'a>(
+            &'a self,
+            req: EngineRequest,
+        ) -> BoxFuture<'a, Result<EngineResponse, String>> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("{} {}", req.method, req.path));
+            let status = self.status;
+            Box::pin(async move {
+                Ok(EngineResponse {
+                    status,
+                    headers: HeaderMap::new(),
+                    body: boxed_sync_stream(futures::stream::empty()),
+                })
+            })
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[tokio::test]
+    async fn test_execute_domain_delete_issues_engine_delete() {
+        let transport: Arc<dyn EngineTransport> = Arc::new(StubTransport {
+            status: 200,
+            calls: StdMutex::new(Vec::new()),
+        });
+        execute_domain_delete(&transport, "admin/db").await.unwrap();
+        let stub = transport.as_any().downcast_ref::<StubTransport>().unwrap();
+        assert_eq!(
+            stub.calls.lock().unwrap().as_slice(),
+            ["DELETE /domain?domain=admin%2Fdb"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_domain_delete_tolerates_404_and_fails_500() {
+        let t404: Arc<dyn EngineTransport> = Arc::new(StubTransport {
+            status: 404,
+            calls: StdMutex::new(Vec::new()),
+        });
+        execute_domain_delete(&t404, "admin/db").await.unwrap();
+        let t500: Arc<dyn EngineTransport> = Arc::new(StubTransport {
+            status: 500,
+            calls: StdMutex::new(Vec::new()),
+        });
+        assert!(execute_domain_delete(&t500, "admin/db").await.is_err());
     }
 }

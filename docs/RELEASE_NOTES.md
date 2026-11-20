@@ -1,16 +1,176 @@
-# TerminusDB Server v12.1-rc1 Release Notes
+# TerminusDB Server 12.1.0 Release Candidate 3
+
+The third release candidate of TerminusDB 12.1 hardens the indexing and commit pipeline, finalises the storage layout and embedded vectorlink startup, and makes raw JSON documents read back exactly as they were written. The small delta of insights from formal ACID testing with ALICE and Jepsen tools were incorporated.
+
+Headline changes:
+
+* Atomic commit application guarded by compare-and-swap (CAS), requests held until startup components are ready, and a formal ACID test suite guarding the invariants
+* Multi-process indexer handoff so embedding indexing no longer starves ordinary requests, and the global atom-GC stall that followed large index runs is gone
+* Verbatim `sys:JSONDocument` (vanilla JSON) reads by default across every instance selector — **breaking, intentional:** clients relying on the injected `@id` must pass `raw_id=true` (see Behavior changes)
+* `TERMINUSDB_STORE` storage root, a new `~/.terminusdb` default layout, opt-in embedded vectorlink, and serve startup failures that exit non-zero
+* Real HTTP statuses for streaming document formats instead of a blanket 200
+* GraphQL subclass interfaces (example: `... on MyClass { field }`)
+* Type inference ladder: a specificity staircase for ambiguous candidates (precise and fast type resolution)
+* Idempotent `merge_repeats` resubmission and unbound-prefix errors that name the fix
+* `xdd:dateTimeInterval` single instants and full-day dates, and `xsd:duration` beyond 255 days
+* Document inserts even faster after a commit-path profiling pass — ~7% on serial inserts, up to ~10% on wide documents
+
+Storage layout and vectorlink configuration changes:
+
+* **`TERMINUSDB_STORE` is the new official storage variable.** It names the storage root; the database lives at `<root>/db` and the embedded vectorlink index at `<root>/vectorlink`. The `terminusdb serve --store` flag now sets `TERMINUSDB_STORE`. `TERMINUSDB_SERVER_DB_PATH` remains valid as a legacy override naming the db dir directly — when both are set, `DB_PATH` wins for the database and `STORE` still informs vectorlink.
+* **New default storage layout.** Without configuration, the store resolves to `~/.terminusdb/db` instead of the cwd-relative `./storage/db`. **Migration:** move an existing default local store into the new layout (`~/.terminusdb/` contents → `~/.terminusdb/db/`, keeping `../vectorlink/` as a db sibling), or keep `TERMINUSDB_SERVER_DB_PATH` pointing at the old location. Default Docker users are unaffected — the image now exports `TERMINUSDB_STORE`, so databases remain in their existing location.
+* **Embedded vectorlink is opt-in.** The engine starts only when `TERMINUSDB_STORE` (or `serve --store`) or `VECTORLINK_DATA_DIR` is set; otherwise it logs a notice and stays disabled. A `TERMINUSDB_SERVER_DB_PATH`-only install that wants vectorlink must set `TERMINUSDB_STORE` or `VECTORLINK_DATA_DIR`.
+* **Concurrent vectorlink instances degrade to read-only.** When the embed-cache lock is held by another process, the second instance disables the cache, skips startup cleanup, refuses all index writes, and serves search queries only — reported on the console.
+* **Startup failures exit non-zero.** A port already in use (or any other serve startup failure) now reports the real error and exits 1 instead of printing command help and exiting 0. Also cleaned up boot messages.
+
+## New functionality
+
+* Atomic commit CAS, startup readiness, and a formal ACID suite [#2639](https://github.com/terminusdb/terminusdb/pull/2639)
+* Multi process indexer handoff [#2644](https://github.com/terminusdb/terminusdb/pull/2644) [#2651](https://github.com/terminusdb/terminusdb/pull/2651)
+* `xdd:dateTimeInterval`: single instants and full-day dates [#2629](https://github.com/terminusdb/terminusdb/pull/2629)
+* CLI startup: `TERMINUSDB_STORE` storage root, embedded vectorlink resolution, loud serve failures [#2630](https://github.com/terminusdb/terminusdb/pull/2630)
+* Type inference ladder: specificity staircase for ambiguous candidates [#2638](https://github.com/terminusdb/terminusdb/pull/2638)
+* GraphQL subclass interfaces [#2647](https://github.com/terminusdb/terminusdb/pull/2647)
+
+## Behavior changes
+
+* **`sys:JSONDocument` reads are verbatim by default.** `raw_id` on the document API now defaults to `false`: raw JSON documents read back as submitted, `@`-prefixed members like `"@type"` and nested `"@id"` included — they are document content, not annotations (key order and whitespace canonicalize). Applies across every instance selector (`id`, `ids`, `type`, `id_prefix`, `query`, bare listing) in single-document and `as_list` output. `identifiers=false` no longer strips `@`-members from raw documents, and field names URI-escaped at insert now decode correctly on read. **Migration:** pass `raw_id=true` to keep the injected `@id`; no data migration is needed.
+* `xdd:dateTimeInterval` keeps a single instant a single instant: a bare dateTime literal reads back as supplied — with `Z`, an offset, or zoneless — instead of a zero-length `T/T` pair, distinguished by a new `point` flag in the lexical entry (an explicit pair still renders `T/T`). A bare ISO date denotes the whole day `[D, D+1)` (`P1D`), the same interval as `D/D`. Date pairs round-trip verbatim: `2025-01-01/2025-03-31` reads back unchanged, dates inclusive, and zoneless datetimes render as local time rather than acquiring `Z`. Filter equality treats every spelling of the same period as equal, the supported range is increased, and values stored before this change are unaffected [#2626](https://github.com/terminusdb/terminusdb/issues/2626)
+* `xsd:duration` now supports > 255 days (i64 instead of u8 representation)
+* `xsd:duration` canonical zero length duration is now generally aligned to PT0S
+
+## Bugfixes
+
+* GraphQL and the VectorLink embedding indexer no longer panic on schemas that carry a field-level `@unfold` annotation — the GraphQL frame parser accepts (and ignores for GraphQL typing) `@unfold` on any field definition, and a frame that still fails to parse now surfaces a catchable `rust_error` exception instead of a panic [#2628](https://github.com/terminusdb/terminusdb/issues/2628)
+* `merge_repeats` idempotent resubmission and actionable unbound-prefix errors [#2631](https://github.com/terminusdb/terminusdb/pull/2631)
+* QName id alignment [#2633](https://github.com/terminusdb/terminusdb/pull/2633)
+* Return real HTTP statuses for streaming document formats [#2645](https://github.com/terminusdb/terminusdb/pull/2645)
+* Fix the global atom-GC stall after large index runs [#2652](https://github.com/terminusdb/terminusdb/pull/2652)
+* Bound the log drain before each dispatch [#2653](https://github.com/terminusdb/terminusdb/pull/2653)
+* Gate context prefix maps to the datatypes that read them [#2654](https://github.com/terminusdb/terminusdb/pull/2654)
+* Type-inference specificity ranking now actually ranks: the `inference_level` accumulator kept its counter in a `thread_local` clause that returned a fresh copy on every call, so each `nb_setarg` was discarded and every candidate read level 0 — specificity never differentiated and ambiguous documents always took the tie path. The counter moved to `flag/3` and resets at `infer_type` entry
+
+## Maintenance
+
+* Include the latest versions of tdb-data and tdb-admin dashboards [#2624](https://github.com/terminusdb/terminusdb/pull/2624)
+* Decimal canonical form tests [#2634](https://github.com/terminusdb/terminusdb/pull/2634) [#2635](https://github.com/terminusdb/terminusdb/pull/2635)
+* Link the pinned tus checkout into the pack dir instead of pack_install [#2646](https://github.com/terminusdb/terminusdb/pull/2646)
+* Pin SWI-Prolog 10.0.2 in docs and lint workflows [#2649](https://github.com/terminusdb/terminusdb/pull/2649)
+* Bump js-yaml from 4.3.0 to 4.3.2 in /dashboard by @dependabot [#2622](https://github.com/terminusdb/terminusdb/pull/2622)
+* Update the generated man page [#2621](https://github.com/terminusdb/terminusdb/pull/2621) [#2655](https://github.com/terminusdb/terminusdb/pull/2655)
+* Bump version to 12.1.0-rc3 [#2650](https://github.com/terminusdb/terminusdb/pull/2650)
+* Commit-path profiling pass on document inserts: removed the per-field `cast_level_memo_` clause layer (asserted once per checked field on keys that never repeat), made `typecast/3` the no-hint default, tabled the pure type classifiers, resolved `database_instance` once per document in the generated-ID uniqueness check, and gated per-triple prefix hints to context-family datatypes
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.1.0-rc2...v12.1.0-rc3
+
+# TerminusDB Server 12.1.0 Release Candidate 2
+
+The second release candidate of TerminusDB 12.1 hardens the capability model and finishes the datatype and vector search work that began in rc1.
+
+Headline changes:
+
+* **New capability actions for search, reindex and upcoming stored WOQL.** Thirteen new actions land in the system schema — `search`, `search_snippets`, `reindex_write`, `woql_exec` family, and dedicated `woql_instance_*`/`woql_schema_*` delegates — with a new built-in `Role/executor` for executable data products. Existing installs migrate automatically on boot: `Role/admin` and `Role/consumer` gain the new actions, customised roles are left untouched. **Breaking, intentional:** custom roles that lack `search` lose access to search endpoints, and any existing branch literally named `@logic` becomes capability-gated [#2617](https://github.com/terminusdb/terminusdb/pull/2617)
+* **Succinct, fast ISO8601 intervals.** `xdd:dateTimeInterval` is now stored lexically with indexed start and end points, enabling point-aware interval relations straight at the stored-triple seam [#2607](https://github.com/terminusdb/terminusdb/pull/2607)
+* **Fixed `xsd:duration`.** The old fixed-width encoding silently capped durations at P255D with no range check; a new lexical, arbitrary-precision encoding replaces it — previously stored durations keep reading correctly [#2620](https://github.com/terminusdb/terminusdb/issues/2620)
+* **QName and SQName datatypes** with Clark-notation storage, prefix-aware rendering, and typecasting across the document pipeline [#2611](https://github.com/terminusdb/terminusdb/pull/2611)
+* **`triple_relation` WOQL predicate** relating a triple component to a value — such as Allen interval algebra — plus a generic relationship filter in GraphQL [#2607](https://github.com/terminusdb/terminusdb/pull/2607)
+* **Overhauled migrations** for managing classes, fields, enums and foreign references, now preserving instance data on every inferrable weakening migration [#2604](https://github.com/terminusdb/terminusdb/pull/2604)
+* **New modeller in tdb-data for schema management** The modeller is overhauled and now works stepwise together with the modelling user one field and class at a time, including fixing the necessary migrations for it!
+* **JSON document collections** and a new database modeller in the tdb-data browser, backed by lazy IRI-prefix document listing in the documents API [#2604](https://github.com/terminusdb/terminusdb/pull/2604)
+
+Notice that migration will be performed automatically to the new system schema on boot, which is backwards compatible. The store is backwards compatible for `xsd:duration` and `xdd:dateTimeIntervals` changes but any values written with the new format will not work with older releases.
+
+## New functionality
+* Indexed counting: WOQL `triple_count`/`triple_range_count`, `counted` document listing, and GraphQL `_count` [#2601](https://github.com/terminusdb/terminusdb/pull/2601)
+* JSON document collections via lazy IRI-prefix document listing in the documents API [#2604](https://github.com/terminusdb/terminusdb/pull/2604)
+* Overhauled and finalized migrations for managing classes, fields, enums and foreign references, preserving instance data on every inferrable weakening migration [#2604](https://github.com/terminusdb/terminusdb/pull/2604)
+* Fast ISO8601 intervals (xdd:dateTimeInterval) and wide duration segments [#2607](https://github.com/terminusdb/terminusdb/pull/2607)
+* New WOQL `triple_relation` predicate relating a triple component to a value (such as Allen interval algebra), plus a generic relationship filter in GraphQL [#2607](https://github.com/terminusdb/terminusdb/pull/2607)
+* XML QName & SQName Datatypes support [#2611](https://github.com/terminusdb/terminusdb/pull/2611)
+* Migrations for AnyURI with QNames and SQNames and proper typecasting [#2618](https://github.com/terminusdb/terminusdb/pull/2618)
+
+## Bugfixes
+* Schema modeller adjustments [#2604](https://github.com/terminusdb/terminusdb/pull/2604)
+* Single date in intervals means start of day timestamp as-of [#2612](https://github.com/terminusdb/terminusdb/pull/2612)
+* Replace the fixed-width `xsd:duration` dictionary encoding with a lexical, arbitrary-precision encoding — previously capped at P255D with no range check; old-format durations still read correctly [#2620](https://github.com/terminusdb/terminusdb/issues/2620)
+
+## Maintenance
+* Move the star and Discord asks below the intro [#2602](https://github.com/terminusdb/terminusdb/pull/2602)
+* Bump follow-redirects from 1.16.1 to 1.16.2 in /tests by @dependabot [#2605](https://github.com/terminusdb/terminusdb/pull/2605)
+* Upgrade javascript testing environment [#2608](https://github.com/terminusdb/terminusdb/pull/2608)
+* Tests for date [#2614](https://github.com/terminusdb/terminusdb/pull/2614)
+* Preparations for 12.1.0-rc2 [#2615](https://github.com/terminusdb/terminusdb/pull/2615)
+
+## Security
+* New action capabilities for search, reindex, and stored WOQL (security) [#2617](https://github.com/terminusdb/terminusdb/pull/2617)
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.9...v12.1.0-rc2
+
+
+# TerminusDB Server 12.1.0 Release Candidate 1
 
 This is a major release that also builds the core foundation for a reactive future by moving to a scalable webserver foundation in Rust and a streaming commit pipeline.
 
-## Major changes
-* Subscriptions made possible by replacing streaming swipl http server with rust based streaming http server
+This release packs a massive amount of new and important functionality:
+* Hybrid Search is now built in: VectorlLink 2.0 with Full Text Search and Vector Search
+* Moved webserver achitecture to streaming Rust for improved scalability
 * Significantly improve performance and scalability with parallel write document elaboration and processing
 * Standards-compliant fully qualified intervals support
-* Embedded vectorlink search engine: set `TERMINUSDB_INDEXER_BACKEND=vectorlink` to run vectorlink in-process through the Rust webserver — no external endpoint needed (requires `TERMINUSDB_SERVER_BACKEND=rust`). The existing `http_vectorlink` and `http_legacy_vectorlink` remote backends are unchanged.
+* GraphQL Subscriptions (SSE) with support for many listening clients
+* Local MCP Server (use /llms.txt to configure)
+* Support for rendering schema classes as JSON Schema documents
+* Add dashboards for admin (`/app/admin`), and indexing and data processing (`/app/data`)
 * Two plugin paths: `builtin_plugins/` (always loaded, shipped with the server, `TERMINUSDB_BUILTIN_PLUGINS_PATH`) and `plugins/` (operator-installed, `TERMINUSDB_PLUGINS_PATH`). Shipped plugins moved to builtin; auto-optimize runs by default (set `TERMINUSDB_ENABLE_OPTIMIZER=0` to disable; test harnesses do for deterministic data versions).
 
+## New functionality
+* Upgrade patch/diff to preserve high precision, and use the Rust JSON parser for performance [#2468](https://github.com/terminusdb/terminusdb/pull/2468)
+* Fully specified, and accurate, intervals in retrieval path, with nanosecond precision [#2469](https://github.com/terminusdb/terminusdb/pull/2469)
+* Move web server foundation from swipl to rust, enabling live query foundation [#2473](https://github.com/terminusdb/terminusdb/pull/2473)
+* `@shared` change detection [#2479](https://github.com/terminusdb/terminusdb/pull/2479)
+* VectorLink 2.0 integration [#2488](https://github.com/terminusdb/terminusdb/pull/2488)
+* Integrate tdb admin dashboard in `/app/admin` [#2490](https://github.com/terminusdb/terminusdb/pull/2490)
+* GraphQL Subscriptions (SSE) and Native JSON Object Variables [#2497](https://github.com/terminusdb/terminusdb/pull/2497)
+* Schema-driven re-embedding: changed embedding configs ride their own commit [#2564](https://github.com/terminusdb/terminusdb/pull/2564)
+* Canonical ISO8604 interval semantics, timezone offsets, and typecasting with xdd:dateRange [#2574](https://github.com/terminusdb/terminusdb/pull/2574)
+* Add vectorsearch compose setup for the 12.1 release candidate [#2582](https://github.com/terminusdb/terminusdb/pull/2582)
+* Local MCP server for TerminusDB [#2588](https://github.com/terminusdb/terminusdb/pull/2588)
+* Intervals handling improvements [#2569](https://github.com/terminusdb/terminusdb/pull/2569)
+
 ## Bugfixes
+* Fix apply and patch on schemaless (raw_json) documents [#2571](https://github.com/terminusdb/terminusdb/pull/2571)
+* Make sure to map all headers [#2475](https://github.com/terminusdb/terminusdb/pull/2475)
+* Ensure predicate is added correctly to main [#2477](https://github.com/terminusdb/terminusdb/pull/2477)
+* Info should give version infomation only to logged in users [#2482](https://github.com/terminusdb/terminusdb/pull/2482)
+* Ensure there is a parent commit before intersecting [#2485](https://github.com/terminusdb/terminusdb/pull/2485)
+* Compress JSON true by default [#2498](https://github.com/terminusdb/terminusdb/pull/2498)
+* Fix insert performance for 12.1-rc [#2528](https://github.com/terminusdb/terminusdb/pull/2528)
+* Fix worker-pipe race: unregister before close, correlate cancels by request id [#2542](https://github.com/terminusdb/terminusdb/pull/2542)
+* Fix: stray client_disconnected signal must not kill a request worker [#2562](https://github.com/terminusdb/terminusdb/pull/2562)
+* Embedding change detection [#2566](https://github.com/terminusdb/terminusdb/pull/2566)
+* Embed vectorlink as a builtin core plugin via the Rust plugin path [#2556](https://github.com/terminusdb/terminusdb/pull/2556)
+* Neat starting experience: quieter GC plugin logging and JWT opt-in at runtime [#2573](https://github.com/terminusdb/terminusdb/pull/2573)
+* Issue 2576: Hold requests until startup components are ready [#2583](https://github.com/terminusdb/terminusdb/pull/2583)
 * Fix rebase race condition on throttled cpu 
+
+## Maintenance
+* Run engine intensively over a long time [#2553](https://github.com/terminusdb/terminusdb/pull/2553)
+* Scaled commit history listeners plugin example [#2480](https://github.com/terminusdb/terminusdb/pull/2480)
+* Show active engine, and sensitive info only when authenticated [#2474](https://github.com/terminusdb/terminusdb/pull/2474)
+* Parallel and sequential write improvements, with revised elaboration, commit queue, and contract-based verification [#2466](https://github.com/terminusdb/terminusdb/pull/2466)
+* Extend commit queue concept and fix race between rebase and auto-optimizer on _meta graph [#2467](https://github.com/terminusdb/terminusdb/pull/2467)
+* Add missing error message when inserting duplicate id [#2483](https://github.com/terminusdb/terminusdb/pull/2483)
+* GraphQL quality + merge in latest main [#2503](https://github.com/terminusdb/terminusdb/pull/2503)
+* Add doc complexity bound for 12.1 elaboration workers and report timeout outcomes properly [#2537](https://github.com/terminusdb/terminusdb/pull/2537)
+* Build rust faster in 12.1 using a cache [#2558](https://github.com/terminusdb/terminusdb/pull/2558)
+* Pin terminus-store to v0.21.8 for forward-compatible pack import (to prepare for faster intervals) [#2568](https://github.com/terminusdb/terminusdb/pull/2568)
+* Opt out of some tests for enterprise build [#2570](https://github.com/terminusdb/terminusdb/pull/2570)
+* Use the approved one-line description in the README [#2575](https://github.com/terminusdb/terminusdb/pull/2575)
+* Fix `malformed_parameter(id)` blocking non-JSON document input formats [#2578](https://github.com/terminusdb/terminusdb/pull/2578)
+* Bump follow-redirects from 1.16.0 to 1.16.1 in /tests by @dependabot [#2581](https://github.com/terminusdb/terminusdb/pull/2581)
+* Add Trendshift badge to the README [#2580](https://github.com/terminusdb/terminusdb/pull/2580)
+* vectorsearch: remove container_name so two stacks can run side by side [#2584](https://github.com/terminusdb/terminusdb/pull/2584)
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.8...v12.1.0-rc1
 
 # TerminusDB Server v12.0.9 Release Notes
 

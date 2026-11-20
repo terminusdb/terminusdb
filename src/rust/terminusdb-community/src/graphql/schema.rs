@@ -11,23 +11,24 @@ use juniper::{
 use lazy_init::Lazy;
 use rug::Integer;
 use swipl::prelude::*;
-use tdb_succinct::{Decimal, TypedDictEntry};
+use tdb_succinct::{Datatype, Decimal, TypedDictEntry};
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer, ObjectType};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, RDF_TYPE, SYS_VALUE};
 use crate::doc::{retrieve_all_index_ids, ArrayIterator, DocumentContext};
+use crate::expanded_name::clark_to_lexical;
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
     enum_node_to_value, type_is_big_integer, type_is_bool, type_is_datetime, type_is_decimal,
-    type_is_float, type_is_json, type_is_small_integer, value_to_graphql,
+    type_is_float, type_is_json, type_is_small_integer, value_to_graphql, value_to_string,
 };
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
-use super::naming::{ordering_name, path_field_to_class, path_to_class_name};
+use super::naming::{interface_name, ordering_name, path_field_to_class, path_to_class_name};
 use super::query::{run_count_query, run_filter_query};
 use super::subscription::{SubscriptionResolveContext, TerminusSubscriptionRoot};
 
@@ -201,7 +202,9 @@ impl<C: TerminusResolveContext> GraphQLValue for CommitMetadata<C> {
     ) -> juniper::ExecutionResult {
         match field_name {
             "_id" => match &self.values.id {
-                Some(id) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(id.clone()))),
+                Some(id) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(
+                    id.clone(),
+                ))),
                 None => Ok(juniper::Value::Null),
             },
             "_timestamp" => match self.values.timestamp {
@@ -209,11 +212,15 @@ impl<C: TerminusResolveContext> GraphQLValue for CommitMetadata<C> {
                 None => Ok(juniper::Value::Null),
             },
             "_datetime" => match &self.values.datetime {
-                Some(dt) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(dt.clone()))),
+                Some(dt) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(
+                    dt.clone(),
+                ))),
                 None => Ok(juniper::Value::Null),
             },
             "_change_type" => match &self.values.change_type {
-                Some(ct) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(ct.clone()))),
+                Some(ct) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(
+                    ct.clone(),
+                ))),
                 None => Ok(juniper::Value::Null),
             },
             _ => Ok(juniper::Value::Null),
@@ -448,7 +455,13 @@ impl<C: TerminusResolveContext> GraphQLType for TerminusTypeCollection<C> {
                         class: name.as_static(),
                         allframes: info.allframes.clone(),
                     };
-                    let field = registry.field::<Vec<TerminusType<C>>>(name.as_str(), &newinfo);
+                    let field = TerminusType::<C>::register_link_field(
+                        registry,
+                        name.as_str(),
+                        name,
+                        FieldKind::Set,
+                        &info.allframes,
+                    );
 
                     Some(add_arguments(&newinfo, registry, field, c))
                 } else {
@@ -465,7 +478,13 @@ impl<C: TerminusResolveContext> GraphQLType for TerminusTypeCollection<C> {
                     class: restrictiondef.on.to_owned(),
                     allframes: info.allframes.clone(),
                 };
-                let field = registry.field::<Vec<TerminusType<C>>>(name.as_str(), &newinfo);
+                let field = TerminusType::<C>::register_link_field(
+                    registry,
+                    name.as_str(),
+                    &restrictiondef.on,
+                    FieldKind::Set,
+                    &info.allframes,
+                );
                 let class_def;
                 if let TypeDefinition::Class(c) = info
                     .allframes
@@ -699,20 +718,11 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusTypeCollection<C> {
                         type_name,
                         &info.allframes,
                         zero_iter,
-                    )
-                    .into_iter()
-                    .map(TerminusType::<C>::new)
-                    .collect(),
+                    ),
                     None => vec![],
                 };
 
-                executor.resolve(
-                    &TerminusTypeInfo {
-                        class: type_name.as_static(),
-                        allframes: info.allframes.clone(),
-                    },
-                    &objects,
-                )
+                resolve_documents(objects, type_name, &info.allframes, executor)
             }
         }
     }
@@ -757,6 +767,41 @@ impl<C: TerminusResolveContext> TerminusType<C> {
         }
     }
 
+    /// Register a document link field. When the range class has
+    /// subclasses the field is typed as the generated `Class_Possible`
+    /// interface so that `... on Subclass` fragments are valid;
+    /// otherwise it is typed as the concrete class object.
+    fn register_link_field<'r>(
+        registry: &mut Registry<'r, DefaultScalarValue>,
+        field_name: &str,
+        class: &GraphQLName,
+        kind: FieldKind,
+        allframes: &Arc<AllFrames>,
+    ) -> Field<'r, DefaultScalarValue> {
+        if allframes.subsumed(class).len() > 1 {
+            Self::register_field::<TerminusInterface<C>>(
+                registry,
+                field_name,
+                &TerminusInterfaceInfo {
+                    class: class.as_static(),
+                    interface_name: interface_name(class),
+                    allframes: allframes.clone(),
+                },
+                kind,
+            )
+        } else {
+            Self::register_field::<TerminusType<C>>(
+                registry,
+                field_name,
+                &TerminusTypeInfo {
+                    class: class.as_static(),
+                    allframes: allframes.clone(),
+                },
+                kind,
+            )
+        }
+    }
+
     fn generate_class_type<'r>(
         class_name: &GraphQLName,
         d: &ClassDefinition,
@@ -766,20 +811,47 @@ impl<C: TerminusResolveContext> TerminusType<C> {
     where
         DefaultScalarValue: 'r,
     {
+        let fields = Self::generate_class_fields(class_name, d, info, registry);
+        let interface_types: Vec<_> = info
+            .allframes
+            .ancestors_of(class_name)
+            .iter()
+            .filter(|ancestor| info.allframes.subsumed(ancestor).len() > 1)
+            .map(|ancestor| {
+                registry.get_type::<TerminusInterface<C>>(&TerminusInterfaceInfo {
+                    class: ancestor.as_static(),
+                    interface_name: interface_name(ancestor),
+                    allframes: info.allframes.clone(),
+                })
+            })
+            .collect();
+        registry
+            .build_object_type::<TerminusType<C>>(info, &fields)
+            .interfaces(&interface_types)
+            .into_meta()
+    }
+
+    fn generate_class_fields<'r>(
+        class_name: &GraphQLName,
+        d: &ClassDefinition,
+        info: &<Self as GraphQLValue>::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> Vec<Field<'r, DefaultScalarValue>>
+    where
+        DefaultScalarValue: 'r,
+    {
         let frames = &info.allframes;
         let mut fields: Vec<_> = d
             .fields()
             .iter()
             .map(|(field_name, field_definition)| {
                 if let Some(document_type) = field_definition.document_type(frames) {
-                    let field = Self::register_field::<TerminusType<C>>(
+                    let field = Self::register_link_field(
                         registry,
                         field_name.as_str(),
-                        &TerminusTypeInfo {
-                            class: document_type.as_static(),
-                            allframes: frames.clone(),
-                        },
+                        document_type,
                         field_definition.kind(),
+                        frames,
                     );
 
                     if field_definition.kind().is_collection() {
@@ -883,11 +955,12 @@ impl<C: TerminusResolveContext> TerminusType<C> {
                     class: class.as_static(),
                     allframes: frames.clone(),
                 };
-                let field = Self::register_field::<TerminusType<C>>(
+                let field = Self::register_link_field(
                     registry,
                     field_name.as_str(),
-                    &new_info,
+                    class,
                     FieldKind::Set,
+                    frames,
                 );
                 let field = add_arguments(&new_info, registry, field, class_definition);
 
@@ -907,11 +980,12 @@ impl<C: TerminusResolveContext> TerminusType<C> {
                 class: class.as_static(),
                 allframes: frames.clone(),
             };
-            let field = Self::register_field::<TerminusType<C>>(
+            let field = Self::register_link_field(
                 registry,
                 field_name.as_str(),
-                &new_info,
+                class,
                 FieldKind::Set,
+                frames,
             );
             let field = add_arguments(&new_info, registry, field, class_definition);
             let field = field.argument(registry.arg::<String>("path", &()));
@@ -943,9 +1017,7 @@ impl<C: TerminusResolveContext> TerminusType<C> {
 
         fields.extend(standard_type_operators::<C>(registry));
 
-        registry
-            .build_object_type::<TerminusType<C>>(info, &fields)
-            .into_meta()
+        fields
     }
 }
 
@@ -1090,10 +1162,13 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                 // the parent instance if the current instance doesn't have
                 // this subject.
                 let parent_doc_context;
-                let document_context = if let Some(sub_ctx) = executor.context().as_subscription_context() {
+                let document_context = if let Some(sub_ctx) =
+                    executor.context().as_subscription_context()
+                {
                     if let Some(parent) = sub_ctx.parent_instance() {
                         if !instance.triples_s(self.id).next().is_some() {
-                            parent_doc_context = DocumentContext::new(sub_ctx.schema.clone(), Some(parent.clone()));
+                            parent_doc_context =
+                                DocumentContext::new(sub_ctx.schema.clone(), Some(parent.clone()));
                             &parent_doc_context
                         } else {
                             executor.context().document_context()
@@ -1177,7 +1252,11 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            ListElementType { doc_type: Some(domain), enum_type: None, is_json: false },
+                            ListElementType {
+                                doc_type: Some(domain),
+                                enum_type: None,
+                                is_json: false,
+                            },
                             executor,
                             info,
                             arguments,
@@ -1212,7 +1291,11 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            ListElementType { doc_type: Some(domain), enum_type: None, is_json: false },
+                            ListElementType {
+                                doc_type: Some(domain),
+                                enum_type: None,
+                                is_json: false,
+                            },
                             executor,
                             info,
                             arguments,
@@ -1230,7 +1313,11 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                             })
                             .map(|t| t.subject);
                         collect_into_graphql_list(
-                            ListElementType { doc_type: Some(domain), enum_type: None, is_json: false },
+                            ListElementType {
+                                doc_type: Some(domain),
+                                enum_type: None,
+                                is_json: false,
+                            },
                             executor,
                             info,
                             arguments,
@@ -1242,7 +1329,11 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
             } else if let Some(class) = path_field_to_class(&field_name) {
                 let ids = vec![self.id].into_iter();
                 collect_into_graphql_list(
-                    ListElementType { doc_type: Some(&class), enum_type: None, is_json: false },
+                    ListElementType {
+                        doc_type: Some(&class),
+                        enum_type: None,
+                        is_json: false,
+                    },
                     executor,
                     info,
                     arguments,
@@ -1319,8 +1410,15 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                             instance.triples_sp(self.id, field_id).map(|t| t.object),
                         ));
                         collect_into_graphql_list(
-                            ListElementType { doc_type, enum_type, is_json },
-                            executor, info, arguments, object_ids,
+                            ListElementType {
+                                doc_type,
+                                enum_type,
+                                is_json,
+                            },
+                            executor,
+                            info,
+                            arguments,
+                            object_ids,
                             instance,
                         )
                     }
@@ -1330,8 +1428,15 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                             instance.triples_sp(self.id, field_id).map(|t| t.object),
                         ));
                         collect_into_graphql_list(
-                            ListElementType { doc_type, enum_type, is_json },
-                            executor, info, arguments, object_ids,
+                            ListElementType {
+                                doc_type,
+                                enum_type,
+                                is_json,
+                            },
+                            executor,
+                            info,
+                            arguments,
+                            object_ids,
                             instance,
                         )
                     }
@@ -1349,8 +1454,15 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                                 rdf_nil_id: instance.subject_id(RDF_NIL),
                             }));
                         collect_into_graphql_list(
-                            ListElementType { doc_type, enum_type, is_json },
-                            executor, info, arguments, object_ids,
+                            ListElementType {
+                                doc_type,
+                                enum_type,
+                                is_json,
+                            },
+                            executor,
+                            info,
+                            arguments,
+                            object_ids,
                             instance,
                         )
                     }
@@ -1374,7 +1486,11 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                             elements.into_iter().map(|(_, elt)| elt),
                         ));
                         collect_into_graphql_list(
-                            ListElementType { doc_type, enum_type, is_json },
+                            ListElementType {
+                                doc_type,
+                                enum_type,
+                                is_json,
+                            },
                             executor,
                             info,
                             arguments,
@@ -1404,13 +1520,24 @@ fn extract_fragment<C: TerminusResolveContext>(
     is_json: bool,
 ) -> Option<Result<juniper::Value, juniper::FieldError>> {
     if let Some(doc_type) = doc_type {
-        Some(executor.resolve(
-            &TerminusTypeInfo {
-                class: doc_type.as_static(),
-                allframes: info.allframes.clone(),
-            },
-            &TerminusType::<C>::new(object_id),
-        ))
+        if info.allframes.subsumed(doc_type).len() > 1 {
+            Some(executor.resolve(
+                &TerminusInterfaceInfo {
+                    class: doc_type.as_static(),
+                    interface_name: interface_name(doc_type),
+                    allframes: info.allframes.clone(),
+                },
+                &TerminusInterface::<C>::new(object_id),
+            ))
+        } else {
+            Some(executor.resolve(
+                &TerminusTypeInfo {
+                    class: doc_type.as_static(),
+                    allframes: info.allframes.clone(),
+                },
+                &TerminusType::<C>::new(object_id),
+            ))
+        }
     } else if let Some(enum_type) = enum_type {
         let value = extract_enum_fragment(info, instance, object_id, enum_type);
         Some(Ok(value))
@@ -1421,7 +1548,15 @@ fn extract_fragment<C: TerminusResolveContext>(
         let obj = instance.id_object(object_id)?;
         match obj {
             ObjectType::Node(n) => Some(Ok(n.into())),
-            ObjectType::Value(v) => Some(Ok(value_to_graphql(&v))),
+            ObjectType::Value(v) => Some(Ok(match v.datatype() {
+                Datatype::QName | Datatype::SQName => {
+                    juniper::Value::Scalar(DefaultScalarValue::String(clark_to_lexical(
+                        &value_to_string(&v),
+                        &crate::doc::prefix::get_layer_reverse_prefix_map(instance),
+                    )))
+                }
+                _ => value_to_graphql(&v),
+            })),
         }
     }
 }
@@ -1597,6 +1732,117 @@ impl GraphQLValue for TerminusEnum {
     }
 }
 
+/// TypeInfo for the generated `Class_Possible` interface. `class` is the
+/// declared base class used for field generation; `interface_name` is the
+/// name the interface is registered under.
+pub struct TerminusInterfaceInfo {
+    pub class: GraphQLName<'static>,
+    pub interface_name: GraphQLName<'static>,
+    pub allframes: Arc<AllFrames>,
+}
+
+/// A document id typed at a base class position whose range class has
+/// subclasses. Field and fragment resolution delegate to `TerminusType`
+/// with the document's concrete class so subclass fields resolve.
+pub struct TerminusInterface<C: TerminusResolveContext> {
+    id: u64,
+    _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: TerminusResolveContext> TerminusInterface<C> {
+    fn new(id: u64) -> Self {
+        Self {
+            id,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// TerminusTypeInfo for the declared base class.
+    fn object_info(info: &TerminusInterfaceInfo) -> TerminusTypeInfo {
+        TerminusTypeInfo {
+            class: info.class.as_static(),
+            allframes: info.allframes.clone(),
+        }
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLType for TerminusInterface<C> {
+    fn name(info: &Self::TypeInfo) -> Option<&str> {
+        Some(info.interface_name.as_str())
+    }
+
+    fn meta<'r>(
+        info: &Self::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let allframes = &info.allframes;
+        let frame = &allframes.frames[&info.class];
+        match frame {
+            TypeDefinition::Class(d) => {
+                let obj_info = Self::object_info(info);
+                let fields =
+                    TerminusType::<C>::generate_class_fields(&info.class, d, &obj_info, registry);
+                registry
+                    .build_interface_type::<TerminusInterface<C>>(info, &fields)
+                    .into_meta()
+            }
+            TypeDefinition::Enum(_) => panic!("no enum expected here"),
+        }
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLValue for TerminusInterface<C> {
+    type Context = C;
+
+    type TypeInfo = TerminusInterfaceInfo;
+
+    fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some(info.interface_name.as_str())
+    }
+
+    fn concrete_type_name(&self, context: &Self::Context, info: &Self::TypeInfo) -> String {
+        TerminusType::<C>::new(self.id).concrete_type_name(context, &Self::object_info(info))
+    }
+
+    fn resolve_into_type(
+        &self,
+        info: &Self::TypeInfo,
+        type_name: &str,
+        selection_set: Option<&[juniper::Selection<DefaultScalarValue>]>,
+        executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult<DefaultScalarValue> {
+        // Juniper calls this only when `type_name` is the document's
+        // concrete class, so resolve the selection with that class's
+        // TypeInfo — its object meta carries the fragment's fields.
+        let concrete = TerminusTypeInfo {
+            class: GraphQLName(type_name.to_string().into()),
+            allframes: info.allframes.clone(),
+        };
+        TerminusType::<C>::new(self.id).resolve(&concrete, selection_set, executor)
+    }
+
+    fn resolve_field(
+        &self,
+        info: &Self::TypeInfo,
+        field_name: &str,
+        arguments: &juniper::Arguments,
+        executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult {
+        // Interface positions only expose base-class fields, all of
+        // which the base class definition carries, so resolve with the
+        // declared class info — no concrete rdf:type read needed here.
+        TerminusType::<C>::new(self.id).resolve_field(
+            &Self::object_info(info),
+            field_name,
+            arguments,
+            executor,
+        )
+    }
+}
+
 struct SimpleArrayIterator<'a, L: Layer>(ArrayIterator<'a, L>);
 
 impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
@@ -1622,6 +1868,40 @@ struct ListElementType<'a> {
     is_json: bool,
 }
 
+/// Resolve document ids against `class`. When the class has subclasses
+/// the values are `TerminusInterface` resolved against the `Class_Possible`
+/// interface; otherwise they are `TerminusType` objects.
+fn resolve_documents<C: TerminusResolveContext>(
+    object_ids: Vec<u64>,
+    class: &GraphQLName,
+    allframes: &Arc<AllFrames>,
+    executor: &juniper::Executor<C>,
+) -> juniper::ExecutionResult<DefaultScalarValue> {
+    if allframes.subsumed(class).len() > 1 {
+        let objects: Vec<_> = object_ids
+            .into_iter()
+            .map(TerminusInterface::<C>::new)
+            .collect();
+        executor.resolve(
+            &TerminusInterfaceInfo {
+                class: class.as_static(),
+                interface_name: interface_name(class),
+                allframes: allframes.clone(),
+            },
+            &objects,
+        )
+    } else {
+        let objects: Vec<_> = object_ids.into_iter().map(TerminusType::<C>::new).collect();
+        executor.resolve(
+            &TerminusTypeInfo {
+                class: class.as_static(),
+                allframes: allframes.clone(),
+            },
+            &objects,
+        )
+    }
+}
+
 fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
     element_type: ListElementType<'a>,
     executor: &'a juniper::Executor<C>,
@@ -1630,7 +1910,11 @@ fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
     object_ids: ClonableIterator<'a, u64>,
     instance: &'a SyncStoreLayer,
 ) -> Option<Result<Value, juniper::FieldError>> {
-    let ListElementType { doc_type, enum_type, is_json } = element_type;
+    let ListElementType {
+        doc_type,
+        enum_type,
+        is_json,
+    } = element_type;
     if let Some(doc_type) = doc_type {
         let object_ids = match executor.context().instance() {
             Some(instance) => run_filter_query(
@@ -1643,13 +1927,11 @@ fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
             ),
             None => vec![],
         };
-        let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::<C>::new).collect();
-        Some(executor.resolve(
-            &TerminusTypeInfo {
-                class: doc_type.as_static(),
-                allframes: info.allframes.clone(),
-            },
-            &subdocs,
+        Some(resolve_documents(
+            object_ids,
+            doc_type,
+            &info.allframes,
+            executor,
         ))
     } else if let Some(enum_type) = enum_type {
         let vals: Vec<_> = object_ids
@@ -1671,7 +1953,15 @@ fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
         let vals: Vec<_> = object_ids
             .map(|o| match instance.id_object(o).unwrap() {
                 ObjectType::Node(n) => graphql_value!(n),
-                ObjectType::Value(v) => value_to_graphql(&v),
+                ObjectType::Value(v) => match v.datatype() {
+                    Datatype::QName | Datatype::SQName => {
+                        juniper::Value::Scalar(DefaultScalarValue::String(clark_to_lexical(
+                            &value_to_string(&v),
+                            &crate::doc::prefix::get_layer_reverse_prefix_map(instance),
+                        )))
+                    }
+                    _ => value_to_graphql(&v),
+                },
             })
             .collect();
         Some(Ok(Value::List(vals)))
@@ -1823,7 +2113,10 @@ where
     }
 
     fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
-        value.as_string_value().filter(|s| is_json_value(s)).map(|s| Self(s.to_owned()))
+        value
+            .as_string_value()
+            .filter(|s| is_json_value(s))
+            .map(|s| Self(s.to_owned()))
     }
 
     fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
@@ -1939,14 +2232,24 @@ impl<C: TerminusResolveContext> GraphQLType for ChangeSet<C> {
                 };
 
                 for (op_name, description) in [
-                    (format!("{}_added", name.as_str()), "Documents of this class added in the commit"),
-                    (format!("{}_changed", name.as_str()), "Documents of this class changed in the commit"),
-                    (format!("{}_deleted", name.as_str()), "Documents of this class deleted in the commit"),
+                    (
+                        format!("{}_added", name.as_str()),
+                        "Documents of this class added in the commit",
+                    ),
+                    (
+                        format!("{}_changed", name.as_str()),
+                        "Documents of this class changed in the commit",
+                    ),
+                    (
+                        format!("{}_deleted", name.as_str()),
+                        "Documents of this class deleted in the commit",
+                    ),
                 ] {
                     let field = registry.field::<Vec<TerminusType<C>>>(op_name.as_str(), &newinfo);
                     let field = field.description(description);
                     let field = field.argument(registry.arg::<Option<Vec<ID>>>("ids", &()));
-                    let field = field.argument(registry.arg::<Option<bool>>("include_children", &()));
+                    let field =
+                        field.argument(registry.arg::<Option<bool>>("include_children", &()));
                     fields.push(field);
                 }
             }
@@ -2022,13 +2325,15 @@ impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
         }
 
         if ids.is_empty() {
-            return executor.resolve(
-                &TerminusTypeInfo {
-                    class: GraphQLName(Cow::Owned(class_name.to_string())),
-                    allframes: info.allframes.clone(),
-                },
-                &Vec::<TerminusType<C>>::new(),
-            ).map(|r| r);
+            return executor
+                .resolve(
+                    &TerminusTypeInfo {
+                        class: GraphQLName(Cow::Owned(class_name.to_string())),
+                        allframes: info.allframes.clone(),
+                    },
+                    &Vec::<TerminusType<C>>::new(),
+                )
+                .map(|r| r);
         }
 
         // For deleted documents, use the parent layer (pre-commit state).
@@ -2044,13 +2349,15 @@ impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
         let instance = match resolve_layer {
             Some(layer) => layer,
             None => {
-                return executor.resolve(
-                    &TerminusTypeInfo {
-                        class: GraphQLName(Cow::Owned(class_name.to_string())),
-                        allframes: info.allframes.clone(),
-                    },
-                    &Vec::<TerminusType<C>>::new(),
-                ).map(|r| r);
+                return executor
+                    .resolve(
+                        &TerminusTypeInfo {
+                            class: GraphQLName(Cow::Owned(class_name.to_string())),
+                            allframes: info.allframes.clone(),
+                        },
+                        &Vec::<TerminusType<C>>::new(),
+                    )
+                    .map(|r| r);
             }
         };
 
@@ -2062,13 +2369,15 @@ impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
             })
             .collect();
 
-        executor.resolve(
-            &TerminusTypeInfo {
-                class: GraphQLName(Cow::Owned(class_name.to_string())),
-                allframes: info.allframes.clone(),
-            },
-            &objects,
-        ).map(|r| r)
+        executor
+            .resolve(
+                &TerminusTypeInfo {
+                    class: GraphQLName(Cow::Owned(class_name.to_string())),
+                    allframes: info.allframes.clone(),
+                },
+                &objects,
+            )
+            .map(|r| r)
     }
 }
 
@@ -2100,9 +2409,18 @@ impl<C: TerminusResolveContext> GraphQLType for TerminusSubscriptionRoot<C> {
                 };
 
                 for (op_name, description) in [
-                    (format!("{}_added", name.as_str()), "Fired when a document of this class is added"),
-                    (format!("{}_changed", name.as_str()), "Fired when a document of this class is changed"),
-                    (format!("{}_deleted", name.as_str()), "Fired when a document of this class is deleted"),
+                    (
+                        format!("{}_added", name.as_str()),
+                        "Fired when a document of this class is added",
+                    ),
+                    (
+                        format!("{}_changed", name.as_str()),
+                        "Fired when a document of this class is changed",
+                    ),
+                    (
+                        format!("{}_deleted", name.as_str()),
+                        "Fired when a document of this class is deleted",
+                    ),
                 ] {
                     let field = registry.field::<TerminusType<C>>(op_name.as_str(), &newinfo);
                     let field = field.description(description);

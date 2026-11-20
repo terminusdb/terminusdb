@@ -36,7 +36,7 @@ info:
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  version: 12.0.5
+  version: 12.1.0
 externalDocs:
   description: Find out more about TerminusDB
   url: https://terminusdb.org
@@ -916,9 +916,10 @@ paths:
             - `json` (default): Standard JSON document representation
             - `embedding`: Text/plain rendered embedding string using schema-defined GraphQL query and Handlebars template. Requires the document type to have an embedding query defined in `@metadata.embedding`. No indexer backend is needed.
             - `markdown`: Document rendered as markdown (text/markdown).
+            - `ids`: Document IDs only, streamed under the same `as_list` framing — a fast way to enumerate large collections without fetching document bodies.
           schema:
             type: string
-            enum: [json, embedding, markdown]
+            enum: [json, embedding, markdown, ids]
             default: json
         - name: skip
           in: query
@@ -989,6 +990,21 @@ paths:
           schema:
             type: string
             example: Person
+        - name: id_prefix
+          in: query
+          required: false
+          description: |
+            List documents whose ID starts with the given IRI prefix. Accepts
+            both compressed (`Person/`) and full IRIs. Combined with `type`,
+            returns only documents of that type under the prefix. May be
+            combined with `format=ids` and `counted=true` for fast
+            enumeration. Currently supported for instance graphs only.
+            `sys:JSONDocument` (raw JSON) documents under the prefix
+            stream verbatim — see `raw_id` and `identifiers`.
+            Example: `Person/` or `terminusdb:///data/Person/`
+          schema:
+            type: string
+            example: Person/
         - name: counted
           in: query
           required: false
@@ -1000,7 +1016,9 @@ paths:
 
             Counting is supported for the document listing selectors only:
             all documents, optionally restricted by `type` (including
-            subclasses), in the `instance` or `schema` graph. It cannot be
+            subclasses) or `id_prefix`, in the `instance` or `schema` graph.
+            `id_prefix` counting is supported for instance graphs only. It
+            cannot be
             combined with `id`, `ids` or `query`. When `counted=true`, the
             `skip` and `count` pagination parameters are ignored. Counts follow
             the same inclusion rules as the corresponding document listing,
@@ -1043,6 +1061,52 @@ paths:
           schema:
             type: boolean
             default: true
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
+        - name: raw_id
+          in: query
+          required: false
+          description: |
+            Inject the internal document `@id` into `sys:JSONDocument`
+            (raw JSON) responses. Since 12.1 the default is `false`: raw
+            JSON documents stream back verbatim — semantically identical
+            to what was submitted, including any `@`-prefixed members,
+            which are document content rather than generated
+            annotations. Key order and whitespace are canonicalized.
+            Set `raw_id=true` to include the document's `@id`.
+          schema:
+            type: boolean
+            default: false
+        - name: identifiers
+          in: query
+          required: false
+          description: |
+            Include generated document annotations in the response. When
+            `identifiers=false`, returned documents are stripped of `@id`
+            and `@type` so they can read back in a submitted lexical form.
+            Stripping is recursive and covers unfolded shared members and
+            subdocuments; a pure unfolded link reference keeps its
+            `@id`/`@type` so the reference is not lost. Applies to all
+            instance selectors (`id`, `ids`, `type`, `id_prefix`, `query`
+            and the bare listing). The stripped form is not directly
+            resubmittable — insertion still may still require `@type` to
+            identify the class if it can't be resolved automatically.
+            `sys:JSONDocument` (raw JSON) documents are exempt: they
+            stream verbatim in their submitted lexical form regardless
+            of this flag, since their `@`-prefixed members are content.
+          schema:
+            type: boolean
+            default: true
 
       responses:
         200:
@@ -1056,6 +1120,15 @@ paths:
             **Array mode** (`as_list=true`):
             - Content-Type: `application/json; charset=UTF-8`
             - Standard JSON array `[{...}, {...}]`
+            
+            **Counted mode** (`counted=true`):
+            - Content-Type: `application/json; charset=UTF-8`
+            - Single object `{"@type": "api:DocumentCountResponse", "api:count": <integer>}`
+            
+            **IDs format** (`format=ids`):
+            - Same `as_list` framing, but items are document ID strings instead
+            of document objects: `"Person/Alice"` per line, or
+            `["Person/Alice", ...]`
           content:
             application/json; stream=true; charset=UTF-8:
               schema:
@@ -1071,25 +1144,48 @@ paths:
                 additionalProperties: true
             application/json; charset=UTF-8:
               schema:
-                type: array
-                description: Array of documents (array mode, as_list=true)
-                items:
-                  type: object
-                  properties:
-                    "@id":
+                oneOf:
+                  - type: array
+                    description: Array of documents (array mode, as_list=true)
+                    items:
+                      type: object
+                      properties:
+                        "@id":
+                          type: string
+                        "@type":
+                          type: string
+                      additionalProperties: true
+                  - type: array
+                    description: Array of document ID strings (format=ids)
+                    items:
                       type: string
-                    "@type":
-                      type: string
-                  additionalProperties: true
-              example:
-                - "@id": "Person/Alice"
-                  "@type": "Person"
-                  "name": "Alice"
-                  "age": 30
-                - "@id": "Person/Bob"
-                  "@type": "Person"
-                  "name": "Bob"
-                  "age": 25
+                      example: Person/Alice
+                  - type: object
+                    description: Document count response (counted=true)
+                    properties:
+                      "@type":
+                        type: string
+                        enum: ["api:DocumentCountResponse"]
+                      "api:count":
+                        type: integer
+                    required: ["@type", "api:count"]
+              examples:
+                documents:
+                  value:
+                    - "@id": "Person/Alice"
+                      "@type": "Person"
+                      "name": "Alice"
+                      "age": 30
+                    - "@id": "Person/Bob"
+                      "@type": "Person"
+                      "name": "Bob"
+                      "age": 25
+                ids:
+                  value: ["Person/Alice", "Person/Bob"]
+                counted:
+                  value:
+                    "@type": "api:DocumentCountResponse"
+                    "api:count": 2
         400:
           description: Bad Request
         401:
@@ -1144,7 +1240,16 @@ paths:
         - name: merge_repeats
           in: query
           required: false
-          description: If true, duplicate document IDs in the same request are silently merged instead of causing an error.
+          description: |
+            If true, repeated inserts of the same document are merged
+            instead of causing a `DocumentIdAlreadyExists` error. This
+            covers duplicates within one request and resubmission of an
+            already-committed document — including a `@shared` member
+            elaborated again inside a later parent. A repeat is accepted
+            only when its content normalizes to exactly the existing
+            document; differing content at the same `@id` still fails.
+            Limitation: `@subdocument` members cannot be normalized
+            standalone and may remain a conflict.
           schema:
             type: boolean
             default: false
@@ -1263,7 +1368,16 @@ paths:
         - name: merge_repeats
           in: query
           required: false
-          description: If true, duplicate document IDs in the same request are silently merged instead of causing an error.
+          description: |
+            If true, repeated inserts of the same document are merged
+            instead of causing a `DocumentIdAlreadyExists` error. This
+            covers duplicates within one request and resubmission of an
+            already-committed document — including a `@shared` member
+            elaborated again inside a later parent. A repeat is accepted
+            only when its content normalizes to exactly the existing
+            document; differing content at the same `@id` still fails.
+            Limitation: `@subdocument` members cannot be normalized
+            standalone and may remain a conflict.
           schema:
             type: boolean
             default: false
@@ -1541,6 +1655,19 @@ paths:
       x-js-client: Client.woqlQuery
       tags:
         - WOQL
+      parameters:
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
       requestBody:
         required: true
         content:
@@ -1566,6 +1693,18 @@ paths:
         - WOQL
       parameters:
         - $ref: '#/components/parameters/branch_path'
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
       requestBody:
         required: true
         content:
@@ -1622,6 +1761,18 @@ paths:
           schema:
             type: boolean
             default: true
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
       responses:
         200:
           description: GraphQL query result
@@ -1703,6 +1854,18 @@ paths:
           schema:
             type: boolean
             default: true
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
       requestBody:
         required: true
         content:
@@ -2856,17 +3019,59 @@ paths:
       x-python-client: Client::log
       x-js-client: not_implemented
       summary: "Get commits from a specific database or branch"
+      description: |
+        Returns commits newest-to-oldest. The window's top edge is anchored
+        by index (`start`) or by time (`startDateTime`) — the two are
+        mutually exclusive. `endDateTime` bounds the oldest edge
+        independently and combines with either to express a range;
+        `count` then limits the already-filtered result.
+
+        `startDateTime` makes the log begin at the newest commit whose
+        timestamp is at or before the given instant. `endDateTime` drops
+        commits older than the given instant. Both accept ISO 8601 datetimes with
+        sub-second fractions up to nanosecond resolution, matching the
+        exact decimal timestamps stored on commits.
+
+        **Example: commits since a point in time**
+        ```bash
+        curl -u admin:root "http://localhost:6363/api/log/admin/mydb?endDateTime=2026-10-01T00:00:00Z"
+        ```
+
+        With `stream=true` the commits are emitted as newline-delimited
+        JSON (application/x-ndjson) instead of a JSON array, and the
+        `TerminusDB-Log-Start` response header carries the resolved start
+        offset of the window's top commit.
       tags:
         - Change management
       parameters:
         - $ref: '#/components/parameters/branch_path'
         - name: start
-          description: Index to start from
+          description: >-
+            Index to start from. Mutually exclusive with `startDateTime`.
           in: query
           required: false
           schema:
             type: integer
             example: 0
+        - name: startDateTime
+          description: >-
+            ISO 8601 instant; the log starts at the newest commit with a
+            timestamp at or before it. Mutually exclusive with `start`.
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2026-10-01T12:00:00Z"
+        - name: endDateTime
+          description: >-
+            ISO 8601 instant; only commits with a timestamp at or after it
+            are returned. Combines with `start` or `startDateTime` to
+            express a range.
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2026-10-01T00:00:00Z"
         - name: count
           description: Amount of commits to show
           in: query
@@ -2885,9 +3090,27 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: stream
+          description: >-
+            Stream commits as newline-delimited JSON
+            (application/x-ndjson) instead of returning a JSON array.
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
           description: "Successful log request"
+          headers:
+            TerminusDB-Log-Start:
+              description: >-
+                Index (newest-to-oldest, 0-based) of the window's top
+                commit. Only sent when `stream=true`; lets callers page
+                onward with plain `start`.
+              schema:
+                type: integer
+                example: 3
           content:
             application/json:
               schema:
@@ -2915,6 +3138,7 @@ paths:
                       example: layer_data:Layer_4234adfe377fa9563a17ad764ac37f5dcb14de13668ea725ef0748248229a91b
                     "timestamp":
                       type: number
+                      description: Commit time as epoch seconds, a decimal with up to nanosecond resolution
                       example: 1660919664.9129035
                     "added_count":
                       type: integer
@@ -2929,6 +3153,43 @@ paths:
                       description: Number of documents deleted in this commit (only present when with_counts=true)
                       example: 0
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+            application/x-ndjson:
+              schema:
+                type: string
+                description: >-
+                  One commit object per line (same shape as the JSON array
+                  items). Only returned when `stream=true`.
+        400:
+          description: >-
+            Invalid window parameters: `start` and `startDateTime` were
+            combined (api:MutuallyExclusiveLogParameters), or a datetime
+            parameter is not a valid ISO 8601 value
+            (api:InvalidLogDateTime).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  "@type":
+                    type: string
+                    example: api:LogErrorResponse
+                  "api:error":
+                    type: object
+                    properties:
+                      "@type":
+                        type: string
+                        example: api:MutuallyExclusiveLogParameters
+                      "api:parameters":
+                        type: array
+                        items:
+                          type: string
+                        example: ["start", "startDateTime"]
+                  "api:message":
+                    type: string
+                    example: "Log window parameters may not be combined in one request: start, startDateTime"
+                  "api:status":
+                    type: string
+                    example: api:failure
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
@@ -4580,19 +4841,28 @@ paths:
     post:
       tags: [Search & Entity Resolution]
       operationId: triggerIndex
-      summary: Trigger an explicit reindex of a branch.
+      summary: Trigger an index catch-up of a branch.
       description: |
-        Kicks off an asynchronous index build for the addressed branch.
-        If an index is already in progress for this branch, the request
-        returns success with a message indicating the index is already
-        running (idempotent).
+        Starts an asynchronous catch-up for the addressed branch: the
+        indexer resumes from the engine's last-indexed commit and indexes
+        every commit up to the current branch head. The request never
+        blocks and never rebuilds — a rebuild is `DELETE` followed by
+        this trigger. Repeated calls fold into the run already in
+        progress, so the endpoint is safe to call on a schedule for
+        manual (non-automatic) indexing.
 
-        **Authorization:** requires read access to the addressed data product.
+        The response carries `api:target_commit`: the branch head at
+        trigger time — the commit the catch-up runs toward. Poll
+        `GET /index/{path}` until `status` is `completed` and
+        `last_indexed_commit` is at or past it.
+
+        **Authorization:** requires reindex-write access to the
+        addressed data product.
       parameters:
         - $ref: '#/components/parameters/search_path'
       responses:
         200:
-          description: Index triggered successfully.
+          description: Index catch-up triggered.
           content:
             application/json:
               schema:
@@ -4602,12 +4872,34 @@ paths:
                   value:
                     '@type': api:IndexResponse
                     api:status: api:success
-                alreadyRunning:
-                  summary: Index already in progress
-                  value:
-                    '@type': api:IndexResponse
-                    api:status: api:success
-                    api:message: Index already in progress for this branch
+                    api:target_commit: "b0a2f6c0d5e34d2f8a4a1b0d0ab2e5d6f7e8c9d0"
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+    put:
+      tags: [Search & Entity Resolution]
+      operationId: triggerIndexPut
+      summary: Trigger an index catch-up of a branch (PUT synonym).
+      description: |
+        Identical to `POST /index/{path}` — see that operation for the
+        contract, the `api:target_commit` response, and the poll
+        pattern.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+      responses:
+        200:
+          description: Index catch-up triggered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexResponse'
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
@@ -5567,7 +5859,7 @@ components:
 
     IndexStatus:
       type: object
-      required: [status, branch, last_indexed_commit, branch_processing, engine]
+      required: [status, branch, last_indexed_commit, read_only, handoff, branch_processing, engine]
       properties:
         status:
           type: string
@@ -5585,6 +5877,22 @@ components:
           type: string
           nullable: true
           description: Commit ID of the last successfully indexed commit.
+        read_only:
+          type: boolean
+          description: >-
+            True when this instance's vectorlink engine is read-only —
+            the data dir write lock is held by another process sharing it,
+            so index requests are handed off through the task queue
+            instead of executing locally.
+        handoff:
+          type: string
+          enum: [pending, underway]
+          nullable: true
+          description: >-
+            Handoff queue state for this ref on a read-only instance:
+            `pending` (task file queued for the write-lock holder) or
+            `underway` (claimed by the holder). Absent on writable
+            instances and when no task file exists.
         branch_processing:
           type: object
           properties:
@@ -5631,7 +5939,10 @@ components:
           example: api:success
         api:message:
           type: string
-          description: Optional message (e.g. "Index already in progress for this branch").
+          description: Optional message (e.g. "Index request handed off to the instance holding the index write lock").
+        api:target_commit:
+          type: string
+          description: Branch head commit id at trigger time — the commit the catch-up runs toward. Empty when the branch has no commits.
 
     CandidatesRequestBody:
       type: object

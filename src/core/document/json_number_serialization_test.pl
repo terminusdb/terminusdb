@@ -1,6 +1,8 @@
 :- module(json_number_serialization_test, []).
 
 :- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(document/json)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(api)).
@@ -16,11 +18,17 @@
  * JavaScript's JSON.parse(), not the JSON format itself.
  */
 
+product_schema(Descriptor, Properties) :-
+    with_test_transaction(
+        Descriptor, C0,
+        insert_schema_document(
+            C0, _{'@type':'Class','@id':'Product'}.put(Properties))).
+
 :- begin_tests(json_number_serialization, []).
 
 test(decimal_serializes_as_json_number, [
     setup((setup_temp_store(State),
-           create_db_without_schema('admin','test'))),
+           create_db_with_empty_schema('admin','test'))),
     cleanup(teardown_temp_store(State))
 ]) :-
     % Insert a document with a decimal value
@@ -28,15 +36,17 @@ test(decimal_serializes_as_json_number, [
             '@id': 'Product/test1',
             price: '19.99'^^'http://www.w3.org/2001/XMLSchema#decimal'},
     
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    product_schema(Descriptor, json{price: json{'@type':'Optional','@class':'xsd:decimal'}}),
     with_test_transaction(
-        _Descriptor,
+        Descriptor,
         C1,
         insert_document(C1, Doc, Id)
     ),
     
     % Retrieve and check JSON serialization
     with_test_transaction(
-        _Descriptor2,
+        Descriptor,
         C2,
         (   get_document(C2, Id, Retrieved),
             % Convert to JSON text
@@ -51,7 +61,7 @@ test(decimal_serializes_as_json_number, [
 
 test(integer_serializes_as_json_number, [
     setup((setup_temp_store(State),
-           create_db_without_schema('admin','test'))),
+           create_db_with_empty_schema('admin','test'))),
     cleanup(teardown_temp_store(State))
 ]) :-
     % Insert a document with an integer value
@@ -59,15 +69,17 @@ test(integer_serializes_as_json_number, [
             '@id': 'Product/test2',
             quantity: '42'^^'http://www.w3.org/2001/XMLSchema#integer'},
     
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    product_schema(Descriptor, json{quantity: json{'@type':'Optional','@class':'xsd:integer'}}),
     with_test_transaction(
-        _Descriptor,
+        Descriptor,
         C1,
         insert_document(C1, Doc, Id)
     ),
     
     % Retrieve and check JSON serialization
     with_test_transaction(
-        _Descriptor2,
+        Descriptor,
         C2,
         (   get_document(C2, Id, Retrieved),
             % Convert to JSON text
@@ -82,7 +94,7 @@ test(integer_serializes_as_json_number, [
 
 test(big_integer_serializes_as_json_number, [
     setup((setup_temp_store(State),
-           create_db_without_schema('admin','test'))),
+           create_db_with_empty_schema('admin','test'))),
     cleanup(teardown_temp_store(State))
 ]) :-
     % Insert a document with a large integer (beyond JavaScript MAX_SAFE_INTEGER)
@@ -91,15 +103,17 @@ test(big_integer_serializes_as_json_number, [
             '@id': 'Product/test3',
             bigValue: BigInt^^'http://www.w3.org/2001/XMLSchema#integer'},
     
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    product_schema(Descriptor, json{bigValue: json{'@type':'Optional','@class':'xsd:integer'}}),
     with_test_transaction(
-        _Descriptor,
+        Descriptor,
         C1,
         insert_document(C1, Doc, Id)
     ),
     
     % Retrieve and check JSON serialization
     with_test_transaction(
-        _Descriptor2,
+        Descriptor,
         C2,
         (   get_document(C2, Id, Retrieved),
             % Convert to JSON text
@@ -116,7 +130,7 @@ test(big_integer_serializes_as_json_number, [
 
 test(high_precision_decimal_serializes_as_json_number, [
     setup((setup_temp_store(State),
-           create_db_without_schema('admin','test'))),
+           create_db_with_empty_schema('admin','test'))),
     cleanup(teardown_temp_store(State))
 ]) :-
     % Insert a document with 20-digit precision decimal
@@ -125,15 +139,17 @@ test(high_precision_decimal_serializes_as_json_number, [
             '@id': 'Product/test4',
             preciseValue: HighPrecision^^'http://www.w3.org/2001/XMLSchema#decimal'},
     
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    product_schema(Descriptor, json{preciseValue: json{'@type':'Optional','@class':'xsd:decimal'}}),
     with_test_transaction(
-        _Descriptor,
+        Descriptor,
         C1,
         insert_document(C1, Doc, Id)
     ),
     
     % Retrieve and check JSON serialization
     with_test_transaction(
-        _Descriptor2,
+        Descriptor,
         C2,
         (   get_document(C2, Id, Retrieved),
             % Convert to JSON text
@@ -150,7 +166,7 @@ test(high_precision_decimal_serializes_as_json_number, [
 
 test(rational_decimal_serializes_as_json_number_with_20_digits, [
     setup((setup_temp_store(State),
-           create_db_without_schema('admin','test'))),
+           create_db_with_empty_schema('admin','test'))),
     cleanup(teardown_temp_store(State))
 ]) :-
     % Insert a document with a rational (1/3) stored internally as rational
@@ -158,15 +174,17 @@ test(rational_decimal_serializes_as_json_number_with_20_digits, [
             '@id': 'Product/test5',
             rational: '0.33333333333333333333'^^'http://www.w3.org/2001/XMLSchema#decimal'},
     
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    product_schema(Descriptor, json{rational: json{'@type':'Optional','@class':'xsd:decimal'}}),
     with_test_transaction(
-        _Descriptor,
+        Descriptor,
         C1,
         insert_document(C1, Doc, Id)
     ),
     
     % Retrieve and check JSON serialization
     with_test_transaction(
-        _Descriptor2,
+        Descriptor,
         C2,
         (   get_document(C2, Id, Retrieved),
             % Convert to JSON text
@@ -174,8 +192,9 @@ test(rational_decimal_serializes_as_json_number_with_20_digits, [
             
             % Verify it's a JSON number with 20 digits (not IEEE 754 rounded)
             sub_string(JsonText, _, _, _, '"rational":0.33333333333333333333'),
-            % Verify it's not the IEEE 754 representation
-            \+ sub_string(JsonText, _, _, _, '"rational":0.3333333333333333'),
+            % Verify the stored value is the exact rational, not an IEEE 754 float
+            get_dict(rational, Retrieved, RV),
+            RV == 33333333333333333333r100000000000000000000,
             % Verify it's not a string
             \+ sub_string(JsonText, _, _, _, '"rational":"0.33333333333333333333"')
         )
@@ -183,7 +202,7 @@ test(rational_decimal_serializes_as_json_number_with_20_digits, [
 
 test(multiple_numeric_types_in_same_document, [
     setup((setup_temp_store(State),
-           create_db_without_schema('admin','test'))),
+           create_db_with_empty_schema('admin','test'))),
     cleanup(teardown_temp_store(State))
 ]) :-
     % Insert a document with multiple numeric types
@@ -194,15 +213,20 @@ test(multiple_numeric_types_in_same_document, [
             bigInt: '999999999999999999999'^^'http://www.w3.org/2001/XMLSchema#integer',
             highPrecision: '3.14159265358979323846'^^'http://www.w3.org/2001/XMLSchema#decimal'},
     
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    product_schema(Descriptor, json{intValue: json{'@type':'Optional','@class':'xsd:integer'},
+              decimalValue: json{'@type':'Optional','@class':'xsd:decimal'},
+              bigInt: json{'@type':'Optional','@class':'xsd:integer'},
+              highPrecision: json{'@type':'Optional','@class':'xsd:decimal'}}),
     with_test_transaction(
-        _Descriptor,
+        Descriptor,
         C1,
         insert_document(C1, Doc, Id)
     ),
     
     % Retrieve and check JSON serialization
     with_test_transaction(
-        _Descriptor2,
+        Descriptor,
         C2,
         (   get_document(C2, Id, Retrieved),
             % Convert to JSON text
@@ -224,7 +248,7 @@ test(multiple_numeric_types_in_same_document, [
 
 test(zero_and_negative_numbers_serialize_correctly, [
     setup((setup_temp_store(State),
-           create_db_without_schema('admin','test'))),
+           create_db_with_empty_schema('admin','test'))),
     cleanup(teardown_temp_store(State))
 ]) :-
     % Test edge cases: zero and negative numbers
@@ -235,15 +259,20 @@ test(zero_and_negative_numbers_serialize_correctly, [
             negativeInt: '-42'^^'http://www.w3.org/2001/XMLSchema#integer',
             negativeDecimal: '-19.99'^^'http://www.w3.org/2001/XMLSchema#decimal'},
     
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    product_schema(Descriptor, json{zeroInt: json{'@type':'Optional','@class':'xsd:integer'},
+              zeroDecimal: json{'@type':'Optional','@class':'xsd:decimal'},
+              negativeInt: json{'@type':'Optional','@class':'xsd:integer'},
+              negativeDecimal: json{'@type':'Optional','@class':'xsd:decimal'}}),
     with_test_transaction(
-        _Descriptor,
+        Descriptor,
         C1,
         insert_document(C1, Doc, Id)
     ),
     
     % Retrieve and check JSON serialization
     with_test_transaction(
-        _Descriptor2,
+        Descriptor,
         C2,
         (   get_document(C2, Id, Retrieved),
             % Convert to JSON text

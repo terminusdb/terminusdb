@@ -33,6 +33,7 @@
               getenv_number/2,
               getenv_default/3,
               getenv_default_number/3,
+              retry_startup/2,
               escape_pcre/2,
               pattern_string_split/3,
               merge_separator_split/3,
@@ -67,6 +68,7 @@
               member_last/3,
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
+              iso8601_to_epoch/2,
               json_read_term/2,
               json_read_term_stream/2,
               json_read_list_stream/2,
@@ -105,6 +107,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(library(pcre)).
+:- use_module(library(date)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
@@ -177,6 +180,24 @@ die_if(Goal, Error) :-
     (   call(Goal)
     ->  throw(Error)
     ;   true).
+
+/*
+ * retry_startup(+Retries, :Goal) is semidet.
+ *
+ * Run Goal, retrying failure or exceptions every half-second while a
+ * startup transient may still resolve. Once Retries is exhausted the
+ * goal runs unprotected: its exception propagates and its failure
+ * fails, so the caller sees the real outcome.
+ */
+:- meta_predicate retry_startup(+, 0).
+retry_startup(Retries, Goal) :-
+    (   Retries > 0
+    ->  (   catch(Goal, _Error, fail)
+        ->  true
+        ;   sleep(0.5),
+            Retries1 is Retries - 1,
+            retry_startup(Retries1, Goal))
+    ;   Goal).
 
 /**
  * get_key(+Key,+Object,-Val,+Default) is det.
@@ -978,6 +999,72 @@ time_to_internal_time(time(HH,MM,SS,_NS,Offset),time(HN,MN,SN)) :-
     MN0 is MM + MMOff,
     MN is (MN0 mod 60 + 60) mod 60,
     SN is SS + SSOff.
+
+%% iso8601_to_epoch(+ISO, -Epoch) is det.
+%
+%  Parse an ISO 8601 datetime (fraction digits up to nanoseconds and beyond)
+%  to exact rational epoch seconds. Commit timestamps are stored as
+%  xsd:decimal, so bounds must be exact decimals too — going through a float
+%  would inject a ~1ulp gap and break boundary comparisons.
+iso8601_to_epoch(ISO, Epoch) :-
+    (   sub_atom(ISO, Before, 1, _, '.')
+    ->  sub_atom(ISO, 0, Before, _, Head_Part),
+        DotPos is Before + 1,
+        sub_atom(ISO, DotPos, _, 0, Fraction_Rest),
+        atom_chars(Fraction_Rest, Chars),
+        take_digit_chars(Chars, Digit_Chars, Zone_Chars),
+        Digit_Chars \= [],
+        length(Digit_Chars, Len),
+        atom_chars(Digits, Digit_Chars),
+        atom_number(Digits, Num),
+        Fraction is Num rdiv 10^Len,
+        % Whatever follows the fraction digits is the timezone suffix —
+        % it must stay on the datetime part or parse_time assumes local time.
+        atom_chars(Zone, Zone_Chars),
+        atom_concat(Head_Part, Zone, DateTime_Part)
+    ;   DateTime_Part = ISO,
+        Fraction = 0),
+    % Date/time part has no fraction, so the parsed float is integer-valued
+    % and rounds to an exact whole-second count.
+    parse_time(DateTime_Part, iso_8601, Float),
+    Whole is round(Float),
+    Epoch is Whole + Fraction.
+
+%% take_digit_chars(+Chars, -Digits, -Rest) is det.
+%  Digits is the longest leading run of digit characters; Rest is what
+%  follows it.
+take_digit_chars([C|Cs], [C|Ds], Rest) :-
+    char_type(C, digit),
+    !,
+    take_digit_chars(Cs, Ds, Rest).
+take_digit_chars(Rest, [], Rest).
+
+:- begin_tests(iso8601_to_epoch).
+
+test("epoch boundary with and without fraction") :-
+    iso8601_to_epoch('1970-01-01T00:00:00Z', 0),
+    iso8601_to_epoch('1970-01-01T00:00:00.000000000Z', 0).
+
+test("pre-1970 second is a negative epoch") :-
+    iso8601_to_epoch('1969-12-31T23:59:59Z', -1).
+
+test("pre-1970 fraction is an exact negative rational") :-
+    iso8601_to_epoch('1969-12-31T23:59:59.5Z', Epoch),
+    assertion(rational(Epoch)),
+    assertion(Epoch =:= -0.5).
+
+test("deep historic date") :-
+    iso8601_to_epoch('1900-01-01T00:00:00Z', -2208988800).
+
+test("nanosecond fraction is exact") :-
+    iso8601_to_epoch('1970-01-01T00:00:00.123456789Z', Epoch),
+    assertion(rational(Epoch)),
+    assertion(Epoch =:= 0.123456789).
+
+test("malformed input fails", [fail]) :-
+    iso8601_to_epoch('not-a-date', _).
+
+:- end_tests(iso8601_to_epoch).
 
 % Read a JSON Term from Stream. Fail if no JSON terms are found in Stream.
 json_read_term(Stream, Term) :-

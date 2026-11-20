@@ -347,6 +347,7 @@ describe('document', function () {
       let A
       let B
       let schema
+
       before(async function () {
         A = util.randomString()
         B = util.randomString()
@@ -542,6 +543,60 @@ describe('document', function () {
       expect(result.body['api:error']['@type']).to.equal('api:SameDocumentIdsMutatedInOneTransaction')
     })
 
+    it('allows resubmitting an identical embedded document with merge_repeats', async function () {
+      const shared = util.randomString()
+      const parent = util.randomString()
+      const schema = [
+        { '@id': shared, '@type': 'Class', '@shared': [], '@key': { '@type': 'Lexical', '@fields': ['name'] }, name: 'xsd:string', value: 'xsd:string' },
+        { '@id': parent, '@type': 'Class', member: { '@class': shared, '@type': 'Optional' } },
+      ]
+      await document.insert(agent, { schema })
+      const member = { '@type': shared, name: 'shared1', value: 'same' }
+      await document.insert(agent, { instance: { '@type': parent, member } })
+      const r = await document.insert(agent, { instance: { '@type': parent, member }, merge_repeats: true }).unverified()
+      expect(r.status).to.equal(200)
+    })
+
+    it('rejects resubmitting an identical embedded document without merge_repeats', async function () {
+      const shared = util.randomString()
+      const parent = util.randomString()
+      const schema = [
+        { '@id': shared, '@type': 'Class', '@shared': [], '@key': { '@type': 'Lexical', '@fields': ['name'] }, name: 'xsd:string', value: 'xsd:string' },
+        { '@id': parent, '@type': 'Class', member: { '@class': shared, '@type': 'Optional' } },
+      ]
+      await document.insert(agent, { schema })
+      const member = { '@type': shared, name: 'shared1', value: 'same' }
+      await document.insert(agent, { instance: { '@type': parent, member } })
+      const r = await document.insert(agent, { instance: { '@type': parent, member } }).unverified()
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentIdAlreadyExists')
+    })
+
+    it('rejects a modified embedded document even with merge_repeats', async function () {
+      const shared = util.randomString()
+      const parent = util.randomString()
+      const schema = [
+        { '@id': shared, '@type': 'Class', '@shared': [], '@key': { '@type': 'Lexical', '@fields': ['name'] }, name: 'xsd:string', value: 'xsd:string' },
+        { '@id': parent, '@type': 'Class', member: { '@class': shared, '@type': 'Optional' } },
+      ]
+      await document.insert(agent, { schema })
+      await document.insert(agent, { instance: { '@type': parent, member: { '@type': shared, name: 'shared1', value: 'same' } } })
+      const changed = { '@type': parent, member: { '@type': shared, name: 'shared1', value: 'different' } }
+      const r = await document.insert(agent, { instance: changed, merge_repeats: true }).unverified()
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentIdAlreadyExists')
+    })
+
+    it('allows resubmitting the same document with merge_repeats', async function () {
+      const className = util.randomString()
+      const schema = [{ '@id': className, '@type': 'Class', '@key': { '@type': 'Lexical', '@fields': ['name'] }, name: 'xsd:string', value: 'xsd:string' }]
+      await document.insert(agent, { schema })
+      const instance = { '@type': className, name: 'doc1', value: 'same' }
+      await document.insert(agent, { instance })
+      const r = await document.insert(agent, { instance, merge_repeats: true }).unverified()
+      expect(r.status).to.equal(200)
+    })
+
     describe('tests cardinality in schema', function () {
       let card
       let min
@@ -658,7 +713,7 @@ describe('document', function () {
       it('passes insert, get JSONDocument', async function () {
         const r1 = await document.insert(agent, { instance: { a: [42, 23, 12] }, raw_json: true })
         const id = r1.body[0]
-        const r2 = await document.get(agent, { query: { id, as_list: true, compress_ids: false } })
+        const r2 = await document.get(agent, { query: { id, as_list: true, compress_ids: false, raw_id: true } })
         // Numbers are returned as JSON numbers per JSON_SERIALIZATION_RULES.md
         expect(r2.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
       })
@@ -671,7 +726,7 @@ describe('document', function () {
         // First insert
         await document.insert(agent, { instance, raw_json: true })
 
-        const r1 = await document.get(agent, { query: { id, as_list: true, compress_ids: false } })
+        const r1 = await document.get(agent, { query: { id, as_list: true, compress_ids: false, raw_id: true } })
         expect(r1.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
 
         // Second insert with same ID - with overwrite=false (default), this should now fail

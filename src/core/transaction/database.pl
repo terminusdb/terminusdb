@@ -11,7 +11,10 @@
               graph_inserts_deletes/3,
               transaction_object_database_key/2,
               reset_transaction_object_graph_descriptors/1,
-              reset_transaction_objects_graph_descriptors/1
+              reset_transaction_objects_graph_descriptors/1,
+              assert_data_version_at_commit/2,
+              assert_options_data_version_guards/1,
+              throw_data_version_cas_lost/2
           ]).
 
 /** <module> Implementation of database graph management
@@ -26,7 +29,10 @@
 :- use_module(core(transaction/validate)).
 :- use_module(core(util)).
 :- use_module(core(util/utils)).
-:- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
+:- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4,
+                            safe_open_named_graph/3, storage/1,
+                            organization_database_name/3,
+                            system_instance_name/1]).
 :- use_module(core(plugins)).
 :- use_module(core(document/migration)).
 :- use_module(core(document/meta_commit_queue)).
@@ -280,7 +286,15 @@ with_transaction_(Query_Context,
 with_transaction_(_,
                   _,
                   _,
-                  _) :-
+                  Options) :-
+    % a versioned write whose retries ran out may simply have lost the race:
+    % re-check the precondition so it surfaces as 400, not a spurious 500
+    (   option(data_version_guard(Descriptor-Requested), Options),
+        Requested \= no_data_version
+    ->  open_descriptor(Descriptor, Fresh_Transaction),
+        transaction_data_version(Fresh_Transaction, Actual),
+        compare_data_versions(Requested, Actual)
+    ;   true),
     throw(error(transaction_retry_exceeded, _)).
 
 :- use_module(core(util/test_utils)).
@@ -313,10 +327,115 @@ transaction_object_database_key(Transaction_Object, Key) :-
     ;   fail
     ).
 
+/*
+ * assert_options_data_version_guards(+Options) is det.
+ *
+ * Run the commit-time data-version assertion for a data_version_guard(Descriptor-
+ * Requested) option, inside the meta-commit lock. Absent option is a no-op.
+ */
+assert_options_data_version_guards(Options) :-
+    (   is_dict(Options)
+    ->  (   get_dict(data_version_guard, Options, Descriptor-Requested)
+        ->  assert_data_version_at_commit(Descriptor, Requested)
+        ;   true)
+    ;   option(data_version_guard(Descriptor-Requested), Options)
+    ->  assert_data_version_at_commit(Descriptor, Requested)
+    ;   true
+    ).
+
+/*
+ * retract_unconsumed_label_versions(+Options) is det.
+ *
+ * expected_label_version/4 records are one-shot CAS preconditions: installed
+ * by assert_options_data_version_guards/1 and consumed by the label's head
+ * update in commit_validation_object/2. A record that survives the locked
+ * section — a guard that passed but whose commit then threw, or a label no
+ * validation writes — arms a later foreign commit's CAS with a version that
+ * commit never requested, surfacing as a phantom data_version_mismatch on an
+ * unversioned write. Retraction is scoped to this run's guarded labels: a
+ * concurrent commit's pending precondition on another label is untouched.
+ */
+retract_unconsumed_label_versions(Options) :-
+    forall(
+        data_version_guard_label(Options, Label),
+        retractall(data_version:expected_label_version(Label, _, _, _))
+    ).
+
+data_version_guard_label(Options, Label) :-
+    (   is_dict(Options)
+    ->  get_dict(data_version_guard, Options, Descriptor-_)
+    ;   option(data_version_guard(Descriptor-_), Options)
+    ),
+    root_label_name(Descriptor, Label).
+
+/*
+ * assert_data_version_at_commit(+Descriptor, +Requested_Data_Version) is det.
+ *
+ * The authoritative data-version check. head/3 is captured FIRST as the
+ * expected label version for the nb_force_set_head/3 CAS at commit; a fresh
+ * descriptor read is verified SECOND; the expectation is recorded only once
+ * the compare passes, so a rejected guard never leaves a stale CAS
+ * precondition behind. Capture-first keeps the expected version <= the
+ * verified state: a foreign commit landing between the two either fails the
+ * fresh read (data_version_mismatch, thrown, no retry) or loses the CAS
+ * (fail -> retry -> re-assert).
+ */
+assert_data_version_at_commit(Descriptor, Requested) :-
+    Requested \= no_data_version,
+    !,
+    root_label_name(Descriptor, Composite),
+    storage(Store),
+    safe_open_named_graph(Store, Composite, Graph),
+    head(Graph, _Layer, Expected_Version),
+    open_descriptor(Descriptor, Fresh_Transaction),
+    transaction_data_version(Fresh_Transaction, Actual),
+    compare_data_versions(Requested, Actual),
+    record_expected_label_version(Composite, Expected_Version, Descriptor, Requested).
+assert_data_version_at_commit(_, _).
+
+/**
+ * throw_data_version_cas_lost(+Descriptor, +Requested) is det.
+ *
+ * Called when a versioned label CAS loses inside the commit lock: the head
+ * moved between the locked verify and the head update. Builders are already
+ * committed at this point, so a retry cannot help; surface the stale
+ * precondition as data_version_mismatch (-> 400) instead. A CAS loss while
+ * the data version is still current is a genuine commit failure (-> 500).
+ */
+throw_data_version_cas_lost(Descriptor, Requested) :-
+    (   open_descriptor(Descriptor, Fresh_Transaction),
+        transaction_data_version(Fresh_Transaction, Actual),
+        Actual \= Requested
+    ->  throw(error(data_version_mismatch(Requested, Actual), _))
+    ;   throw(error(data_version_cas_lost(Requested), _))
+    ).
+
+/*
+ * root_label_name(+Descriptor, -Label_Name) is semidet.
+ *
+ * The named-graph label whose version covers the descriptor's data version.
+ */
+root_label_name(Descriptor, Composite) :-
+    (   database_descriptor{organization_name: Organization,
+                          database_name: DB} :< Descriptor
+    ->  organization_database_name(Organization, DB, Composite)
+    ;   repository_descriptor{database_descriptor: Database_Descriptor} :< Descriptor
+    ->  root_label_name(Database_Descriptor, Composite)
+    ;   branch_descriptor{repository_descriptor: Repository_Descriptor} :< Descriptor
+    ->  root_label_name(Repository_Descriptor, Composite)
+    ;   commit_descriptor{repository_descriptor: Repository_Descriptor} :< Descriptor
+    ->  root_label_name(Repository_Descriptor, Composite)
+    ;   label_descriptor{instance: Instance_Label} :< Descriptor
+    ->  Composite = Instance_Label
+    ;   system_descriptor{} :< Descriptor
+    ->  system_instance_name(Composite)
+    ).
+
 run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
     (   option(inside_migration(true), Options)
-    ->  Validations=Validations0,
+    ->  maplist([V, V0]>>put_dict(_{inside_migration:true}, V, V0),
+                Validations, Validations0),
         Inference_Metadata=_{}
     ;   infer_migrations_for_commit(Validations,Validations0,Inference_Metadata,Options)
     ),
@@ -345,7 +464,12 @@ run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     % optimizer) do not deadlock trying to acquire the same lock.
     with_meta_commit_locks(
         Sorted_Keys,
-        commit_validation_objects(Validations0, Committed)
+        call_cleanup(
+            (   assert_options_data_version_guards(Options),
+                commit_validation_objects(Validations0, Committed)
+            ),
+            retract_unconsumed_label_versions(Options)
+        )
     ),
     % Use the original validations before any potential schema migration
     collect_validations_metadata(Validations, Validation_Meta_Data),
@@ -533,5 +657,110 @@ test(partial_transaction_commit, [
     run_transactions(Transaction_Objects, true, _),
 
     partial_commits(Context).
+
+test(root_label_name_mapping, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,testdb3))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor(admin,testdb3,Desc),
+    root_label_name(Desc, 'admin|testdb3'),
+    root_label_name(system_descriptor{}, Sys_Label),
+    system_instance_name(Sys_Label).
+
+test(commit_guard_accept_then_reject_after_head_move, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,testdb3))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor(admin,testdb3,Desc),
+    open_descriptor(Desc, Trans),
+    transaction_data_version(Trans, Req),
+    % guard accepts the current head and seals the label version
+    assert_data_version_at_commit(Desc, Req),
+    % a foreign commit moves the head
+    create_context(Desc, Pre_Foreign_Ctx),
+    Foreign_Ctx = Pre_Foreign_Ctx.put(_{commit_info : commit_info{ author : test,
+                                                                 message : test}}),
+    ask(Foreign_Ctx, insert(a,b,c)),
+    query_context_transaction_objects(Foreign_Ctx, Foreign_TObjs),
+    run_transactions(Foreign_TObjs, true, _),
+    % the stale precondition is now rejected
+    catch(assert_data_version_at_commit(Desc, Req),
+          error(data_version_mismatch(Req,_),_),
+          true).
+
+test(commit_guard_rejection_leaves_no_cas_precondition, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,testdb4))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor(admin,testdb4,Desc),
+    seed_commit(Desc),
+    % A versioned write with a stale precondition is rejected at the guard.
+    create_context(Desc, Pre_VCtx),
+    VCtx = Pre_VCtx.put(_{commit_info : commit_info{ author : test,
+                                                     message : test}}),
+    ask(VCtx, insert(x,y,z)),
+    query_context_transaction_objects(VCtx, VTObjs),
+    catch(run_transactions(VTObjs, true, _,
+                           [data_version_guard(Desc-data_version(branch, bogus_stale_commit_id))]),
+          error(data_version_mismatch(_, _), _),
+          true),
+    % The expected-version record must not outlive the rejected guard.
+    \+ data_version:expected_label_version(_, _, _, _),
+    % An unversioned commit must not inherit the stale CAS precondition.
+    create_context(Desc, Pre_Ctx2),
+    Ctx2 = Pre_Ctx2.put(_{commit_info : commit_info{ author : test,
+                                                     message : test}}),
+    ask(Ctx2, insert(p,q,r)),
+    query_context_transaction_objects(Ctx2, TObjs2),
+    run_transactions(TObjs2, true, _).
+
+test(commit_guard_foreign_bump_then_unversioned_commit, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,testdb5))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor(admin,testdb5,Desc),
+    seed_commit(Desc),
+    % A versioned write with a stale precondition is rejected at the guard.
+    create_context(Desc, Pre_VCtx),
+    VCtx = Pre_VCtx.put(_{commit_info : commit_info{ author : test,
+                                                     message : test}}),
+    ask(VCtx, insert(x,y,z)),
+    query_context_transaction_objects(VCtx, VTObjs),
+    catch(run_transactions(VTObjs, true, _,
+                           [data_version_guard(Desc-data_version(branch, bogus_stale_commit_id))]),
+          error(data_version_mismatch(_, _), _),
+          true),
+    % A head writer that does not consult expected_label_version/4 moves the
+    % label anyway — named_graph_optimize/1 bumps _meta labels like this.
+    root_label_name(Desc, Composite),
+    storage(Store),
+    safe_open_named_graph(Store, Composite, Graph),
+    head(Graph, Head_Layer, Expected_Version),
+    squash(Head_Layer, New_Layer),
+    nb_force_set_head(Graph, New_Layer, Expected_Version),
+    % The unversioned commit must still succeed: it carries no precondition
+    % of its own and must not arm a CAS against a version nobody requested.
+    create_context(Desc, Pre_Ctx2),
+    Ctx2 = Pre_Ctx2.put(_{commit_info : commit_info{ author : test,
+                                                     message : test}}),
+    ask(Ctx2, insert(p,q,r)),
+    query_context_transaction_objects(Ctx2, TObjs2),
+    run_transactions(TObjs2, true, _).
+
+seed_commit(Descriptor) :-
+    create_context(Descriptor, Pre_Ctx),
+    Ctx = Pre_Ctx.put(_{commit_info : commit_info{ author : test,
+                                                   message : test}}),
+    ask(Ctx, insert(a,b,c)),
+    query_context_transaction_objects(Ctx, TObjs),
+    run_transactions(TObjs, true, _).
 
 :- end_tests(database_transactions).

@@ -90,6 +90,7 @@
               % patch.pl
               simple_patch/4,
               patch_cost/2,
+              strip_wire_hints/2,
 
               % normalize.pl
               normalize_document/3,

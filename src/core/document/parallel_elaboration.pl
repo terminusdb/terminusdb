@@ -324,7 +324,7 @@ process_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated) :
 
 rust_elaborate_chunk(DB, _Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Pairs) :-
     rust_elaboration_available,
-    '$doc':get_document_context(DB, true, Context),
+    '$doc':get_document_context(DB, true, false, Context),
     catch(
         '$doc':rust_elaborate_simple_documents(Context, Docs, PreBranchCommitId, PreSchemaLayerId, Pairs),
         _Error,
@@ -907,7 +907,7 @@ test(rust_elaboration_matches_prolog_simple, [
     open_descriptor(Desc, DB),
     json_elaborate(DB, Doc, Prolog_Elaborated),
     (   rust_elaboration_available
-    ->  '$doc':get_document_context(DB, true, Context),
+    ->  '$doc':get_document_context(DB, true, false, Context),
         '$doc':rust_elaborate_simple_documents(Context, [Doc], none, none, [Rust_Elaborated-_Rust_Contract]),
         elaboration_for_comparison(Prolog_Elaborated, Prolog_Normalized),
         elaboration_for_comparison(Rust_Elaborated, Rust_Normalized),
@@ -960,7 +960,7 @@ test(rust_elaboration_fails_on_missing_required_field, [
     (   rust_elaboration_available
     ->  Doc = json{'@type':'Person', age:30},
         open_descriptor(Desc, DB),
-        '$doc':get_document_context(DB, true, Context),
+        '$doc':get_document_context(DB, true, false, Context),
         % The Rust fast path must refuse to elaborate a document that is
         % missing a required schema property, so the Prolog inference fallback
         % can generate the standard required_field_does_not_exist_in_document
@@ -981,23 +981,32 @@ test(rust_vs_prolog_elaboration_performance, [
     ->  DocCount = 10000,
         helper_docs(DocCount, Docs),
         open_descriptor(Desc, DB),
-        '$doc':get_document_context(DB, true, Context),
-        % Warm-up to avoid cold-start effects.
-        '$doc':rust_elaborate_simple_documents(Context, [json{'@type':'Person', name:'Warm', age:1}], none, none, _),
+        '$doc':get_document_context(DB, true, false, Context),
+        % Warm both paths on the full workload so neither timed sample pays
+        % first-touch costs the other has already amortized.
         forall(member(D, Docs), json_elaborate(DB, D, _)),
-        % Prolog path timing.
-        statistics(walltime, [PrologT0, _]),
-        forall(member(D, Docs), json_elaborate(DB, D, _)),
-        statistics(walltime, [PrologT1, _]),
-        PrologMs is PrologT1 - PrologT0,
-        PrologDocsPerS is (DocCount * 1000) / max(PrologMs, 1),
-        % Rust path timing.
-        statistics(walltime, [RustT0, _]),
         '$doc':rust_elaborate_simple_documents(Context, Docs, none, none, _),
-        statistics(walltime, [RustT1, _]),
-        RustMs is RustT1 - RustT0,
-        RustDocsPerS is (DocCount * 1000) / max(RustMs, 1),
-        assertion(RustDocsPerS > PrologDocsPerS)
+        % CI runners steal CPU in bursts, which only ever adds walltime, so
+        % the minimum of repeated samples is the steal-resistant estimate.
+        findall(Ms,
+                (   between(1, 3, _),
+                    statistics(walltime, [T0, _]),
+                    forall(member(D, Docs), json_elaborate(DB, D, _)),
+                    statistics(walltime, [T1, _]),
+                    Ms is T1 - T0
+                ),
+                PrologSamples),
+        min_list(PrologSamples, PrologMs),
+        findall(Ms,
+                (   between(1, 3, _),
+                    statistics(walltime, [T0, _]),
+                    '$doc':rust_elaborate_simple_documents(Context, Docs, none, none, _),
+                    statistics(walltime, [T1, _]),
+                    Ms is T1 - T0
+                ),
+                RustSamples),
+        min_list(RustSamples, RustMs),
+        assertion(RustMs < PrologMs)
     ;   true
     ),
     !.

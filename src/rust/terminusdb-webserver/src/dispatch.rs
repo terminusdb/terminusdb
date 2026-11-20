@@ -1,3 +1,4 @@
+use crate::config::MAX_BODY_SIZE;
 use axum::{
     body::Body,
     extract::Path,
@@ -7,30 +8,29 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use flate2::read::{GzDecoder, ZlibDecoder};
 use futures::Stream;
+use nix::unistd::pipe;
 use percent_encoding::percent_decode_str;
 use serde_json::json;
+use std::io::Write;
+use std::os::fd::{FromRawFd, IntoRawFd};
+use std::pin::Pin;
+use std::task::{Context as TaskContext, Poll};
 use std::{
     collections::{HashMap, HashSet},
     io::Read,
     path::{Component, Path as StdPath, PathBuf},
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, OnceLock,
     },
 };
-use flate2::read::{GzDecoder, ZlibDecoder};
-use nix::unistd::pipe;
-use std::io::Write;
-use std::os::fd::{FromRawFd, IntoRawFd};
-use std::pin::Pin;
-use std::task::{Context as TaskContext, Poll};
-use crate::config::MAX_BODY_SIZE;
 use swipl::prelude::*;
 use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf};
+use tokio::net::unix::pipe::Receiver;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use tokio::net::unix::pipe::Receiver;
 
 /// A route registered by a Prolog plugin.
 #[derive(Clone, Debug)]
@@ -481,17 +481,15 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                     let mut closed_count = 0u32;
                     let failed: Vec<StreamId> = subs
                         .iter()
-                        .filter_map(|(id, sub)| {
-                            match sub.tx.try_send(bytes.clone()) {
-                                Ok(()) => None,
-                                Err(mpsc::error::TrySendError::Full(_)) => {
-                                    full_count += 1;
-                                    Some(*id)
-                                }
-                                Err(mpsc::error::TrySendError::Closed(_)) => {
-                                    closed_count += 1;
-                                    Some(*id)
-                                }
+                        .filter_map(|(id, sub)| match sub.tx.try_send(bytes.clone()) {
+                            Ok(()) => None,
+                            Err(mpsc::error::TrySendError::Full(_)) => {
+                                full_count += 1;
+                                Some(*id)
+                            }
+                            Err(mpsc::error::TrySendError::Closed(_)) => {
+                                closed_count += 1;
+                                Some(*id)
                             }
                         })
                         .collect();
@@ -531,17 +529,15 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                     let mut closed_count = 0u32;
                     let failed: Vec<StreamId> = subs
                         .iter()
-                        .filter_map(|(id, sub)| {
-                            match sub.tx.try_send(bytes.clone()) {
-                                Ok(()) => None,
-                                Err(mpsc::error::TrySendError::Full(_)) => {
-                                    full_count += 1;
-                                    Some(*id)
-                                }
-                                Err(mpsc::error::TrySendError::Closed(_)) => {
-                                    closed_count += 1;
-                                    Some(*id)
-                                }
+                        .filter_map(|(id, sub)| match sub.tx.try_send(bytes.clone()) {
+                            Ok(()) => None,
+                            Err(mpsc::error::TrySendError::Full(_)) => {
+                                full_count += 1;
+                                Some(*id)
+                            }
+                            Err(mpsc::error::TrySendError::Closed(_)) => {
+                                closed_count += 1;
+                                Some(*id)
                             }
                         })
                         .collect();
@@ -787,6 +783,7 @@ pub struct PipeDispatchRequest {
     pub(crate) output_worker_write_fd: i32,
     pub(crate) binary: bool,
     pub(crate) request_id: String,
+    pub(crate) indexer_worker: bool,
 }
 
 /// Message sent to the single-engine dispatcher queue.
@@ -801,6 +798,10 @@ pub enum DispatchMessage {
         output_worker_write_fd: i32,
         request_id: String,
     },
+    /// Wake-up marker queued by `nudge_log_drain` when log entries land —
+    /// without it the loop sleeps in `blocking_recv` and buffered entries
+    /// only flush when a request happens to arrive.
+    FlushLogs,
 }
 
 /// Sender for the single-engine dispatcher queue.
@@ -838,12 +839,46 @@ pub fn dispatcher_initialized() -> bool {
     DISPATCH_QUEUE.get().is_some()
 }
 
+/// Set when a wake-up marker for the log channel is queued; cleared when
+/// the marker is processed so the next log entry queues a fresh one. The
+/// marker is deduplicated so a log flood cannot fill the bounded dispatch
+/// queue and starve real requests.
+static LOG_DRAIN_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// Queue a one-shot marker so the dispatcher loop wakes to drain the log
+/// channel even with no request traffic. Called from `crate::log::log`
+/// after an entry is enqueued.
+pub fn nudge_log_drain() {
+    if LOG_DRAIN_PENDING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let queued = DISPATCH_QUEUE
+        .get()
+        .map(|tx| tx.try_send(DispatchMessage::FlushLogs).is_ok())
+        .unwrap_or(false);
+    if !queued {
+        // Queue full or dispatcher not running — entries still drain at
+        // engine init and on every dispatch pass; re-arm so a later
+        // entry can try again.
+        LOG_DRAIN_PENDING.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Bounds on the log drain before each dispatch. Each entry costs a full
+/// `call_once` FFI round trip, so both an entry count and a time budget
+/// keep dispatch latency independent of log volume; the channel is
+/// unbounded so nothing drops.
+const LOG_DRAIN_PER_DISPATCH: usize = 64;
+const LOG_DRAIN_BUDGET: std::time::Duration = std::time::Duration::from_millis(10);
+
 /// Initialize the single-engine request dispatcher. Must be called once
 /// before the webserver starts accepting requests.
 pub fn init_dispatcher() {
     let (tx, mut rx) = mpsc::channel::<DispatchMessage>(1024);
     DISPATCH_QUEUE.set(tx).ok();
-    IN_FLIGHT_REQUESTS.set(Arc::new(Mutex::new(HashSet::new()))).ok();
+    IN_FLIGHT_REQUESTS
+        .set(Arc::new(Mutex::new(HashSet::new())))
+        .ok();
     let log_rx = crate::log::init_log_channel();
 
     let handle = std::thread::spawn(move || {
@@ -878,13 +913,31 @@ pub fn init_dispatcher() {
         let context: Context<_> = activation.into();
 
         // Drain any log messages that were queued before the engine was ready.
-        crate::log::drain_log_messages(&context, &log_rx);
+        crate::log::drain_log_messages(&context, &log_rx, usize::MAX, std::time::Duration::MAX);
 
         while let Some(msg) = rx.blocking_recv() {
-            // Process pending log messages before each dispatch.
-            crate::log::drain_log_messages(&context, &log_rx);
+            // Process pending log messages before each dispatch — bounded
+            // so a sustained flood (an index run emits per-document lines)
+            // cannot starve queued dispatches; leftovers drain next pass.
+            crate::log::drain_log_messages(
+                &context,
+                &log_rx,
+                LOG_DRAIN_PER_DISPATCH,
+                LOG_DRAIN_BUDGET,
+            );
             match msg {
                 DispatchMessage::Shutdown => break,
+                DispatchMessage::FlushLogs => {
+                    // Clear before draining so an entry landing mid-drain
+                    // queues a fresh marker and is picked up next pass.
+                    LOG_DRAIN_PENDING.store(false, Ordering::SeqCst);
+                    crate::log::drain_log_messages(
+                        &context,
+                        &log_rx,
+                        LOG_DRAIN_PER_DISPATCH,
+                        LOG_DRAIN_BUDGET,
+                    );
+                }
                 DispatchMessage::Pipe(req) => {
                     let dispatch_start = std::time::Instant::now();
                     let dispatch_result = dispatch_pipe_to_prolog(&context, &req);
@@ -910,7 +963,9 @@ pub fn init_dispatcher() {
                     output_worker_write_fd,
                     request_id,
                 } => {
-                    if let Err(e) = cancel_pipe_to_prolog(&context, output_worker_write_fd, &request_id) {
+                    if let Err(e) =
+                        cancel_pipe_to_prolog(&context, output_worker_write_fd, &request_id)
+                    {
                         crate::log::log_error(format!(
                             "[terminusdb-webserver] cancel_pipe_request failed for FD {}: {}",
                             output_worker_write_fd, e
@@ -934,11 +989,14 @@ pub fn init_dispatcher() {
                             "headers": {"Content-Type": "application/json"}
                         })
                         .to_string();
-                        let _ = stream_registry()
+                        let _ = stream_registry().lock().unwrap().send(
+                            req.response_stream_id,
+                            axum::body::Bytes::from(error_response),
+                        );
+                        stream_registry()
                             .lock()
                             .unwrap()
-                            .send(req.response_stream_id, axum::body::Bytes::from(error_response));
-                        stream_registry().lock().unwrap().remove(req.response_stream_id);
+                            .remove(req.response_stream_id);
                     }
                 }
             }
@@ -990,7 +1048,9 @@ fn init_prolog_worker_pool(context: &Context<impl QueryableContextType>) -> Prol
                 .and_then(|s| s.parse().ok())
         })
         .unwrap_or(16);
-    workers_term.put(&pool_size).map_err(|_| PrologError::Failure)?;
+    workers_term
+        .put(&pool_size)
+        .map_err(|_| PrologError::Failure)?;
 
     let init_callable = CallablePredicate::new(Predicate::new(
         Functor::new(Atom::new("init_request_worker_pool"), 1),
@@ -1067,20 +1127,28 @@ fn dispatch_pipe_to_prolog(
         .put(&Atom::new(&req.request_id))
         .map_err(|_| PrologError::Failure)?;
 
+    let functor_name = if req.indexer_worker {
+        "dispatch_indexer_request"
+    } else {
+        "dispatch_request"
+    };
     let callable = CallablePredicate::new(Predicate::new(
-        Functor::new(Atom::new("dispatch_request"), 7),
+        Functor::new(Atom::new(functor_name), 7),
         Module::new(Atom::new("request_worker_pool")),
     ))
     .map_err(|_| PrologError::Failure)?;
-    let result = frame.call_once(callable, [
-        &request_term,
-        &module_term,
-        &handler_term,
-        &input_fd_term,
-        &output_fd_term,
-        &binary_term,
-        &request_id_term,
-    ]);
+    let result = frame.call_once(
+        callable,
+        [
+            &request_term,
+            &module_term,
+            &handler_term,
+            &input_fd_term,
+            &output_fd_term,
+            &binary_term,
+            &request_id_term,
+        ],
+    );
     // discard (not close) so the global stack is rewound and all term
     // refs + serialized request atoms are freed immediately. close()
     // leaves term data on the global stack, pinning request atoms.
@@ -1160,13 +1228,16 @@ fn dispatch_stream_to_prolog(
         Module::new(Atom::new("request_worker_pool")),
     ))
     .map_err(|_| PrologError::Failure)?;
-    let result = frame.call_once(callable, [
-        &request_term,
-        &module_term,
-        &handler_term,
-        &input_stream_id_term,
-        &response_stream_id_term,
-    ]);
+    let result = frame.call_once(
+        callable,
+        [
+            &request_term,
+            &module_term,
+            &handler_term,
+            &input_stream_id_term,
+            &response_stream_id_term,
+        ],
+    );
     frame.discard();
     result
 }
@@ -1180,7 +1251,6 @@ fn write_to_fd(fd: i32, data: &str) -> std::io::Result<()> {
         .map(|_| ())
         .map_err(std::io::Error::from)
 }
-
 
 /// Register a new response stream and return its id and the receiver.
 ///
@@ -1266,7 +1336,9 @@ fn term_to_string(term: &Term) -> PrologResult<String> {
 ///
 /// This is called from the `appserver_start` Prolog predicate,
 /// so a Prolog engine is active.
-pub fn collect_routes(context: &Context<impl QueryableContextType>) -> PrologResult<Vec<PluginRoute>> {
+pub fn collect_routes(
+    context: &Context<impl QueryableContextType>,
+) -> PrologResult<Vec<PluginRoute>> {
     let frame = context.open_frame();
     let [method_term, path_term, handler_term, binary_term] = frame.new_term_refs();
 
@@ -1363,7 +1435,9 @@ pub fn collect_static_paths(
 ///
 /// Each registration is: method, path, handler (as `Module:Handler`).
 /// The handler must have arity 3 and accept `+Request`, `+StreamId`, `-Response`.
-pub fn collect_streams(context: &Context<impl QueryableContextType>) -> PrologResult<Vec<PluginStream>> {
+pub fn collect_streams(
+    context: &Context<impl QueryableContextType>,
+) -> PrologResult<Vec<PluginStream>> {
     let frame = context.open_frame();
     let [method_term, path_term, handler_term] = frame.new_term_refs();
 
@@ -1485,7 +1559,9 @@ pub fn build_static_router(static_paths: Vec<PluginStaticPath>) -> Router {
             let dir = dir.clone();
             let fallback = fallback.clone();
             let not_found = not_found.clone();
-            move || async move { serve_static_file(&dir, fallback.as_deref(), not_found.as_deref(), "/").await }
+            move || async move {
+                serve_static_file(&dir, fallback.as_deref(), not_found.as_deref(), "/").await
+            }
         };
 
         let sub_handler = {
@@ -1500,12 +1576,14 @@ pub fn build_static_router(static_paths: Vec<PluginStaticPath>) -> Router {
         let prefix_routes = Router::new()
             .route(&static_path.prefix, get(root_handler.clone()))
             .route(&format!("{}/", static_path.prefix), get(root_handler))
-            .route(&format!("{}/{{*path}}", static_path.prefix), get(sub_handler));
+            .route(
+                &format!("{}/{{*path}}", static_path.prefix),
+                get(sub_handler),
+            );
 
         if csp_nonce {
-            router = router.merge(
-                prefix_routes.layer(axum::middleware::from_fn(csp_nonce_middleware)),
-            );
+            router =
+                router.merge(prefix_routes.layer(axum::middleware::from_fn(csp_nonce_middleware)));
         } else {
             router = router.merge(prefix_routes);
         }
@@ -1640,7 +1718,12 @@ pub fn build_stream_router(streams: Vec<PluginStream>) -> Router {
 /// `dir` (after resolving symlinks). Missing files, unsafe paths, and symlink
 /// escapes result in a 404 response — served from `not_found` if configured,
 /// otherwise a default JSON 404.
-async fn serve_static_file(dir: &StdPath, fallback: Option<&StdPath>, not_found: Option<&StdPath>, uri_path: &str) -> Response<Body> {
+async fn serve_static_file(
+    dir: &StdPath,
+    fallback: Option<&StdPath>,
+    not_found: Option<&StdPath>,
+    uri_path: &str,
+) -> Response<Body> {
     let canonical_dir = match tokio::fs::canonicalize(dir).await {
         Ok(d) => d,
         Err(_) => return not_found_response(),
@@ -1677,7 +1760,11 @@ async fn serve_static_file(dir: &StdPath, fallback: Option<&StdPath>, not_found:
 /// When `allow_index` is true, a directory candidate is also accepted if it
 /// contains an `index.html` that stays within `dir`. Symlinks are resolved by
 /// `canonicalize`, so a symlink pointing outside `dir` is rejected.
-async fn canonical_file_within_dir(dir: &StdPath, candidate: &StdPath, allow_index: bool) -> Option<PathBuf> {
+async fn canonical_file_within_dir(
+    dir: &StdPath,
+    candidate: &StdPath,
+    allow_index: bool,
+) -> Option<PathBuf> {
     if let Ok(path) = tokio::fs::canonicalize(candidate).await {
         if path.starts_with(dir) {
             if let Ok(metadata) = tokio::fs::metadata(&path).await {
@@ -1789,7 +1876,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app_dir = dir.path().join("app");
         tokio::fs::create_dir(&app_dir).await.unwrap();
-        tokio::fs::write(app_dir.join("hello.txt"), "hello").await.unwrap();
+        tokio::fs::write(app_dir.join("hello.txt"), "hello")
+            .await
+            .unwrap();
 
         let router = build_static_router(vec![PluginStaticPath {
             prefix: "/app".to_string(),
@@ -1801,7 +1890,12 @@ mod tests {
         }]);
 
         let response = router
-            .oneshot(Request::builder().uri("/app/hello.txt").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/app/hello.txt")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -1835,7 +1929,12 @@ mod tests {
         }]);
 
         let response = router
-            .oneshot(Request::builder().uri("/app/link.txt").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/app/link.txt")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -1851,7 +1950,10 @@ mod tests {
         assert_eq!(params.get("path"), Some(&"a/b/c".to_string()));
 
         params = extract_route_params("/static/*path", "/static/app/admin/index.html");
-        assert_eq!(params.get("path"), Some(&"app/admin/index.html".to_string()));
+        assert_eq!(
+            params.get("path"),
+            Some(&"app/admin/index.html".to_string())
+        );
 
         params = extract_route_params("/api/info", "/api/info");
         assert!(params.is_empty());
@@ -1911,7 +2013,10 @@ mod tests {
         let buf = b"Status: 200\nContent-Type: application/octet-stream\n\n\x00\x01\x02";
         let (status, headers, body_start) = parse_cgi_headers(buf).unwrap();
         assert_eq!(status, 200);
-        assert_eq!(headers.get("content-type").unwrap(), "application/octet-stream");
+        assert_eq!(
+            headers.get("content-type").unwrap(),
+            "application/octet-stream"
+        );
         assert_eq!(&buf[body_start..], b"\x00\x01\x02");
     }
 
@@ -1970,7 +2075,10 @@ mod tests {
         let buf = b"Status: 200\nContent-Type: application/json\n\n\"\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\"";
         let (status, _headers, body_start) = parse_cgi_headers(buf).unwrap();
         assert_eq!(status, 200);
-        assert_eq!(&buf[body_start..], b"\"\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\"");
+        assert_eq!(
+            &buf[body_start..],
+            b"\"\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\""
+        );
     }
 
     #[test]
@@ -2001,10 +2109,7 @@ mod tests {
         drop(write);
 
         let stream = CgiPipeStream::new(read, Vec::new(), None);
-        let collected: Vec<u8> = stream
-            .map(|chunk| chunk.unwrap().to_vec())
-            .concat()
-            .await;
+        let collected: Vec<u8> = stream.map(|chunk| chunk.unwrap().to_vec()).concat().await;
         assert_eq!(collected, cgi_output);
     }
 
@@ -2017,15 +2122,13 @@ mod tests {
         );
 
         // Simulate CGI headers + binary body with raw byte values
-        let cgi_output: &[u8] = b"Status: 200\nContent-Type: application/octet-stream\n\n\x00\xff\x80\x42";
+        let cgi_output: &[u8] =
+            b"Status: 200\nContent-Type: application/octet-stream\n\n\x00\xff\x80\x42";
         write.write_all(cgi_output).unwrap();
         drop(write);
 
         let stream = CgiPipeStream::new(read, Vec::new(), None);
-        let collected: Vec<u8> = stream
-            .map(|chunk| chunk.unwrap().to_vec())
-            .concat()
-            .await;
+        let collected: Vec<u8> = stream.map(|chunk| chunk.unwrap().to_vec()).concat().await;
         assert_eq!(collected, cgi_output);
     }
 
@@ -2072,7 +2175,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app_dir = dir.path().join("app");
         tokio::fs::create_dir(&app_dir).await.unwrap();
-        tokio::fs::write(dir.path().join("secret.txt"), "secret").await.unwrap();
+        tokio::fs::write(dir.path().join("secret.txt"), "secret")
+            .await
+            .unwrap();
 
         let router = build_static_router(vec![PluginStaticPath {
             prefix: "/app".to_string(),
@@ -2206,10 +2311,9 @@ mod tests {
 
             // GraphQL channel may or may not receive the keepalive
             // (depends on forwarder scheduling). If it does, verify content.
-            if let Ok(received_gql) = tokio::time::timeout(
-                tokio::time::Duration::from_millis(200),
-                rx_gql.recv(),
-            ).await {
+            if let Ok(received_gql) =
+                tokio::time::timeout(tokio::time::Duration::from_millis(200), rx_gql.recv()).await
+            {
                 if let Some(data) = received_gql {
                     assert_eq!(data, keepalive);
                 }
@@ -2371,7 +2475,8 @@ async fn dispatch_request_via_pipe(
             }
             Err(e) => {
                 crate::log::log_error(format!("input pipe creation failed: {}", e));
-                let _ = write_cgi_error_to_pipe(output_worker_write_fd, "input pipe creation failed");
+                let _ =
+                    write_cgi_error_to_pipe(output_worker_write_fd, "input pipe creation failed");
                 return plugin_error_response("pipe creation failed").into_response();
             }
         }
@@ -2400,13 +2505,15 @@ async fn dispatch_request_via_pipe(
         output_worker_write_fd,
         binary,
         request_id: request_id.clone(),
+        indexer_worker: false,
     };
 
     let mut output_receiver = match Receiver::from_owned_fd(output_read) {
         Ok(rx) => rx,
         Err(e) => {
             crate::log::log_error(format!("failed to create pipe receiver: {}", e));
-            let _ = write_cgi_error_to_pipe(output_worker_write_fd, "failed to create pipe receiver");
+            let _ =
+                write_cgi_error_to_pipe(output_worker_write_fd, "failed to create pipe receiver");
             return plugin_error_response("pipe creation failed").into_response();
         }
     };
@@ -2487,7 +2594,10 @@ async fn dispatch_request_via_pipe(
     // Transfer the cancel guard into the stream so that if the client
     // disconnects during streaming, the Prolog worker is signalled to abort.
     let body_stream = CgiPipeStream::new(output_receiver, leftover, Some(cancel_guard));
-    builder.body(Body::from_stream(body_stream)).unwrap().into_response()
+    builder
+        .body(Body::from_stream(body_stream))
+        .unwrap()
+        .into_response()
 }
 
 /// Read CGI headers from the pipe receiver, returning the parsed status, header
@@ -2880,7 +2990,10 @@ async fn dispatch_stream_request(
         {
             let mut set = in_flight.lock().unwrap();
             if set.contains(&request_id) {
-                input_stream_registry().lock().unwrap().take(input_stream_id);
+                input_stream_registry()
+                    .lock()
+                    .unwrap()
+                    .take(input_stream_id);
                 stream_registry().lock().unwrap().remove(response_stream_id);
                 return plugin_error_response("duplicate request id");
             }
@@ -2891,7 +3004,11 @@ async fn dispatch_stream_request(
             in_flight,
         };
 
-        if queue.send(DispatchMessage::Stream(dispatch_req)).await.is_err() {
+        if queue
+            .send(DispatchMessage::Stream(dispatch_req))
+            .await
+            .is_err()
+        {
             stream_registry().lock().unwrap().remove(response_stream_id);
             return plugin_error_response("dispatch queue closed");
         }
@@ -2926,9 +3043,7 @@ async fn dispatch_stream_request(
         }
 
         tokio::task::spawn_blocking(move || {
-            let first = response_rx
-                .blocking_recv()
-                .ok_or(PrologError::Failure)?;
+            let first = response_rx.blocking_recv().ok_or(PrologError::Failure)?;
             let response: serde_json::Value =
                 serde_json::from_slice(&first).map_err(|_| PrologError::Failure)?;
             Ok((response, response_rx))
@@ -2967,7 +3082,9 @@ async fn dispatch_stream_request(
                 }
                 let stream = GuardedReceiverStream {
                     inner: ReceiverStream::new(response_rx),
-                    _guard: StreamGuard { id: response_stream_id },
+                    _guard: StreamGuard {
+                        id: response_stream_id,
+                    },
                 };
                 let mut builder = Response::builder().status(status);
                 for (key, value) in response_headers.iter() {
@@ -2984,7 +3101,8 @@ async fn dispatch_stream_request(
                     builder.body(Body::from(body_str.to_string()))
                 } else {
                     builder.body(Body::from(body_value.to_string()))
-                }.unwrap()
+                }
+                .unwrap()
             }
         }
         Err(_) => {
@@ -3015,7 +3133,10 @@ mod path_tests {
 
     #[test]
     fn normalize_decodes_percent_encoding() {
-        assert_eq!(normalize_dispatch_path("/api/db/admin%20name"), "/api/db/admin name");
+        assert_eq!(
+            normalize_dispatch_path("/api/db/admin%20name"),
+            "/api/db/admin name"
+        );
     }
 
     #[test]

@@ -38,6 +38,14 @@
 % mark-ready point covers both modes.
 plugins:readiness_component(store).
 
+% Database requests locate their target through the system database, so
+% `dbs` is marked ready only once the system database demonstrably
+% resolves and enumerates through the request path. Individual user
+% databases are verified lazily at first touch — open_descriptor marks
+% an unopenable one unservable and answers a retryable 503 until its
+% graphs load, so no single database can block or crash the boot.
+plugins:readiness_component(dbs).
+
 % configuration predicates
 :- use_module(config(terminus_config),[jwt_enabled/0,
                                        jwt_jwks_endpoint/1,
@@ -151,6 +159,17 @@ terminus_server(Argv,Wait) :-
         ->  http_delete_handler(id(busy_loading))
         ;   true
         ),
+        % Verify that the system database resolves through the request
+        % path before requests may dispatch. system_database_serve_ready/0
+        % always throws on failure, so the recovery runs iff the check did
+        % not pass: `dbs` is marked failed and await_all_components reports
+        % it like a `store` failure — a server that cannot enumerate
+        % databases can serve nothing, so the boot aborts rather than
+        % answer phantom 404/empty responses for committed data.
+        catch((   system_database_serve_ready,
+                  readiness:readiness_ready(dbs)),
+              Dbs_Error,
+              readiness:readiness_failed(dbs, Dbs_Error)),
         readiness:await_all_components(Failed),
         (   Failed = [failed(_Component, Init_Error)|_]
         ->  throw(Init_Error)

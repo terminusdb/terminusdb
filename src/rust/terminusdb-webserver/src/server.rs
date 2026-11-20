@@ -1,12 +1,12 @@
+use axum::extract::Request;
+use axum::middleware::Next;
 use axum::{
+    extract::DefaultBodyLimit,
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
-    extract::DefaultBodyLimit,
     Json, Router,
 };
-use axum::middleware::Next;
-use axum::extract::Request;
 use serde_json::json;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -56,10 +56,7 @@ async fn method_not_allowed_middleware(req: Request, next: Next) -> Response {
     let path = req.uri().path().to_string();
     let response = next.run(req).await;
     if response.status() == StatusCode::METHOD_NOT_ALLOWED {
-        let allow = response
-            .headers()
-            .get(axum::http::header::ALLOW)
-            .cloned();
+        let allow = response.headers().get(axum::http::header::ALLOW).cloned();
         let body = Json(json!({
             "@type": "api:MethodNotAllowedErrorResponse",
             "api:status": "api:method_not_allowed",
@@ -72,7 +69,9 @@ async fn method_not_allowed_middleware(req: Request, next: Next) -> Response {
         }));
         let mut new_response = (StatusCode::METHOD_NOT_ALLOWED, body).into_response();
         if let Some(allow) = allow {
-            new_response.headers_mut().insert(axum::http::header::ALLOW, allow);
+            new_response
+                .headers_mut()
+                .insert(axum::http::header::ALLOW, allow);
         }
         new_response
     } else {
@@ -162,11 +161,8 @@ pub fn start_with_routes(
         // default backlog (128 on macOS) is too small for high connection
         // counts — 30000 simultaneous connections overflow the accept
         // queue and drop ~50% of connections.
-        let socket = match socket2::Socket::new(
-            socket2::Domain::IPV4,
-            socket2::Type::STREAM,
-            None,
-        ) {
+        let socket = match socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)
+        {
             Ok(s) => s,
             Err(e) => {
                 tx.send(Err(format!(
@@ -202,11 +198,8 @@ pub fn start_with_routes(
         // On macOS with somaxconn=128, this still helps because the kernel
         // may use a higher internal queue.
         if let Err(e) = socket.listen(65535) {
-            tx.send(Err(format!(
-                "failed to listen on port {}: {}",
-                port, e
-            )))
-            .ok();
+            tx.send(Err(format!("failed to listen on port {}: {}", port, e)))
+                .ok();
             return;
         }
 
@@ -232,7 +225,8 @@ pub fn start_with_routes(
                 runtime
             }
             Err(e) => {
-                tx.send(Err(format!("failed to create tokio runtime: {}", e))).ok();
+                tx.send(Err(format!("failed to create tokio runtime: {}", e)))
+                    .ok();
                 return;
             }
         };
@@ -270,7 +264,8 @@ pub fn start_with_routes(
         });
     });
 
-    rx.recv().map_err(|e| format!("webserver startup channel closed: {}", e))?
+    rx.recv()
+        .map_err(|e| format!("webserver startup channel closed: {}", e))?
 }
 
 #[cfg(test)]
@@ -287,7 +282,12 @@ mod tests {
         let app = app();
         let response = app
             .clone()
-            .oneshot(Request::builder().uri("/api/v1/health").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -318,7 +318,12 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
         assert_eq!(
-            response.headers().get("location").unwrap().to_str().unwrap(),
+            response
+                .headers()
+                .get("location")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "/app/admin"
         );
     }
@@ -327,12 +332,19 @@ mod tests {
     async fn fallback_returns_api_not_found() {
         let app = app().fallback(fallback_not_found);
         let response = app
-            .oneshot(Request::builder().uri("/api/unknown").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/unknown")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["api:status"], "api:not_found");
         assert_eq!(json["api:path"], "/api/unknown");

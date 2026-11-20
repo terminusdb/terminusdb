@@ -35,6 +35,7 @@
               ensure_transaction_schema_written/1,
               db_creation_bypass/2,
               db_currently_creating/2,
+              db_failed/3,
 
               % validate.pl
               transaction_objects_to_validation_objects/2,

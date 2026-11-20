@@ -25,6 +25,7 @@ global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
 global_prefixes(owl,'http://www.w3.org/2002/07/owl#').
 global_prefixes(api,'http://terminusdb.com/schema/api#').
 global_prefixes(json,'http://terminusdb.com/schema/json#').
+global_prefixes(xbrl,'https://xbrl.org/2021').
 
 /*
  * TODO: Table? Use a dictionary for global_prefixes?

@@ -232,7 +232,11 @@ impl<'a> TerminusMutationRoot<'a> {
         } else {
             atom!("instance")
         };
-        let compress_atom = if compress_ids { atom!("true") } else { atom!("false") };
+        let compress_atom = if compress_ids {
+            atom!("true")
+        } else {
+            atom!("false")
+        };
         string_term.put(json)?;
         graph_type_term.put(&graph_type_atom)?;
         raw_json_term.put(&raw_json)?;
@@ -272,27 +276,42 @@ impl<'a> TerminusMutationRoot<'a> {
         compress_ids: bool,
     ) -> PrologResult<juniper::Value> {
         let frame = context.open_frame();
-        let [graph_type_term, ids_term, compress_term, result_ids_term] =
-            frame.new_term_refs();
+        let [graph_type_term, ids_term, compress_term, result_ids_term] = frame.new_term_refs();
 
         let graph_type_atom = if graph_type == "SchemaGraph" {
             atom!("schema")
         } else {
             atom!("instance")
         };
-        let compress_atom = if compress_ids { atom!("true") } else { atom!("false") };
+        let compress_atom = if compress_ids {
+            atom!("true")
+        } else {
+            atom!("false")
+        };
 
         ids_term.unify(ids)?;
         graph_type_term.put(&graph_type_atom)?;
         compress_term.put(&compress_atom)?;
 
         let delete_doc = pred!("api_document:api_delete_documents_by_ids_with_compress/5");
-        frame.call_once(delete_doc, [transaction_term, &graph_type_term, &ids_term, &compress_term, &result_ids_term])?;
+        frame.call_once(
+            delete_doc,
+            [
+                transaction_term,
+                &graph_type_term,
+                &ids_term,
+                &compress_term,
+                &result_ids_term,
+            ],
+        )?;
 
         let result_ids: Vec<String> = result_ids_term.get_ex()?;
         frame.close();
         Ok(juniper::Value::List(
-            result_ids.into_iter().map(|id| id.to_string().into()).collect(),
+            result_ids
+                .into_iter()
+                .map(|id| id.to_string().into())
+                .collect(),
         ))
     }
 
@@ -315,7 +334,11 @@ impl<'a> TerminusMutationRoot<'a> {
         } else {
             atom!("instance")
         };
-        let compress_atom = if compress_ids { atom!("true") } else { atom!("false") };
+        let compress_atom = if compress_ids {
+            atom!("true")
+        } else {
+            atom!("false")
+        };
 
         string_term.put(json)?;
         graph_type_term.put(&graph_type_atom)?;

@@ -30,6 +30,7 @@
               node_and_value_count/2,
               predicate_count/2,
               subject_id/3,
+              subject_with_prefix/3,
               predicate_id/3,
               object_id/3,
 
@@ -51,6 +52,9 @@
               triple_value_range_rev/6,
               id_triple_value_range_count/6,
               triple_value_range_count/6,
+
+              id_triple_interval_relation/6,
+              triple_interval_relation/6,
 
               id_triple_sp_value_next/5,
               id_triple_sp_value_previous/5,
@@ -472,6 +476,22 @@ subject_id(Layer, Subject, Id) :-
 
 
 /*
+ * subject_with_prefix(+Layer, +Prefix, -Subject) is nondet
+ *
+ * Enumerate subject names that start with Prefix. Node names are stored in
+ * a sorted front-coded dictionary per layer band, so a prefix is a
+ * contiguous dictionary range which the store seeks with id() and streams
+ * until the prefix no longer matches — the wavelet-mapped subject ids are
+ * not steppable, so seeking has to happen per band in Rust.
+ *
+ * A name present in several bands is yielded once (sorted, deduplicated).
+ */
+subject_with_prefix(Layer, Prefix, Subject) :-
+    atom_string(Prefix, Prefix_String),
+    subject_with_prefix(Layer, Prefix_String, _Id, Subject).
+
+
+/*
  * predicate_id(+Layer, +Predicate, -Id) is semidet
  *
  * Get the ID from a predicate
@@ -694,6 +714,49 @@ triple_value_range(Layer, Low, High, Subject, Predicate, Object) :-
 
 triple_value_range_rev(Layer, Low, High, Subject, Predicate, Object) :-
     id_triple_value_range_rev(Layer, Low, High, S_Id, P_Id, O_Id),
+
+    (   ground(Subject)
+    ->  true
+    ;   subject_id(Layer, Subject, S_Id)),
+
+    (   ground(Predicate)
+    ->  true
+    ;   predicate_id(Layer, Predicate, P_Id)),
+
+    (   ground(Object)
+    ->  true
+    ;   object_id(Layer, Object, O_Id)).
+
+/**
+ * triple_interval_relation(+Layer, +Rel, +Reference, ?Subject, ?Predicate, ?Object) is nondet.
+ *
+ * Triples whose object value can satisfy the Allen relation Rel against
+ * Reference. The object ids come from the interval indexes and are a
+ * superset of the true hits — callers verify each object semantically.
+ */
+triple_interval_relation(Layer, Rel, Reference, Subject, Predicate, Object) :-
+    (   nonvar(Subject)
+    ->  (   Subject = id(S_Id)
+        ->  true
+        ;   subject_id(Layer, Subject, S_Id)
+        )
+    ;   true),
+
+    (   nonvar(Predicate)
+    ->  (   Predicate = id(P_Id)
+        ->  true
+        ;   predicate_id(Layer, Predicate, P_Id)
+        )
+    ;   true),
+
+    (   nonvar(Object),
+        Object = id(O_Id)
+    ->  true
+    ;   ground(Object)
+    ->  object_id(Layer, Object, O_Id)
+    ;   true),
+
+    id_triple_interval_relation(Layer, Rel, Reference, S_Id, P_Id, O_Id),
 
     (   ground(Subject)
     ->  true
@@ -1078,6 +1141,46 @@ test(query_builder_for_committed, [cleanup(clean(TestDir)),setup(createng(TestDi
     nb_commit(Builder, _Layer),
 
     builder_committed(Builder).
+
+test(subject_with_prefix,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    forall(member(S, ["col/3","aaa/1","col/1","zzz/9","col/2","aab/1"]),
+           nb_add_triple(Builder, S, "Predicate", node("obj"))),
+    nb_add_triple(Builder, "col/4", "Predicate", value("x",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    findall(N, subject_with_prefix(Layer, "col/", N), Names),
+    Names == ["col/1","col/2","col/3","col/4"].
+
+test(subject_with_prefix_no_match,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "aaa/1", "Predicate", node("obj")),
+    nb_commit(Builder, Layer),
+    \+ subject_with_prefix(Layer, "nope/", _).
+
+test(subject_with_prefix_shorter_than_first,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "abc/1", "Predicate", node("obj")),
+    nb_add_triple(Builder, "abd/2", "Predicate", node("obj")),
+    nb_commit(Builder, Layer),
+    findall(N, subject_with_prefix(Layer, "ab", N), Names),
+    Names == ["abc/1","abd/2"].
+
+test(subject_with_prefix_across_layers,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "col/2", "Predicate", node("obj")),
+    nb_add_triple(Builder, "zzz/1", "Predicate", node("obj")),
+    nb_commit(Builder, Layer),
+    open_write(Layer, Builder2),
+    nb_add_triple(Builder2, "col/1", "Predicate", node("obj")),
+    nb_add_triple(Builder2, "aaa/1", "Predicate", node("obj")),
+    nb_commit(Builder2, Layer2),
+    findall(N, subject_with_prefix(Layer2, "col/", N), Names),
+    sort(Names, Sorted),
+    Sorted == ["col/1","col/2"].
 
 test(squash_a_tower,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     open_archive_store(TestDir, Store),

@@ -24,6 +24,7 @@
               api_full_replace_schema/2,
               idlists_duplicates_toplevel/3,
               nonground_captures/2,
+              compress_doc_ids/4,
 
               api_insert_documents_core_string/8,
               api_insert_documents_core_string_with_compress/9,
@@ -74,9 +75,13 @@
 :- use_module(core(document/json), [
                   insert_document_expanded/4,
                   insert_document_expanded/5,
+                  insert_document_expanded/6,
+                  insert_document_merge/9,
                   replace_document_expanded/5,
                   insert_backlinks/2,
-                  extract_return_ids/2
+                  extract_return_ids/2,
+                  compress_schema_uri/3,
+                  path_component/3
               ]).
 :- use_module(core(document/parallel_elaboration), [
                   elaborate_insert_request_db/4,
@@ -126,6 +131,7 @@
 
 document_input_format(json).
 document_output_format(json).
+document_output_format(ids).
 document_output_format(embedding).
 document_output_format(markdown).
 
@@ -227,6 +233,60 @@ api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document) :-
     api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
 
 
+/**
+ * api_generate_document_ids_by_id_prefix(+Graph_Type, +Transaction, ?Type,
+ *                                        +Id_Prefix, +Config, -Id) is nondet
+ *
+ * Yield the document ids whose expanded IRI starts with Id_Prefix. The
+ * succinct node dictionary keeps subject names in lexicographic order, so
+ * the matching ids live in a contiguous range that
+ * terminus_store:subject_with_prefix/3 seeks and streams directly instead
+ * of scanning every subject in the graph.
+ *
+ * Candidates are then filtered to actual documents — dictionary entries
+ * are append-only, so names of deleted documents and of nodes that only
+ * ever appear in object position are skipped here. Type restricts matches
+ * the same way as api_generate_document_ids_by_type/5.
+ */
+api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id) :-
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   Type_Ex = Type),
+    database_instance(Transaction, Instance),
+    member(G, Instance),
+    read_write_obj_reader(G, Layer),
+    (   Config.unfold = true
+    ->  Include_Subdocuments = false
+    ;   Include_Subdocuments = true),
+    skip_generate_nsols(
+        (   terminus_store:subject_with_prefix(Layer, Id_Prefix_Ex, Name),
+            id_prefix_candidate(Transaction, Instance, Include_Subdocuments, Type_Ex, Name)),
+        Config.skip,
+        Config.count),
+    Id = Name.
+api_generate_document_ids_by_id_prefix(schema, _Transaction, _Type, _Id_Prefix, _Config, _Id) :-
+    throw(error(id_prefix_is_only_supported_for_instance_graphs, _)).
+
+% id_prefix_candidate(+Transaction, +Instance, +Include_Subdocuments,
+%                     ?Type_Ex, +Name) is semidet
+%
+% Name is a candidate document id (expanded IRI) if it carries an rdf:type
+% edge satisfying the same conditions as get_document_uri/3, or the
+% requested Type with the same class subsumption as is_instance_class/3.
+id_prefix_candidate(Transaction, Instance, Include_Subdocuments, Type_Ex, Name) :-
+    (   ground(Type_Ex)
+    ->  once(   is_instance_class(Transaction, Name, Type_Ex)
+            ;   xrdf(Instance, Name, rdf:type, Type_Ex))
+    ;   global_prefix_expand(sys:'JSONDocument', JSON_Document_Class),
+        once((   xrdf(Instance, Name, rdf:type, Class),
+                (   Class == JSON_Document_Class
+                ;   is_simple_class(Transaction, Class),
+                    (   Include_Subdocuments = true
+                    ;   \+ is_subdocument(Transaction, Class)))))).
+
+
 api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id) :-
     skip_generate_nsols(
         match_expanded_query_document_uri(Transaction, Type, Query, Id),
@@ -235,14 +295,52 @@ api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, I
 api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config, _Id) :-
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
+
+% api_document_context(+Transaction, +Config, -Context) is det.
+% Builds the Rust document-printer context, forwarding the request's XSD
+% canonicalization version.
+api_document_context(Transaction, Config, Context) :-
+    api_document_context_(Transaction, Config.get(raw_id, false), Context).
+
+api_document_context_(Transaction, Include_Id, Context) :-
+    (   xsd_version('1.0')
+    ->  Xsd_10 = true
+    ;   Xsd_10 = false),
+    '$doc':get_document_context(Transaction, Include_Id, Xsd_10, Context).
+
+%% api_emit_instance_document(+Transaction, +Id, +Config, +Raw_Context,
+%%                            +Stream_Started) is det.
+%
+%  Single-document emit under identifiers=false. A sys:JSONDocument
+%  streams verbatim through the Rust printer (Raw_Context is built with
+%  include_id=false): its content @id/@type keys are data, not generated
+%  annotations, and must round-trip. Other documents materialize via
+%  api_get_document where the recursive annotation strip applies.
+api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started) :-
+    database_prefixes(Transaction, Prefixes),
+    prefix_expand(Id, Prefixes, Id_Ex),
+    database_instance(Transaction, Instance),
+    global_prefix_expand(sys:'JSONDocument', JSON_Document_Class),
+    (   xrdf(Instance, Id_Ex, rdf:type, JSON_Document_Class)
+    ->  Stream_Started = started(Started),
+        do_or_die('$doc':print_document_json(current_output, Raw_Context, Id_Ex, (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized), Started),
+                  error(document_not_found(Id), _)),
+        nb_setarg(1, Stream_Started, true)
+    ;   api_get_document(instance, Transaction, Id, Config, Document),
+        json_stream_write_dict(Config, Stream_Started, Document)).
+
 api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
-           (   Stream_Started = started(Started),
-               do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
-                         error(document_not_found(Id), _)),
-               nb_setarg(1, Stream_Started, true)
-           )).
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
+    ;   api_document_context(Transaction, Config, Context),
+        forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
+               (   Stream_Started = started(Started),
+                   do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
+                             error(document_not_found(Id), _)),
+                   nb_setarg(1, Stream_Started, true)
+               ))).
 
 api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document) :-
     api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Config, Id),
@@ -258,6 +356,34 @@ api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Documen
  * several matching classes is counted once per rdf:type edge, exactly
  * as the listing would yield it once per match.
  */
+% Local id-namespace segment of a class IRI — the text after the last '/'
+% or '#'. Document ids are minted as <Base><Local>/<key>.
+class_iri_local_name(IRI, Local) :-
+    atomic_list_concat(Slash_Parts, '/', IRI),
+    last(Slash_Parts, Last_Slash),
+    atomic_list_concat(Hash_Parts, '#', Last_Slash),
+    last(Hash_Parts, Local).
+
+api_count_documents(Transaction, instance, Type, Config, Count) :-
+    get_dict(id_prefix, Config, Id_Prefix),
+    ground(Id_Prefix),
+    !,
+    api_document_context(Transaction, Config, Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   true),
+    (   % A class mints document ids under its own <Local>/ namespace, so
+        % when the prefix is exactly the requested type's namespace every
+        % subject in the range already has that type — no probing needed.
+        ground(Type_Ex),
+        class_iri_local_name(Type_Ex, Type_Local),
+        atom_concat(Type_Local, '/', Type_NS_Rel),
+        prefix_expand(Type_NS_Rel, Prefixes, Type_NS),
+        Type_NS == Id_Prefix_Ex
+    ->  '$doc':count_subjects_by_prefix(Context, Id_Prefix_Ex, Count)
+    ;   '$doc':count_documents_by_prefix(Context, Id_Prefix_Ex, Type_Ex, (Config.unfold), Count)).
 api_count_documents(Transaction, instance, Type, Config, Count) :-
     database_instance(Transaction, Instance),
     (   ground(Type)
@@ -267,9 +393,12 @@ api_count_documents(Transaction, instance, Type, Config, Count) :-
         (   setof(Class,
                   (   is_simple_class(Transaction, Class),
                       class_subsumed(Transaction, Class, Type_Ex)),
-                  Classes)
+                  Classes0)
         ->  true
-        ;   Classes = []),
+        ;   Classes0 = []),
+        % Type itself counts its own rdf:type edges even when it is not a
+        % schema-declared simple class (e.g. sys:JSONDocument).
+        ord_union([Type_Ex], Classes0, Classes),
         aggregate_all(sum(Partial),
                       (   member(Class, Classes),
                           xrdf_count(Instance, _, rdf:type, Class, Partial)),
@@ -297,14 +426,12 @@ api_count_documents(Transaction, schema, Type, _Config, Count) :-
         % Mirrors get_schema_document_uri_by_type/3.
         xrdf_count(Schema, _, rdf:type, Type_Ex, Count)
     ;   % Mirrors get_schema_document_uri/2: '@context' plus every
-        % frame class and foreign type.
+        % frame class (which includes foreign types).
         aggregate_all(sum(Partial),
                       (   system_frame_class(C),
                           xrdf_count(Schema, _, rdf:type, C, Partial)),
                       Frame_Count),
-        global_prefix_expand(sys:'Foreign', Foreign),
-        xrdf_count(Schema, _, rdf:type, Foreign, Foreign_Count),
-        Count is 1 + Frame_Count + Foreign_Count
+        Count is 1 + Frame_Count
     ).
 
 api_document_exists(schema, Transaction, Id) :-
@@ -315,13 +442,16 @@ api_document_exists(instance, Transaction, Id) :-
 api_print_document(Graph_Type, Transaction, Id, Config) :-
     api_print_document(Graph_Type, Transaction, Id, Config, started(true)).
 api_print_document(instance, Transaction, Id, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    Stream_Started = started(Started),
-    database_prefixes(Transaction, Prefixes),
-    prefix_expand(Id, Prefixes, Id_Ex),
-    do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
-              error(document_not_found(Id), _)),
-   nb_setarg(1, Stream_Started, true).
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started)
+    ;   api_document_context(Transaction, Config, Context),
+        Stream_Started = started(Started),
+        database_prefixes(Transaction, Prefixes),
+        prefix_expand(Id, Prefixes, Id_Ex),
+        do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
+                  error(document_not_found(Id), _)),
+        nb_setarg(1, Stream_Started, true)).
 api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)),
@@ -330,44 +460,165 @@ api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
 api_print_documents(schema, Transaction, Config, Stream_Started) :-
     forall(api_get_documents(Transaction, schema, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents(instance, Transaction, Config, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    (   parallelize_enabled
-    ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+api_print_documents(instance, Transaction, Config, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_generate_document_ids(instance, Transaction, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
+    ;   api_document_context(Transaction, Config, Context),
+        (   parallelize_enabled
+        ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 
 api_print_documents_by_type(schema, Transaction, Config, Type, Stream_Started) :-
     forall(api_get_documents_by_type(Transaction, schema, Type, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    database_and_default_prefixes(Transaction,Prefixes),
-    % TODO errors on unknown prefix
-    prefix_expand_schema(Type, Prefixes, Type_Ex),
+api_print_documents_by_type(instance, Transaction, Config, Type, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_generate_document_ids_by_type(instance, Transaction, Type, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
+    ;   api_document_context(Transaction, Config, Context),
+        database_and_default_prefixes(Transaction,Prefixes),
+        % TODO errors on unknown prefix
+        prefix_expand_schema(Type, Prefixes, Type_Ex),
 
-    (   parallelize_enabled
-    ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+        (   parallelize_enabled
+        ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 
 api_print_documents_by_id(schema, Transaction, Config, Ids, Stream_Started) :-
     forall((member(Id, Ids),
             api_get_document(schema, Transaction, Id, Config, Document)),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+api_print_documents_by_id(instance, Transaction, Config, Ids, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(member(Id, Ids),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
+    ;   api_document_context(Transaction, Config, Context),
+        database_and_default_prefixes(Transaction, Prefixes),
+        maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
+                Ids,
+                Ids_Ex),
+        (   parallelize_enabled
+        ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
+
+% Documents selected by an id prefix, printed as full documents. The Rust
+% writer streams the sorted subject-dictionary range for the prefix and
+% materializes each document inline — no Prolog-side id list.
+api_print_documents_by_id_prefix(instance, Transaction, Config, Id_Prefix, Type, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
+    ;   api_document_context(Transaction, Config, Context),
+        database_and_default_prefixes(Transaction, Prefixes),
+        prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+        (   ground(Type)
+        ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+        ;   true),
+        (   parallelize_enabled
+        ->  '$doc':par_print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
+api_print_documents_by_id_prefix(schema, _Transaction, _Config, _Id_Prefix, _Type, _Stream_Started) :-
+    throw(error(id_prefix_is_only_supported_for_instance_graphs, _)).
+
+/**
+ * api_print_document_ids(+Graph_Type, +Transaction, ?Id, ?Ids, ?Type,
+ *                        ?Query, +Config, +Stream_Started) is det
+ *
+ * The format=ids output: stream the document ids selected by the usual
+ * selectors instead of the documents themselves. Ids are compressed when
+ * compress_ids is on, matching the shape accepted by the ids parameter.
+ */
+% Instance listings stream ids straight from the Rust document context:
+% a name prefix uses the sorted subject-dictionary range, a bare or typed
+% listing enumerates the allowed types' subjects — no per-id Prolog
+% round-trips. Query and explicit-id selectors stay on the Prolog path.
+api_print_document_ids(instance, Transaction, Id, Ids, Type, Query, Config, _Stream_Started) :-
+    \+ (nonvar(Query) ; ground(Id) ; ground(Ids)),
+    !,
+    api_document_context(Transaction, Config, Context),
     database_and_default_prefixes(Transaction, Prefixes),
-    maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
-            Ids,
-            Ids_Ex),
-    (   parallelize_enabled
-    ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+    (   get_dict(id_prefix, Config, Id_Prefix), ground(Id_Prefix)
+    ->  prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex)
+    ;   true),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   true),
+    '$doc':print_document_ids_json(current_output, Context, Id_Prefix_Ex, Type_Ex,
+                                  (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold)).
+api_print_document_ids(Graph_Type, Transaction, Id, Ids, Type, Query, Config, Stream_Started) :-
+    (   nonvar(Query)
+    ->  die_if(Graph_Type \= instance,
+               error(query_is_only_supported_for_instance_graphs, _)),
+        expand_query_document(Transaction, Type, Query, Query_Ex, Type_Ex),
+        Goal = api_generate_document_ids_by_query(Graph_Type, Transaction, Type_Ex, Query_Ex, Config, Doc_Id)
+    ;   ground(Id)
+    ->  Goal = (Doc_Id = Id)
+    ;   ground(Ids)
+    ->  Goal = member(Doc_Id, Ids)
+    ;   get_dict(id_prefix, Config, Id_Prefix),
+        ground(Id_Prefix)
+    ->  Goal = api_generate_document_ids_by_id_prefix(Graph_Type, Transaction, Type, Id_Prefix, Config, Doc_Id)
+    ;   ground(Type)
+    ->  Goal = api_generate_document_ids_by_type(Graph_Type, Transaction, Type, Config, Doc_Id)
+    ;   Goal = api_generate_document_ids(Graph_Type, Transaction, Config, Doc_Id)),
+    database_prefixes(Transaction, Prefixes),
+    forall(Goal,
+           (   compress_id_for_output(Config, Prefixes, Doc_Id, Out_Id),
+               json_stream_write(Config, Stream_Started, Out_Id))).
+
+compress_id_for_output(Config, Prefixes, Id, Out_Id) :-
+    (   Config.compress = true,
+        catch(compress_dict_uri(Id, Prefixes, Out_Id), _, fail)
+    ->  true
+    ;   Out_Id = Id).
+
+% strip_identifiers(+Config) is semidet.
+% True when the request asked for identifiers=false — document @id/@type
+% annotations are stripped from the response so a fetched document reads
+% back in its submitted lexical form.
+strip_identifiers(Config) :-
+    Config.get(identifiers, true) = false.
+
+% strip_id_type_annotations(+Document, -Stripped) is det.
+% Recursively removes document `@id`/`@type` annotations so the result reads
+% back in submitted lexical form. Typed literal wrappers (dicts carrying
+% `@value`) and `@id` link references are preserved — they are semantic
+% content, not generated annotations.
+strip_id_type_annotations(Value, Value) :-
+    \+ is_dict(Value), \+ is_list(Value), !.
+strip_id_type_annotations(List, Stripped) :-
+    is_list(List), !,
+    maplist(strip_id_type_annotations, List, Stripped).
+strip_id_type_annotations(Dict, Dict) :-
+    (   get_dict('@value', Dict, _)
+    ;   get_dict('@type', Dict, '@id')),
+    !.
+strip_id_type_annotations(Dict, Dict) :-
+    dict_pairs(Dict, _, Pairs),
+    forall(member(Key-_, Pairs), memberchk(Key, ['@id','@type'])),
+    !.
+strip_id_type_annotations(Dict, Stripped) :-
+    dict_pairs(Dict, Tag, Pairs),
+    findall(Key-Stripped_Value,
+            (   member(Key-Value, Pairs),
+                \+ memberchk(Key, ['@id','@type']),
+                strip_id_type_annotations(Value, Stripped_Value)),
+            Stripped_Pairs),
+    dict_pairs(Stripped, Tag, Stripped_Pairs).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
-    Raw_Id = Config.get(raw_id, true),
+    Raw_Id = Config.get(raw_id, false),
     Options = options{compress_ids: Config.compress, unfold: Config.unfold, keep_json_type: false, raw_id: Raw_Id},
-    do_or_die(get_document(Transaction, Id, Document, Options),
-              error(document_not_found(Id), _)).
+    do_or_die(get_document(Transaction, Id, Document0, Options),
+              error(document_not_found(Id), _)),
+    (   strip_identifiers(Config)
+    ->  strip_id_type_annotations(Document0, Document)
+    ;   Document = Document0).
 api_get_document(schema, Transaction, Id, _Config, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
@@ -397,6 +648,7 @@ known_document_error(type_not_found(_)).
 known_document_error(can_not_insert_existing_object_with_id(_)).
 known_document_error(unrecognized_property(_,_,_)).
 known_document_error(casting_error(_,_)).
+known_document_error(unbound_prefix(_,_,_)).
 known_document_error(submitted_id_does_not_match_generated_id(_,_)).
 known_document_error(submitted_document_id_does_not_have_expected_prefix(_,_)).
 known_document_error(document_key_type_unknown(_)).
@@ -449,17 +701,17 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, _Raw_JSON, _Overwrite, Transaction, Document, Captures, [Id], Captures, T-T) :-
+api_insert_document_(schema, _Raw_JSON, _Overwrite, _Merge, Transaction, Document, Captures, [Id], Captures, T-T) :-
     call_catch_document_mutation(
         Document,
         do_or_die(insert_schema_document(Transaction, Document),
                   error(document_insertion_failed_unexpectedly(Document), _))),
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, Raw_JSON, Overwrite, Transaction, Document, Captures_In, Id, Captures_Out, BLH-BLT) :-
+api_insert_document_(instance, Raw_JSON, Overwrite, Merge, Transaction, Document, Captures_In, Id, Captures_Out, BLH-BLT) :-
     call_catch_document_mutation(
         Document,
-        do_or_die(insert_document(Transaction, Document, Raw_JSON, Overwrite, Captures_In, Id, BLH-BLT, Captures_Out),
+        do_or_die(insert_document_merge(Transaction, Document, Raw_JSON, Overwrite, Merge, Captures_In, Id, BLH-BLT, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, [Id], Captures, T-T) :-
@@ -480,7 +732,7 @@ api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document,
             error(document_insertion_failed_unexpectedly(Document), _))
     ).
 
-insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
+insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, _Merge, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
@@ -501,10 +753,10 @@ insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, Stream, Transaction, I
     ),
     inject_document_id(Injected_Id, Lazy_List, Lazy_List_With_Id),
     api_insert_document_from_lazy_list_unsafe(Lazy_List_With_Id, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BackLinks-[], Ids).
-insert_documents_(false, Graph_Type, Raw_JSON, Overwrite, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
+insert_documents_(false, Graph_Type, Raw_JSON, Overwrite, Merge, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
     stream_to_lazy_docs(Stream, Lazy_List),
     inject_document_id(Injected_Id, Lazy_List, Lazy_List_With_Id),
-    api_insert_document_from_lazy_list(Lazy_List_With_Id, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
+    api_insert_document_from_lazy_list(Lazy_List_With_Id, Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
 
 /* A request-level document id is addressed exactly like a body @id. The
  * body must hold a single document; a matching @id is fine and a differing
@@ -550,13 +802,17 @@ api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, T-
 
 % /8 wrapper - backward compatibility (default overwrite=false)
 api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
-    api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, false, Transaction, Captures_In, Captures_Out, BackLinks, Ids).
+    api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, false, false, Transaction, Captures_In, Captures_Out, BackLinks, Ids).
 
-api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
+% /9 wrapper - backward compatibility (default merge_repeats=false)
+api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+    api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Overwrite, false, Transaction, Captures_In, Captures_Out, BackLinks, Ids).
+
+api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
     !,
-    api_insert_document_(Graph_Type, Raw_JSON, Overwrite, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
-    api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
-api_insert_document_from_lazy_list([], _, _, _, _, Captures, Captures, T-T, []).
+    api_insert_document_(Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
+    api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
+api_insert_document_from_lazy_list([], _, _, _, _, _, Captures, Captures, T-T, []).
 
 api_replace_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Create,
                                     Captures_In, Captures_Out, [Ids|New_Ids]) :-
@@ -634,6 +890,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     ;   resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
         before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
         stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
         with_transaction(Context,
                          (   set_stream_position(Stream, Pos),
                              branch_key_from_transaction(Transaction, BranchKey),
@@ -678,7 +935,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                              )
                          ),
                          Meta_Data,
-                         Options),
+                         Guarded_Options),
         meta_data_version(Transaction, Meta_Data, New_Data_Version),
         Transaction_Meta_Data = Meta_Data
     ).
@@ -799,14 +1056,14 @@ elaborate_stream_producer(DB, LazyDocs, Queue) :-
         thread_send_message(Queue, error)
     ).
 
-consume_elaborated_queue(Queue, Transaction, Overwrite, CommitId, Ids, Captures_Out) :-
+consume_elaborated_queue(Queue, Transaction, Overwrite, Merge, CommitId, Ids, Captures_Out) :-
     (   has_commit_window_guard
     ->  WaitForGuard = true
     ;   WaitForGuard = false
     ),
-    consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard, Ids, Captures_Out).
+    consume_elaborated_queue_(Queue, Transaction, Overwrite, Merge, CommitId, WaitForGuard, Ids, Captures_Out).
 
-consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard, Ids, Captures_Out) :-
+consume_elaborated_queue_(Queue, Transaction, Overwrite, Merge, CommitId, WaitForGuard, Ids, Captures_Out) :-
     (   WaitForGuard = true,
         \+ first_commit_candidate(Transaction, CommitId)
     ->  release_commit_window_guard
@@ -830,14 +1087,14 @@ consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard,
     ;   Message = error(Error)
     ->  throw(Error)
     ;   Message = docs(Pairs)
-    ->  pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Ids_Mid, Captures_Mid),
-        consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard, Ids_Tail, Captures_Tail),
+    ->  pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Merge, Ids_Mid, Captures_Mid),
+        consume_elaborated_queue_(Queue, Transaction, Overwrite, Merge, CommitId, WaitForGuard, Ids_Tail, Captures_Tail),
         append(Ids_Mid, Ids_Tail, Ids),
         merge_captures(Captures_Mid, Captures_Tail, Captures_Out)
     ).
 
-pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Ids, Captures_Out) :-
-    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Ids, Captures_Out).
+pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Merge, Ids, Captures_Out) :-
+    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Merge, Ids, Captures_Out).
 
 verify_contract(Transaction, Contract) :-
     is_dict(Contract, verification_contract),
@@ -904,25 +1161,25 @@ verify_contracts(_Transaction, [], ok) :- !.
 verify_contracts(Transaction, Contracts, Result) :-
     '$doc':verify_contracts(Transaction, Contracts, Result).
 
-pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Ids, Captures_Out) :-
+pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Merge, Ids, Captures_Out) :-
     enrich_pairs_for_operation(Pairs, insert, EnrichedPairs),
     pairs_values(EnrichedPairs, Contracts),
     verify_contracts(Transaction, Contracts),
-    pairs_to_insert_ids_and_captures__(EnrichedPairs, Transaction, Overwrite, Ids, Captures_Out).
+    pairs_to_insert_ids_and_captures__(EnrichedPairs, Transaction, Overwrite, Merge, Ids, Captures_Out).
 
-pairs_to_insert_ids_and_captures__([], _, _, [], empty_assoc).
-pairs_to_insert_ids_and_captures__([Doc-Contract], Transaction, Overwrite, [Ids], Captures_Out) :-
-    insert_document_expanded(Transaction, Doc, Contract, Overwrite, _),
+pairs_to_insert_ids_and_captures__([], _, _, _, [], empty_assoc).
+pairs_to_insert_ids_and_captures__([Doc-Contract], Transaction, Overwrite, Merge, [Ids], Captures_Out) :-
+    insert_document_expanded(Transaction, Doc, Contract, Overwrite, Merge, _),
     get_dict(id_pairs, Contract, Id_Pairs),
     extract_return_ids(Id_Pairs, Ids),
     get_dict(captures_out, Contract, Captures_Out).
-pairs_to_insert_ids_and_captures__([Doc-Contract|Rest], Transaction, Overwrite, [Ids|Ids_Rest], Captures_Out) :-
+pairs_to_insert_ids_and_captures__([Doc-Contract|Rest], Transaction, Overwrite, Merge, [Ids|Ids_Rest], Captures_Out) :-
     Rest \= [],
-    insert_document_expanded(Transaction, Doc, Contract, Overwrite, _),
+    insert_document_expanded(Transaction, Doc, Contract, Overwrite, Merge, _),
     get_dict(id_pairs, Contract, Id_Pairs),
     extract_return_ids(Id_Pairs, Ids),
     get_dict(captures_out, Contract, Captures_First),
-    pairs_to_insert_ids_and_captures__(Rest, Transaction, Overwrite, Ids_Rest, Captures_Rest),
+    pairs_to_insert_ids_and_captures__(Rest, Transaction, Overwrite, Merge, Ids_Rest, Captures_Rest),
     merge_captures(Captures_First, Captures_Rest, Captures_Out).
 
 merge_captures(Captures1, Captures2, Merged) :-
@@ -1001,7 +1258,7 @@ pairs_to_replace_ids_and_captures__([Doc-Contract|Rest], Transaction, Create, [[
 
 api_insert_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, CommitId, _Injected_Id, Ids) :-
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    consume_elaborated_queue(Queue, Transaction, Overwrite, CommitId, Ids_List, Captures_Out),
+    consume_elaborated_queue(Queue, Transaction, Overwrite, Doc_Merge, CommitId, Ids_List, Captures_Out),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
@@ -1017,7 +1274,7 @@ api_insert_documents_core(Transaction, pairs([]), Graph_Type, _Raw_JSON, _Full_R
 api_insert_documents_core(Transaction, pairs(Pairs), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, _CommitId, _Injected_Id, Ids) :-
     !,
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Ids_List, Captures_Out),
+    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Doc_Merge, Ids_List, Captures_Out),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
@@ -1030,7 +1287,7 @@ api_insert_documents_core(Transaction, pairs(Pairs), Graph_Type, _Raw_JSON, _Ful
 api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, _CommitId, Injected_Id, Ids) :-
     empty_assoc(Captures_In),
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Overwrite, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids_List),
+    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Overwrite, Doc_Merge, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids_List),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     database_instance(Transaction, [Instance]),
@@ -1115,6 +1372,7 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     stream_property(Stream, position(Pos)),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          % First pass: collect all IDs to delete
@@ -1127,7 +1385,7 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                          api_delete_documents_bulk_(Graph_Type, Transaction, Ids_To_Delete)
                      ),
                      Meta_Data,
-                     Options),
+                     Guarded_Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     Transaction_Meta_Data = Meta_Data.
 
@@ -1152,10 +1410,11 @@ api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_V
 
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      api_delete_document_(Graph_Type, Transaction, ID),
                      Meta_Data,
-                     Options),
+                     Guarded_Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     Transaction_Meta_Data = Meta_Data.
 
@@ -1172,10 +1431,11 @@ api_delete_documents_by_type(SystemDB, Auth, Path, Type, Requested_Data_Version,
 
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      api_delete_documents_by_type_for_graph(Graph_Type, Transaction, Type),
                      Meta_Data,
-                     Options),
+                     Guarded_Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     Transaction_Meta_Data = Meta_Data.
 
@@ -1219,11 +1479,13 @@ api_check_documents(SystemDB, Auth, Path, Graph_Type, Author, Message,
         post_transaction_tabling).
 
 check_run(Context, Transaction, Body, Touched_Types, Options, Result) :-
+    database_prefixes(Transaction, Prefixes),
     catch(
         (   call(Body, Transaction, Extra)
-        ->  do_or_die(check_validation_witnesses(Context, Options, Witnesses),
+        ->  do_or_die(check_validation_witnesses(Context, Options, Witnesses0),
                       error(check_validation_failed(Context), _)),
             check_embedding_report(Transaction, Touched_Types, Embedding),
+            maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
             (   Witnesses = []
             ->  Result = _{'@type':'api:CheckResponse',
                            'api:valid':true,
@@ -1241,29 +1503,67 @@ check_run(Context, Transaction, Body, Touched_Types, Options, Result) :-
                        'api:error':_{'api:message':'check body failed'},
                        'api:embedding':Embedding}),
         Error,
-        check_error_result(Error, Result)).
+        check_error_result(Prefixes, Error, Result)).
+
+%% compress_witness_json(+Prefixes, +Value, -Compressed) is det.
+%
+%  Witness documents carry fully expanded IRIs (terminusdb:///schema#X)
+%  in values and in dict keys. Fold them back through the database
+%  prefixes so api:witnesses reads like the schema itself.
+compress_witness_json(Prefixes, Value, Compressed) :-
+    (   is_dict(Value)
+    ->  dict_pairs(Value, Tag, Pairs),
+        maplist(compress_witness_pair(Prefixes), Pairs, Compressed_Pairs),
+        dict_pairs(Compressed, Tag, Compressed_Pairs)
+    ;   is_list(Value)
+    ->  maplist(compress_witness_json(Prefixes), Value, Compressed)
+    ;   (atom(Value) ; string(Value)),
+        atom_string(Value_Atom, Value),
+        fold_witness_uri(Prefixes, Value_Atom, Folded)
+    ->  Compressed = Folded
+    ;   Compressed = Value).
+
+% Schema vocabulary folds to bare local names (matching compress_ids);
+% anything else folds through the ordinary context prefixes (@base
+% relative, xsd:, sys:, user prefixes) or stays unchanged.
+fold_witness_uri(Prefixes, URI, Folded) :-
+    compress_schema_uri(URI, Prefixes, Schema_Folded),
+    (   Schema_Folded \= URI
+    ->  Folded = Schema_Folded
+    ;   compress_dict_uri(URI, Prefixes, Folded)).
+
+compress_witness_pair(Prefixes, Key-Value, Compressed_Key-Compressed_Value) :-
+    (   (atom(Key) ; string(Key)),
+        atom_string(Key_Atom, Key),
+        fold_witness_uri(Prefixes, Key_Atom, Folded_Key)
+    ->  Compressed_Key = Folded_Key
+    ;   Compressed_Key = Key),
+    compress_witness_json(Prefixes, Value, Compressed_Value).
 
 % On invalid checks the embedding block is still present so callers can
 % read api:embedding.'api:will_embed' unconditionally — nothing embeds
 % when the write itself cannot commit.
 check_no_embedding(_{'api:will_embed':false,
+                     'api:relevant':false,
                      'api:reason':'the write is invalid — fix the witnesses or error first'}).
 
-check_error_result(error(schema_check_failure(Witnesses), _), Result) :-
+check_error_result(Prefixes, error(schema_check_failure(Witnesses0), _), Result) :-
     !,
+    maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
     Result = _{'@type':'api:CheckResponse',
                'api:valid':false,
                'api:witnesses':Witnesses,
                'api:embedding':Embedding},
     check_no_embedding(Embedding).
-check_error_result(schema_check_failure(Witnesses), Result) :-
+check_error_result(Prefixes, schema_check_failure(Witnesses0), Result) :-
     !,
+    maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
     Result = _{'@type':'api:CheckResponse',
                'api:valid':false,
                'api:witnesses':Witnesses,
                'api:embedding':Embedding},
     check_no_embedding(Embedding).
-check_error_result(error(Formal, _), Result) :-
+check_error_result(_Prefixes, error(Formal, _), Result) :-
     !,
     format(string(Msg), "~w", [Formal]),
     Result = _{'@type':'api:CheckResponse',
@@ -1272,7 +1572,7 @@ check_error_result(error(Formal, _), Result) :-
                'api:error':_{'api:message':Msg},
                'api:embedding':Embedding},
     check_no_embedding(Embedding).
-check_error_result(Formal, Result) :-
+check_error_result(_Prefixes, Formal, Result) :-
     format(string(Msg), "~w", [Formal]),
     Result = _{'@type':'api:CheckResponse',
                'api:valid':false,
@@ -1301,43 +1601,85 @@ check_validation_witnesses(Context, Options, Witnesses) :-
 %% check_embedding_report(+Transaction, +Touched_Types, -Report) is det.
 %
 %  Reports whether the touched classes would be embedded by the indexer
-%  after such a commit: the indexer backend must be configured and every
-%  touched class must carry @metadata.embedding in the (post-write)
-%  schema.
+%  after such a commit. Relevance is a property of the classes, not the
+%  engine: the report fires whenever a touched class carries
+%  @metadata.embedding (a query and/or a template), whether or not an
+%  indexer backend is configured. will_embed additionally requires a
+%  configured backend and an embedding query on every touched class —
+%  a template without a query does not embed.
 check_embedding_report(_Transaction, [], _{
         'api:will_embed':false,
+        'api:relevant':false,
         'api:reason':'no documents touched'}) :-
     !.
 check_embedding_report(Transaction, Touched_Types, Report) :-
-    (   catch(indexer_backend(Backend), _, fail),
+    database_schema(Transaction, Schema),
+    database_prefixes(Transaction, Prefixes),
+    convlist(class_embedding_mark(Transaction, Schema, Prefixes),
+             Touched_Types, Marks),
+    pairs_keys(Marks, Marked_Unsorted),
+    sort(Marked_Unsorted, Marked),
+    sort(Touched_Types, Touched_Sorted),
+    (   Marked = []
+    ->  Report = _{'api:will_embed':false,
+                   'api:relevant':false,
+                   'api:reason':'no touched class carries @metadata.embedding'}
+    ;   catch(indexer_backend(Backend), _, fail),
         Backend \= none
-    ->  database_schema(Transaction, Schema),
-        database_prefixes(Transaction, Prefixes),
-        convlist(class_with_embedding_metadata(Transaction, Schema,
-                                               Prefixes), Touched_Types,
-                 Covered),
-        sort(Covered, Covered_Sorted),
-        sort(Touched_Types, Touched_Sorted),
-        (   Covered_Sorted == Touched_Sorted
+    ->  include([_-Mark]>>(Mark = embeddable), Marks, Embeddable_Pairs),
+        pairs_keys(Embeddable_Pairs, Embeddable_Unsorted),
+        sort(Embeddable_Unsorted, Embeddable),
+        subtract(Touched_Sorted, Embeddable, Not_Embedded),
+        (   Not_Embedded = []
         ->  Report = _{'api:will_embed':true,
+                       'api:relevant':true,
                        'api:reason':'all touched classes have embedding metadata'}
-        ;   subtract(Touched_Sorted, Covered_Sorted, Missing),
-            atomic_list_concat(Missing, ', ', Missing_Text),
-            format(string(Reason),
-                   'classes without embedding metadata: ~s — their documents will NOT be embedded; add @metadata.embedding to the class or pass indexing:{query} on the write', [Missing_Text]),
+        ;   subtract(Touched_Sorted, Marked, Unmarked),
+            subtract(Marked, Embeddable, Template_Only),
+            embedding_reason_parts(Unmarked, Template_Only, Parts),
+            atomic_list_concat(Parts, ' ', Reason),
             Report = _{'api:will_embed':false,
+                       'api:relevant':true,
                        'api:reason':Reason})
-    ;   Report = _{'api:will_embed':false,
-                   'api:reason':'indexer backend is none or not configured — no documents are embedded; enable it with TERMINUSDB_INDEXER_BACKEND (and a running Ollama with the embedding model)'}).
+    ;   atomic_list_concat(Marked, ', ', Marked_Text),
+        format(string(Reason),
+               'indexer backend is none or not configured — classes with embedding metadata (~s) will NOT be embedded; enable it with TERMINUSDB_INDEXER_BACKEND (and a running Ollama with the embedding model)', [Marked_Text]),
+        Report = _{'api:will_embed':false,
+                   'api:relevant':true,
+                   'api:reason':Reason}).
 
-class_with_embedding_metadata(Transaction, Schema, Prefixes, Type, Type) :-
+%% embedding_reason_parts(+Unmarked, +Template_Only, -Parts) is det.
+embedding_reason_parts(Unmarked, Template_Only, Parts) :-
+    (   Unmarked = []
+    ->  Unmarked_Parts = []
+    ;   atomic_list_concat(Unmarked, ', ', Unmarked_Text),
+        format(string(Unmarked_Reason),
+               'classes without embedding metadata: ~s — their documents will NOT be embedded; add @metadata.embedding to the class or pass indexing:{query} on the write', [Unmarked_Text]),
+        Unmarked_Parts = [Unmarked_Reason]),
+    (   Template_Only = []
+    ->  Parts = Unmarked_Parts
+    ;   atomic_list_concat(Template_Only, ', ', Template_Text),
+        format(string(Template_Reason),
+               'classes with an embedding template but no query: ~s — they will NOT be embedded; add an embedding query', [Template_Text]),
+        append(Unmarked_Parts, [Template_Reason], Parts)).
+
+%% class_embedding_mark(+Transaction, +Schema, +Prefixes, +Type, -Type-Mark)
+%
+%  Mark = embeddable when the class has an embedding query (what the
+%  indexer actually consumes), template_only when it carries an
+%  embedding template without a query.
+class_embedding_mark(Transaction, Schema, Prefixes, Type, Type-Mark) :-
     atom_string(Type_Atom, Type),
     prefix_expand(Type_Atom, Prefixes, Expanded),
     normalize_document_type(Transaction, Expanded, Normalized),
     xrdf(Schema, Normalized, sys:metadata, _),
     schema_metadata_descriptor(Schema, Normalized, metadata(Metadata)),
     get_dict(embedding, Metadata, Embedding),
-    get_dict(query, Embedding, _).
+    (   get_dict(query, Embedding, _)
+    ->  Mark = embeddable
+    ;   get_dict(template, Embedding, _),
+        Mark = template_only
+    ).
 
 %% api_check_insert_body(+Stream, +Graph_Type, +Options, -Body) is det.
 %
@@ -1429,10 +1771,11 @@ api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Versio
     option_or_die(message(Message),Options),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      api_nuke_documents_(Graph_Type, Transaction),
                      Meta_Data,
-                     Options),
+                     Guarded_Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     Transaction_Meta_Data = Meta_Data.
 
@@ -1489,6 +1832,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     ;   resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
         before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
         stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
         with_transaction(Context,
                          (   set_stream_position(Stream, Pos),
                              branch_key_from_transaction(Transaction, BranchKey),
@@ -1512,7 +1856,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                              )
                          ),
                          Meta_Data,
-                         Options),
+                         Guarded_Options),
         meta_data_version(Transaction, Meta_Data, New_Data_Version),
         Transaction_Meta_Data = Meta_Data
     ).
@@ -1604,7 +1948,12 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
         producer_timeout(ProducerTimeout),
         setup_call_cleanup(
             true,
-            (   Package = commit_package{
+            (   (   Requested_Data_Version = no_data_version
+                ->  Package_Options = options{overwrite: Overwrite, merge_repeats: Doc_Merge}
+                ;   Package_Options = options{overwrite: Overwrite, merge_repeats: Doc_Merge,
+                                              data_version_guard: Descriptor-Requested_Data_Version}
+                ),
+                Package = commit_package{
                     branch_key: BranchKey,
                     all_branches: [BranchKey],
                     transaction_objects: TransactionObjects,
@@ -1616,7 +1965,7 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
                                            raw_docs: Docs
                                        }],
                     commit_info: Context.commit_info,
-                    options: options{overwrite: Overwrite, merge_repeats: Doc_Merge},
+                    options: Package_Options,
                     graph_type: Graph_Type,
                     reply_queue: ReplyQueue,
                     request_id: RequestId
@@ -1639,6 +1988,7 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
         % branch commit, so the commit queue cannot serialize them. Fall back
         % to the synchronous path inside the already-open transaction.
         stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
         with_transaction(Context,
                          (   set_stream_position(Stream, Pos),
                              (   InputFormat = json
@@ -1650,7 +2000,7 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
                              compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
                          ),
                          Meta_Data,
-                         Options),
+                         Guarded_Options),
         meta_data_version(Transaction, Meta_Data, New_Data_Version),
         Transaction_Meta_Data = Meta_Data
     ).
@@ -1684,7 +2034,12 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
         producer_timeout(ProducerTimeout),
         setup_call_cleanup(
             true,
-            (   Package = commit_package{
+            (   (   Requested_Data_Version = no_data_version
+                ->  Package_Options = options{create: Create, merge_repeats: Doc_Merge}
+                ;   Package_Options = options{create: Create, merge_repeats: Doc_Merge,
+                                              data_version_guard: Descriptor-Requested_Data_Version}
+                ),
+                Package = commit_package{
                     branch_key: BranchKey,
                     all_branches: [BranchKey],
                     transaction_objects: TransactionObjects,
@@ -1696,7 +2051,7 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
                                            raw_docs: Docs
                                        }],
                     commit_info: Context.commit_info,
-                    options: options{create: Create, merge_repeats: Doc_Merge},
+                    options: Package_Options,
                     graph_type: Graph_Type,
                     reply_queue: ReplyQueue,
                     request_id: RequestId
@@ -1718,6 +2073,7 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
     ;   % Non-branch descriptors have no advancing branch commit; fall back to
         % the synchronous path.
         stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
         with_transaction(Context,
                          (   set_stream_position(Stream, Pos),
                              (   InputFormat = json
@@ -1729,7 +2085,7 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
                              compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
                          ),
                          Meta_Data,
-                         Options),
+                         Guarded_Options),
         meta_data_version(Transaction, Meta_Data, New_Data_Version),
         Transaction_Meta_Data = Meta_Data
     ).
@@ -1814,16 +2170,24 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
     database_prefixes(Transaction, InternalPrefixes),
     put_dict(schema_context, Config, SchemaContext, Config1),
     put_dict(internal_prefixes, Config1, InternalPrefixes, Config2),
-    put_dict(transaction, Config2, Transaction, ConfigWithCtx),
+    put_dict(transaction, Config2, Transaction, Config3),
+    % CGI headers are emitted lazily — at first body write or stream end —
+    % via this mutable flag cell shared with the stream write handlers,
+    % so lookup and conversion failures surface as real HTTP statuses
+    % instead of an embedded "Status:" block in a committed 200 body.
+    put_dict(stream_headers, Config3, headers(unsent), Config4),
+    put_dict(data_version, Config4, DataVersion, ConfigWithCtx),
 
-    Request = ConfigWithCtx.request,
     document_stream_start(Format, ConfigWithCtx, StreamState),
-
-    document_stream_headers(Format, Request, DataVersion),
 
     % Body preamble (e.g. turtle @prefix block, rdfxml prolog) must be
     % emitted after the CGI headers — writing it in document_stream_start
-    % would corrupt the response framing.
+    % would corrupt the response framing. Formats that define a preamble
+    % emit headers before it since a preamble is itself body output.
+    (   clause(document_stream_preamble(Format, _, _), true)
+    ->  ensure_document_stream_headers(Format, ConfigWithCtx)
+    ;   true
+    ),
     ignore(document_stream_preamble(Format, ConfigWithCtx, StreamState)),
 
     (   nonvar(Query)
@@ -1841,6 +2205,12 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
                 api_get_document(Graph_Type, Transaction, OneId, ConfigWithCtx, Document)
             ),
             document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ;   get_dict(id_prefix, ConfigWithCtx, Id_Prefix),
+        ground(Id_Prefix)
+    ->  forall(
+            (   api_generate_document_ids_by_id_prefix(Graph_Type, Transaction, Type, Id_Prefix, ConfigWithCtx, Doc_Id),
+                api_get_document(Graph_Type, Transaction, Doc_Id, ConfigWithCtx, Document)),
+            document_stream_write(Format, ConfigWithCtx, StreamState, Document))
     ;   ground(Type)
     ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, ConfigWithCtx, Document),
                document_stream_write(Format, ConfigWithCtx, StreamState, Document))
@@ -1848,7 +2218,27 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
                document_stream_write(Format, ConfigWithCtx, StreamState, Document))
     ),
 
+    % Empty streams still get their CGI headers.
+    ensure_document_stream_headers(Format, ConfigWithCtx),
     document_stream_end(Format, ConfigWithCtx).
+
+%% ensure_document_stream_headers(+Format, +Config) is det.
+%
+%  Emits the CGI headers the first time a stream handler produces body
+%  output. The headers flag is a mutable term carried in Config so all
+%  handlers of one request share it. Configs without the flag (e.g. the
+%  MCP document renderer capturing text via with_output_to/2) get no
+%  headers — they are not HTTP responses.
+ensure_document_stream_headers(Format, Config) :-
+    (   get_dict(stream_headers, Config, Headers)
+    ->  (   arg(1, Headers, sent)
+        ->  true
+        ;   nb_setarg(1, Headers, sent),
+            document_stream_headers(Format, Config.request,
+                                    Config.data_version)
+        )
+    ;   true
+    ).
 
 % Embedding helpers
 embedding_type_queries_from_transaction(Transaction, TypeQueries) :-
@@ -1945,7 +2335,7 @@ document_stream_start(embedding, Config, StreamState) :-
     ),
     StreamState = state(System_DB, Transaction, EmbeddingContext, GraphSpec, TypeQueryMap).
 
-document_stream_write(embedding, _Config, StreamState, Document) :-
+document_stream_write(embedding, Config, StreamState, Document) :-
     StreamState = state(System_DB, Transaction, EmbeddingContext, GraphSpec, TypeQueryMap),
     database_prefixes(Transaction, Prefixes),
     (   get_dict('@type', Document, Type)
@@ -1968,6 +2358,7 @@ document_stream_write(embedding, _Config, StreamState, Document) :-
     ->  true
     ;   EmbeddingString = ''
     ),
+    ensure_document_stream_headers(embedding, Config),
     format("~w~n", [EmbeddingString]).
 
 document_stream_end(embedding, _Config).
@@ -1985,9 +2376,10 @@ document_stream_headers(markdown, Request, DataVersion) :-
 document_stream_start(markdown, _Config, StreamState) :-
     StreamState = state.
 
-document_stream_write(markdown, _Config, state, Document) :-
+document_stream_write(markdown, Config, state, Document) :-
     strip_metadata_fields(Document, Cleaned),
     json2markdown:json_to_markdown(Cleaned, Markdown),
+    ensure_document_stream_headers(markdown, Config),
     format("~w~n", [Markdown]).
 
 document_stream_end(markdown, _Config).
@@ -2053,10 +2445,14 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
                             Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
                 Transaction),
+    % Embedding type detection and the write path both consume the
+    % document's @id, so fetch raw documents with it regardless of the
+    % request's raw_id default.
+    put_dict(_{system_db: System_DB, raw_id: true}, Config, ConfigWithSystem),
     embedding_type_queries_from_transaction(Transaction, TypeQueries),
     (   TypeQueries = []
     ->  (   ground(Id),
-            api_get_document(Graph_Type, Transaction, Id, Config, Document),
+            api_get_document(Graph_Type, Transaction, Id, ConfigWithSystem, Document),
             (   plugins:embedding_for_type(_, _, Document, _)
             ;   plugins:embedding_for_type(_, Document, _)
             )
@@ -2068,7 +2464,6 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
     embedding_document_types(Transaction, Graph_Type, Id, Ids, Type, Query,
                              DocTypes),
     list_to_set(DocTypes, _UniqueTypes),
-    put_dict(system_db, Config, System_DB, ConfigWithSystem),
     format_read_documents(embedding, Transaction, Graph_Type, Id, Ids, Type,
                         Query, ConfigWithSystem, Actual_Data_Version).
 
@@ -2091,6 +2486,17 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
     format_read_documents(markdown, Transaction, Graph_Type, Id, Ids, Type,
                         Query, ConfigWithSystem, Actual_Data_Version).
 
+% ids format — stream the matching document ids instead of the documents
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    get_dict(format, Config, ids),
+    !,
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
+    json_stream_start(Config, Stream_Started),
+    api_print_document_ids(Graph_Type, Transaction, Id, Ids, Type, Query, Config, Stream_Started),
+    json_stream_end(Config).
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,1).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, _Initial_Goal) :-
     get_dict(format, Config, Format),
@@ -2191,7 +2597,10 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, _
     call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
-    (   ground(Type)
+    (   get_dict(id_prefix, Config, Id_Prefix),
+        ground(Id_Prefix)
+    ->  api_print_documents_by_id_prefix(Graph_Type, Transaction, Config, Id_Prefix, Type, Stream_Started)
+    ;   ground(Type)
     ->  api_print_documents_by_type(Graph_Type, Transaction, Config, Type, Stream_Started)
     ;   api_print_documents(Graph_Type, Transaction, Config, Stream_Started)
     ),
@@ -2283,6 +2692,21 @@ do_execute_commit_package(Package, Result) :-
             )
         )
     ->  true
+    ;   % Guarded package lost the label CAS: the client asked to commit
+        % onto a version that has moved, so the answer is a mismatch, not
+        % a merge. Re-elaboration cannot apply anyway (builders are spent).
+        get_dict(data_version_guard, Package.options, Guard_Descriptor-Guard_Requested)
+    ->  (   catch(
+                (   open_descriptor(Guard_Descriptor, Fresh_Transaction),
+                    transaction_data_version(Fresh_Transaction, Fresh_Actual),
+                    Fresh_Actual \= Guard_Requested
+                ->  Result = error(error(data_version_mismatch(Guard_Requested, Fresh_Actual), _))
+                ;   Result = error(unexpected_commit_failure)
+                ),
+                GuardError,
+                Result = error(GuardError)
+            )
+        )
     ;   json_log_error_formatted("execute_commit_package catch block failed", []),
         Result = error(unexpected_commit_failure)
     ),
@@ -4269,11 +4693,12 @@ test(raw_id_false_omits_id_and_type,
     \+ get_dict('@type', Doc, _),
     "internal-mechanics-hidden" = Doc.name.
 
-test(raw_id_default_keeps_id,
+test(raw_id_default_omits_id,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb"))),
       cleanup(teardown_temp_store(State))
      ]) :-
+    % 12.1 default: raw JSON documents read back verbatim, no injected @id.
     raw_id_test_db(System, Auth),
     raw_id_test_config(unbound, Config),
     with_output_to(
@@ -4282,7 +4707,8 @@ test(raw_id_default_keeps_id,
                                    _Id, _Ids, _Type, _Query, Config,
                                    no_data_version, _, [_]>>true)),
     atom_json_dict(Out, Doc, []),
-    get_dict('@id', Doc, _),
+    \+ get_dict('@id', Doc, _),
+    \+ get_dict('@type', Doc, _),
     "internal-mechanics-hidden" = Doc.name.
 
 test(raw_id_false_omits_id_in_list,
@@ -4382,10 +4808,14 @@ test(check_delete_of_referenced_document_fails,
                         Body, [], options{}, Result),
     get_dict('api:valid', Result, false).
 
-test(check_embedding_report_no_backend,
+test(check_embedding_report_unmarked_class_is_irrelevant,
      [setup((setup_temp_store(State),
              create_db_with_test_schema(admin, checkdb4))),
       cleanup(teardown_temp_store(State))]) :-
+    % Relevance belongs to the touched classes, not the engine: City has
+    % no @metadata.embedding, so the report must not mention indexer
+    % configuration at all — that warning only makes sense when a class
+    % actually asks to be embedded.
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Auth),
     open_string('{ "@type": "City", "name": "Checktown" }', Stream),
@@ -4395,7 +4825,33 @@ test(check_embedding_report_no_backend,
                         Body, ['City'], options{}, Result),
     Embedding = Result.'api:embedding',
     get_dict('api:will_embed', Embedding, false),
-    once(sub_string(Embedding.get('api:reason'), _, _, _, "indexer")).
+    get_dict('api:relevant', Embedding, false),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "no touched class")),
+    \+ sub_string(Reason, _, _, _, "indexer").
+
+test(check_embedding_report_unmarked_class_with_backend_still_irrelevant,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb4b),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % A configured backend does not make an unmarked class relevant —
+    % the report is identical to the no-backend case.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('{ "@type": "City", "name": "Checktown" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, "admin/checkdb4b", instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['City'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false),
+    get_dict('api:reason', Embedding, Reason),
+    \+ sub_string(Reason, _, _, _, "indexer").
 
 test(check_body_failure_still_reports_embedding_block,
      [setup((setup_temp_store(State),
@@ -4411,7 +4867,8 @@ test(check_body_failure_still_reports_embedding_block,
                         [_Transaction, _Extra]>>fail, [], options{}, Result),
     get_dict('api:valid', Result, false),
     get_dict('api:embedding', Result, Embedding),
-    get_dict('api:will_embed', Embedding, false).
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false).
 
 test(check_bad_path_throws,
      [setup(setup_temp_store(State)),
@@ -4492,7 +4949,171 @@ test(check_embedding_report_covers_embedded_class,
                         "checker", "dry run", no_data_version,
                         Body, ['EmbedMe'], options{}, Result),
     Embedding = Result.'api:embedding',
-    get_dict('api:will_embed', Embedding, true).
+    get_dict('api:will_embed', Embedding, true),
+    get_dict('api:relevant', Embedding, true).
+
+test(check_embedding_report_marked_class_no_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb8),
+             unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               clear_indexer_backend_config))]) :-
+    % The marked class asks to be embedded but no indexer backend is
+    % configured — now the backend warning is the point of the report,
+    % and it names the class that misses out.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb8",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "indexer backend is none or not configured")),
+    once(sub_string(Reason, _, _, _, "EmbedMe")).
+
+test(check_embedding_report_mixed_touched_names_unmarked,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb9),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % With a backend configured and a mixed touched set, the report is
+    % relevant and names exactly the classes that will not be embedded.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb9",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }
+{ "@id": "PlainDoc", "@type": "Class", "name": "xsd:string" }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe', 'PlainDoc'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "PlainDoc")),
+    \+ sub_string(Reason, _, _, _, "indexer backend is none").
+
+test(check_embedding_report_template_only_no_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb11),
+             unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               clear_indexer_backend_config))]) :-
+    % A template without a query still marks the class — the report
+    % fires even though nothing could ever embed.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb11",
+    open_string('{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "Templated", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['Templated'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    once(sub_string(Embedding.get('api:reason'), _, _, _, "Templated")).
+
+test(check_embedding_report_template_only_with_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb12),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % With a backend the template-only class is marked but cannot
+    % embed — the reason must say the query is missing, not that the
+    % metadata is missing.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb12",
+    open_string('{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "Templated", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['Templated'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "template but no query")),
+    once(sub_string(Reason, _, _, _, "Templated")),
+    \+ sub_string(Reason, _, _, _, "without embedding metadata").
+
+test(check_embedding_report_mixed_marks_with_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb13),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % One query-marked, one template-only, one unmarked class touched:
+    % the reason names each failure group with its own cause.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb13",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }
+{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }
+{ "@id": "PlainDoc", "@type": "Class", "name": "xsd:string" }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe', 'Templated', 'PlainDoc'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "PlainDoc")),
+    once(sub_string(Reason, _, _, _, "template but no query: Templated")).
+
+test(check_embedding_report_no_touched_types,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb10))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Deletes and other bodies that touch no class report a stable,
+    % irrelevant embedding block.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    api_check_documents(System, Auth, "admin/checkdb10", instance,
+                        "checker", "dry run", no_data_version,
+                        [_Transaction, Extra]>>(Extra = _{ids:[]}), [],
+                        options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false).
 
 :- end_tests(check_documents).
 :- begin_tests(document_count, []).

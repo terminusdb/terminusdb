@@ -1,4 +1,4 @@
-use std::sync::mpsc::{self, Sender, Receiver};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use swipl::prelude::*;
@@ -56,7 +56,12 @@ fn log(severity: &str, msg: &str) {
     };
     if let Some(tx) = LOG_CHANNEL.get() {
         // Send to the dispatcher thread's engine for proper Prolog logging.
-        let _ = tx.send(entry);
+        if tx.send(entry).is_ok() {
+            // Wake the dispatcher — without the nudge, entries emitted
+            // during request-idle background work (indexer, watchdog)
+            // buffer until the next dispatch arrives.
+            crate::dispatch::nudge_log_drain();
+        }
     } else if Engine::some_engine_active() {
         // No dispatcher yet, but a Prolog engine is active on this thread.
         // Log directly through json_log instead of writing to stderr.
@@ -74,13 +79,34 @@ fn log(severity: &str, msg: &str) {
 
 /// Process pending log messages using the given Prolog context.
 /// Called from the dispatcher thread's engine loop.
-pub fn drain_log_messages<CT: QueryableContextType>(context: &Context<CT>, rx: &Receiver<LogEntry>) {
-    while let Ok(entry) = rx.try_recv() {
-        let _ = log_to_context(context, &entry);
+/// Drains pending log entries, stopping at `max` entries or `budget`
+/// elapsed, whichever comes first. Callers bound the pass so a sustained
+/// log flood cannot starve other work on this thread; entries keep
+/// channel order across passes.
+pub fn drain_log_messages<CT: QueryableContextType>(
+    context: &Context<CT>,
+    rx: &Receiver<LogEntry>,
+    max: usize,
+    budget: std::time::Duration,
+) {
+    let start = std::time::Instant::now();
+    for _ in 0..max {
+        match rx.try_recv() {
+            Ok(entry) => {
+                let _ = log_to_context(context, &entry);
+            }
+            Err(_) => break,
+        }
+        if start.elapsed() >= budget {
+            break;
+        }
     }
 }
 
-fn log_to_context<CT: QueryableContextType>(context: &Context<CT>, entry: &LogEntry) -> PrologResult<()> {
+fn log_to_context<CT: QueryableContextType>(
+    context: &Context<CT>,
+    entry: &LogEntry,
+) -> PrologResult<()> {
     let f = context.open_frame();
     // Call json_log:json_log_rust/3 which accepts a pre-captured timestamp
     // (as a float of seconds since epoch) and formats it with the same
@@ -110,4 +136,48 @@ pub fn log_info(msg: String) {
 
 pub fn log_debug(msg: String) {
     log("DEBUG", &msg);
+}
+
+/// `log::Log` shim routing facade records through the same channel as the
+/// direct log_* calls, so crate diagnostics land in json_log and honour the
+/// `log_level` flag. Registered once by `install()`; `set_logger` errors are
+/// ignored so re-install stays idempotent.
+struct PrologLogger;
+
+impl log::Log for PrologLogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        // Bare span markers from tracing ("load;") carry no information;
+        // every other record goes through so gating stays in json_log.
+        metadata.target() != "tracing::span"
+    }
+
+    fn log(&self, record: &log::Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+        // Lance is chatty at INFO (a loading event per dataset open); demote
+        // its stream so routine store chatter stays out of INFO-level logs.
+        let severity = match record.level() {
+            log::Level::Error => "ERROR",
+            log::Level::Warn => "WARNING",
+            log::Level::Info if record.target().starts_with("lance") => "DEBUG",
+            log::Level::Info => "INFO",
+            log::Level::Debug | log::Level::Trace => "DEBUG",
+        };
+        log(
+            severity,
+            &format!("[{}] {}", record.target(), record.args()),
+        );
+    }
+
+    fn flush(&self) {}
+}
+
+static PROLOG_LOGGER: PrologLogger = PrologLogger;
+
+/// Install the shim as the global `log` logger. Safe to call repeatedly:
+/// only the first call takes effect.
+pub fn install_log_shim() {
+    let _ = log::set_logger(&PROLOG_LOGGER);
+    log::set_max_level(log::LevelFilter::Trace);
 }

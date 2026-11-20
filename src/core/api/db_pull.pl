@@ -8,6 +8,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 :- use_module(core(query)).
+:- use_module(core(plugins)).
 
 :- meta_predicate pull(+, +, +, +, +, 3, -).
 pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fetch_Predicate,
@@ -68,6 +69,105 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
             ->  throw(error(pull_no_common_history(Head_Has_Updated),Ctx))
             ;   throw(E))
         )
-    ).
+    ),
+
+    % Fast-forwarded commits bypass the transaction commit path — fire
+    % the hook so consumers (e.g. the indexer) see the applied commits.
+    (   Inner_Status == "api:pull_fast_forwarded"
+    ->  ignore(forall(post_fast_forward_hook(Our_Branch_Descriptor,
+                                             Applied_Commit_Ids),
+                      true))
+    ;   true).
+
+
+:- begin_tests(pull_indexer_hook, [concurrent(false)]).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(util)).
+:- use_module(core(transaction)).
+:- use_module(core(triple)).
+:- use_module(core(query)).
+:- use_module(core(plugins)).
+:- use_module(db_pack).
+
+:- dynamic ff_hook_clause_ref/1.
+
+% The recorder clause records into the global recorded database — test
+% block code does not live in the module, so a qualified call back into
+% db_pull would not resolve at run time.
+install_ff_hook_recorder :-
+    assertz(plugins:(post_fast_forward_hook(D, I) :-
+                     recordz(pull_ff_hook_call, D-I)),
+            Ref),
+    assertz(ff_hook_clause_ref(Ref)).
+
+uninstall_ff_hook_recorder :-
+    forall(ff_hook_clause_ref(Ref), erase(Ref)),
+    retractall(ff_hook_clause_ref(_)),
+    forall(recorded(pull_ff_hook_call, _, Ref2), erase(Ref2)).
+
+get_pack_from_store(Store, URL, Repository_Head_Option, Payload_Option) :-
+    pattern_string_split('/pack/', URL, [_, Database_String]),
+    string_concat(Database_String, "/local/_commits", Repository_String),
+    resolve_absolute_string_descriptor(Repository_String, Repository_Descriptor),
+    super_user_authority(Auth),
+    with_triple_store(Store,
+                      (   askable_context(Repository_Descriptor, system_descriptor{}, Auth, Repository_Context),
+                          pack_from_context(
+                              Repository_Context,
+                              Repository_Head_Option,
+                              Payload_Option))).
+
+test("pull fast-forward fires post_fast_forward_hook; unchanged pull does not",
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "pullsrc"),
+             create_db_without_schema("admin", "pulldest"),
+             install_ff_hook_recorder)),
+      cleanup((uninstall_ff_hook_recorder,
+               teardown_temp_store(State)))
+     ]) :-
+    % Commit a triple on the source so the pull has history to apply.
+    resolve_absolute_string_descriptor("admin/pullsrc", Src_Branch),
+    create_context(Src_Branch,
+                   commit_info{author:"test", message:"test"},
+                   Src_Context),
+    with_transaction(Src_Context,
+                     ask(Src_Context, insert(a,b,c)),
+                     _),
+    triple_store(Store),
+
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+
+    % Attach a URL remote so remote_fetch can locate the (mocked) pack.
+    resolve_absolute_string_descriptor("admin/pulldest/_meta", Dest_Meta),
+    create_context(Dest_Meta,
+                   commit_info{author:"test", message:"test"},
+                   Dest_Meta_Context),
+    with_transaction(Dest_Meta_Context,
+                     insert_remote_repository(Dest_Meta_Context, "origin",
+                                              "http://fake/pack/admin/pullsrc",
+                                              _Repo_Uri),
+                     _),
+
+    pull(System, Auth, "admin/pulldest", "origin", "main",
+         get_pack_from_store(Store), Status),
+    get_dict('api:pull_status', Status, Pull_Status),
+    assertion(Pull_Status == "api:pull_fast_forwarded"),
+
+    once(recorded(pull_ff_hook_call, Desc-Ids)),
+    assertion(Ids \== []),
+    resolve_absolute_string_descriptor(Path, Desc),
+    assertion(Path == 'admin/pulldest/local/branch/main'),
+
+    % Second pull: nothing new — no additional hook call.
+    pull(System, Auth, "admin/pulldest", "origin", "main",
+         get_pack_from_store(Store), Status2),
+    get_dict('api:pull_status', Status2, Pull_Status2),
+    assertion(Pull_Status2 == "api:pull_unchanged"),
+    findall(_, recorded(pull_ff_hook_call, _), Calls),
+    assertion(length(Calls, 1)).
+
+:- end_tests(pull_indexer_hook).
 
 

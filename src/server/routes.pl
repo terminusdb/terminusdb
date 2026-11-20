@@ -176,13 +176,31 @@ log_handler(get, Path, Request, System_DB, Auth) :-
         log,
         Request,
         (   param_value_search_optional(Search, start, integer, 0, Start),
+            param_value_search_optional(Search, startDateTime, text, _, StartDateTime),
+            param_value_search_optional(Search, endDateTime, text, _, EndDateTime),
             param_value_search_optional(Search, count, integer, -1, Count),
             param_value_search_optional(Search, verbose, boolean, false, Verbose),
             param_value_search_optional(Search, stream, boolean, false, Stream),
             param_value_search_optional(Search, with_counts, boolean, false, With_Counts),
-            Options = opts{ start: Start, count: Count, verbose: Verbose, with_counts: With_Counts},
+            %  start and startDateTime both anchor the window's top edge, so
+            %  they conflict. endDateTime bounds the oldest edge independently
+            %  and combines with either to express a range.
+            (   Start \= 0, ground(StartDateTime)
+            ->  throw(error(mutually_exclusive_log_parameters([start, startDateTime]), _))
+            ;   true
+            ),
+            findall(O, (   (   ground(StartDateTime), O = startDateTime(StartDateTime) )
+                       ;   (   ground(EndDateTime), O = endDateTime(EndDateTime) )),
+                    DateTime_Options),
+            Options = [start(Start), count(Count), verbose(Verbose),
+                       with_counts(With_Counts) | DateTime_Options],
             (   Stream = true
-            ->  write_cors_headers(Request),
+            ->  api_log:api_log_streaming_prepare(System_DB, Auth, Path, Options,
+                                                  Resolved_Start, Repo_Transaction,
+                                                  Anchor_Uri, Repository_Descriptor,
+                                                  Effective_Start),
+                write_cors_headers(Request),
+                format('TerminusDB-Log-Start: ~d~n', [Resolved_Start]),
                 format('Status: 200~n'),
                 format('Content-Type: application/x-ndjson~n'),
                 format('Cache-Control: no-cache~n'),
@@ -190,7 +208,9 @@ log_handler(get, Path, Request, System_DB, Auth) :-
                 format('Connection: close~n'),
                 format("Transfer-Encoding: chunked~n~n"),
                 flush_output,
-                api_log:api_log_streaming(System_DB, Auth, Path, Options)
+                api_log:api_log_stream_emit(Repo_Transaction, Anchor_Uri,
+                                            Effective_Start, Count, With_Counts,
+                                            Repository_Descriptor, Options)
             ;   api_log(System_DB, Auth, Path, Log, Options),
                 cors_reply_json(Request, Log)
             )
@@ -546,10 +566,15 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
             param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
             param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
-            % raw_id: keep internal @id/@type on raw JSON documents.
-            % Default flips to false in 12.1.
-            param_value_search_or_json_optional(Search, JSON, raw_id, boolean, true, Raw_Id),
+            % raw_id: inject the internal @id on raw JSON documents.
+            % Off by default since 12.1 — raw docs read back verbatim.
+            param_value_search_or_json_optional(Search, JSON, raw_id, boolean, false, Raw_Id),
+            % identifiers: include generated document @id/@type annotations
+            % in the response (default). identifiers=false strips them so the
+            % document reads back in its submitted lexical form.
+            param_value_search_or_json_optional(Search, JSON, identifiers, boolean, true, Identifiers),
             param_value_search_or_json_optional(Search, JSON, id, non_empty_atom, _, Id),
+            param_value_search_or_json_optional(Search, JSON, id_prefix, non_empty_atom, _, Id_Prefix),
             param_value_search_or_json_optional(Search, JSON, type, non_empty_atom, _, Type),
 
             % Use new compress_ids but still support old prefixed.
@@ -571,6 +596,10 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             detect_output_format(Search, Request, OutputFormat),
 
+            % XSD canonicalization version selector; '1.0' is enterprise-only.
+            param_value_search_or_json_optional(Search, JSON, xsd, non_empty_atom, '1.1', Xsd_Raw),
+            xsd_version_param(Xsd_Raw, Xsd_Version),
+
             Config = config{
                          skip: Skip,
                          count: Count,
@@ -580,16 +609,19 @@ document_handler(get, Path, Request, System_DB, Auth) :-
                          unfold: Unfold,
                          minimized: Minimized,
                          raw_id: Raw_Id,
+                         identifiers: Identifiers,
                          format: OutputFormat,
+                         id_prefix: Id_Prefix,
                          request: Request
                      },
 
-            api_read_document_selector(
-                System_DB, Auth, Path, Graph_Type,
-                Id, Ids, Type, Query, Config,
-                Requested_Data_Version, Actual_Data_Version,
-                routes:cors_json_stream_write_headers_(Request, Actual_Data_Version)
-            )
+            with_xsd_version(Xsd_Version,
+                api_read_document_selector(
+                    System_DB, Auth, Path, Graph_Type,
+                    Id, Ids, Type, Query, Config,
+                    Requested_Data_Version, Actual_Data_Version,
+                    routes:cors_json_stream_write_headers_(Request, Actual_Data_Version)
+                ))
         )).
 
 document_handler(post, Path, Request, System_DB, Auth) :-
@@ -978,6 +1010,13 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
 
             read_data_version_header(Request, Requested_Data_Version),
 
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            % XSD canonicalization version selector; '1.0' is enterprise-only.
+            param_value_search_or_json_optional(Search, JSON, xsd, non_empty_atom, '1.1', Xsd_Raw),
+            xsd_version_param(Xsd_Raw, Xsd_Version),
+
             Options = _{
                           files: Files,
                           all_witnesses: All_Witnesses,
@@ -987,18 +1026,19 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
                           streaming: Streaming,
                           library: Library
                       },
-            (   Streaming = true
-            ->  format('Status: 200~n'),
-                format('Content-Type: application/json~n'),
-                format("Transfer-Encoding: chunked~n~n"),
-                woql_query_streaming_json(System_DB, Auth, Path_Option, json_query(Query), Options)
-            ;   woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Transaction_Meta_Data, Response, Options),
-                transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
-                write_cors_headers(Request),
-                write_data_version_header(New_Data_Version),
-                write_transaction_retry_count_header(Transaction_Retry_Count),
-                reply_json_dict(Response, [width(0)])
-            )
+            with_xsd_version(Xsd_Version,
+                (   Streaming = true
+                ->  format('Status: 200~n'),
+                    format('Content-Type: application/json~n'),
+                    format("Transfer-Encoding: chunked~n~n"),
+                    woql_query_streaming_json(System_DB, Auth, Path_Option, json_query(Query), Options)
+                ;   woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Transaction_Meta_Data, Response, Options),
+                    transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
+                    write_cors_headers(Request),
+                    write_data_version_header(New_Data_Version),
+                    write_transaction_retry_count_header(Transaction_Retry_Count),
+                    reply_json_dict(Response, [width(0)])
+                ))
         )).
 
 
@@ -3428,6 +3468,7 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
             param_value_search_or_json_required(Search, JSON, message, text, Message),
             param_value_search_or_json_optional(Search, JSON, dry_run, boolean, false, Dry_Run),
             param_value_search_or_json_optional(Search, JSON, verbose, boolean, false, Verbose),
+            param_value_search_or_json_optional(Search, JSON, allow_destructive_migration, boolean, false, Allow_Destructive),
             Commit_Info = commit_info{
                               author: Author,
                               message: Message
@@ -3435,14 +3476,16 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
             (   param_value_search_or_json(Search, JSON, operations, list, Operations)
             ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations, Result,
                                      [dry_run(Dry_Run),
-                                      verbose(Verbose)]),
+                                      verbose(Verbose),
+                                      allow_destructive_migration(Allow_Destructive)]),
                 put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
                          Result, Response),
                 cors_reply_json(Request, Response)
             ;   param_value_search_or_json(Search, JSON, target, text, Target)
             ->  api_migrate_resource_to(System_DB, Auth,Path,Target,Commit_Info, Result,
                                         [dry_run(Dry_Run),
-                                         verbose(Verbose)]),
+                                         verbose(Verbose),
+                                         allow_destructive_migration(Allow_Destructive)]),
                 put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
                          Result, Response),
                 cors_reply_json(Request, Response)
@@ -3506,8 +3549,11 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     ;   Search = []),
 
     catch((      param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
+                 param_value_search_optional(Search, xsd, non_empty_atom, '1.1', Xsd_Raw),
+                 xsd_version_param(Xsd_Raw, Xsd_Version),
                  authenticate(System_DB, Request, Auth),
-                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data, Compress_Ids),
+                 with_xsd_version(Xsd_Version,
+                     handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data, Compress_Ids)),
                  transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
                  write_cors_headers(Request),
                  write_data_version_header(New_Data_Version),
@@ -3836,8 +3882,32 @@ customise_exception(E) :-
  * Throw an API appropriate JSON-LD response message.
  *
  */
+%% startup_lookup_error(+Error) is semidet.
+%
+%  Errors a handler raises when a user database cannot resolve its
+%  descriptor or a document inside it. While the server has not finished
+%  startup these are transient — a database still coming up must never
+%  look like absent data — so api_error_http_reply renders the retryable
+%  api:NotReadyErrorResponse (503) instead of the usual not-found.
+startup_lookup_error(error(unresolvable_collection(_), _)).
+startup_lookup_error(error(unresolvable_absolute_descriptor(_), _)).
+startup_lookup_error(error(unresolvable_descriptor(_), _)).
+startup_lookup_error(error(unresolvable_commit_id(_), _)).
+startup_lookup_error(error(unresolvable_source_descriptor(_), _)).
+startup_lookup_error(error(unresolvable_target_descriptor(_), _)).
+startup_lookup_error(error(invalid_path(_), _)).
+startup_lookup_error(error(branch_does_not_exist(_), _)).
+startup_lookup_error(error(commit_does_not_exist(_), _)).
+startup_lookup_error(error(origin_branch_does_not_exist(_), _)).
+startup_lookup_error(error(origin_commit_does_not_exist(_), _)).
+startup_lookup_error(error(database_not_finalized(_, _), _)).
+startup_lookup_error(error(document_not_found(_), _)).
+
 api_error_http_reply(API, Error, Request) :-
-    api_error_jsonld(API,Error,JSON),
+    (   startup_lookup_error(Error),
+        \+ server_ready
+    ->  generic_exception_jsonld(server_not_ready, JSON)
+    ;   api_error_jsonld(API,Error,JSON)),
     
     % Add request ID if available (new top-level field, backward compatible)
     (   get_current_id_from_stream(Local_Id)
@@ -3854,7 +3924,10 @@ api_error_http_reply(API, Error, Request) :-
     cors_reply_json(Request,JSON_Final,[status(Status),serialize_unknown(true)]).
 
 api_error_http_reply(API, Error, Type, Request) :-
-    api_error_jsonld(API,Error,Type,JSON),
+    (   startup_lookup_error(Error),
+        \+ server_ready
+    ->  generic_exception_jsonld(server_not_ready, JSON)
+    ;   api_error_jsonld(API,Error,Type,JSON)),
     
     % Add request ID if available (new top-level field, backward compatible)
     (   get_current_id_from_stream(Local_Id)
@@ -4298,6 +4371,96 @@ test(fails_on_non_json_content_type) :-
     free_memory_file(MF).
 
 :- end_tests(http_read_json_semidet).
+
+:- begin_tests(startup_readiness).
+
+% While the server has not finished startup, descriptor-resolution errors
+% are transient: a database still coming up must never look like absent
+% data. They render as a retryable 503 instead of the usual not-found.
+
+test(unresolvable_collection_renders_503_while_not_ready,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_pending(dbs))),
+      cleanup(readiness:reset_readiness)]) :-
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(unresolvable_collection(Descriptor), _),
+                            []))),
+    assertion(sub_string(Text, _, _, _, "503")),
+    assertion(sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
+
+test(branch_missing_renders_503_while_not_ready,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_pending(dbs))),
+      cleanup(readiness:reset_readiness)]) :-
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(branch_does_not_exist(Descriptor), _),
+                            []))),
+    assertion(sub_string(Text, _, _, _, "503")),
+    assertion(sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
+
+test(unresolvable_collection_keeps_404_once_ready,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_ready(store),
+             readiness:readiness_ready(dbs),
+             readiness:mark_hooks_done)),
+      cleanup(readiness:reset_readiness)]) :-
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(unresolvable_collection(Descriptor), _),
+                            []))),
+    assertion(sub_string(Text, _, _, _, "404")),
+    assertion(\+ sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
+
+test(database_unservable_renders_500,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_ready(store),
+             readiness:readiness_ready(dbs),
+             readiness:mark_hooks_done)),
+      cleanup(readiness:reset_readiness)]) :-
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(database_unservable("admin", "borked"), _),
+                            []))),
+    assertion(sub_string(Text, _, _, _, "500")),
+    assertion(sub_string(Text, _, _, _, "api:server_error")),
+    assertion(sub_string(Text, _, _, _, "api:DatabaseUnservable")).
+
+test(database_loading_renders_503,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_ready(store),
+             readiness:readiness_ready(dbs),
+             readiness:mark_hooks_done)),
+      cleanup(readiness:reset_readiness)]) :-
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(database_loading("admin", "bigdb"), _),
+                            []))),
+    assertion(sub_string(Text, _, _, _, "503")),
+    assertion(sub_string(Text, _, _, _, "api:NotReadyErrorResponse")),
+    assertion(sub_string(Text, _, _, _, "api:DatabaseLoading")).
+
+test(non_lookup_errors_keep_their_response_while_not_ready,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_pending(dbs))),
+      cleanup(readiness:reset_readiness)]) :-
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(missing_parameter(id), _),
+                            []))),
+    assertion(\+ sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
+
+:- end_tests(startup_readiness).
 
 content_encoded(Request, Encoding) :-
     memberchk(content_encoding(Encoding), Request),

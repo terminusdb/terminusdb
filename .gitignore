@@ -37,9 +37,20 @@ tests/.terminusdb-test-7373.log
 tests/.terminusdb-test-7373.pid
 tests/.terminusdb-test-*.log
 tests/.terminusdb-test-*.pid
+tests/.terminusdb-handoff-*.log
 dashboard/src/assets/openapi.json
 
 assets/
 # builtin_plugins/assets holds shipped source assets (tokenizer, llms.txt)
 !builtin_plugins/assets/
 test-logs/
+tests/context_cache/catalog
+
+# ACID suite run artefacts (tests/acid/README.md)
+tests/acid/traces/
+tests/acid/jepsen/store/
+tests/acid/jepsen/target/
+tests/acid/jepsen/.cpcache/
+tests/acid/**/__pycache__/
+tests/acid/jepsen/secret/
+docker/vectorsearch/.env

@@ -266,7 +266,7 @@ render_list_indented([Item | Rest], Level) :-
     (   is_dict(Item)
     ->  format("- ~n", []),
         NextLevel is Level + 1,
-        render_pairs_indented(Item, NextLevel)
+        render_document_indented(Item, NextLevel)
     ;   is_list(Item)
     ->  format("- ~n", []),
         NextLevel is Level + 1,
@@ -446,5 +446,19 @@ test(rational_in_nested_dict) :-
     json_to_markdown(Doc, MD),
     \+ sub_string(MD, _, _, _, "r10"),
     \+ sub_string(MD, _, _, _, "r5").
+
+% A dict nested inside a list that is itself a field of a dict inside a
+% list — the shape of e.g. Concept.properties inside XbrlModel.concepts —
+% used to fail: render_list_indented passed the dict to
+% render_pairs_indented without the dict_pairs/2 step.
+test(dict_inside_list_inside_dict_inside_list) :-
+    Doc = json{concepts: [json{properties: [json{value: "debit"}]}]},
+    json_to_markdown(Doc, MD),
+    once(sub_string(MD, _, _, _, "debit")).
+
+test(dict_inside_list_inside_list_item) :-
+    Doc = json{a: [json{p: [json{x: 1}]}]},
+    json_to_markdown(Doc, MD),
+    once(sub_string(MD, _, _, _, "1")).
 
 :- end_tests(json2markdown_unit).

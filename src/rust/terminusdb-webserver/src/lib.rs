@@ -5,6 +5,7 @@
 
 pub mod config;
 pub mod dispatch;
+pub mod index_handoff;
 pub mod indexer;
 pub mod log;
 pub mod plugin;
@@ -15,6 +16,7 @@ pub mod server;
 ///
 /// Called from `terminusdb_community::install()` during dylib load.
 pub fn install() {
+    crate::log::install_log_shim();
     plugin::register();
     indexer::register();
 }

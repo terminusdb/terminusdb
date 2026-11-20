@@ -125,16 +125,15 @@ indexer_process_commit_handler(Request, OutStream) :-
     format(OutStream, 'X-Store-Clustering: ~w\n', [StoreClustering]),
     format(OutStream, '\n', []),
     flush_output(OutStream),
-    format(user_error, "[DEBUG] indexer_worker: calling indexer_process_commit for ~w commit=~w doc_count=~w~n", [Path, CommitToProcess, DocCount]),
     catch(
         (   indexer_process_commit(Path, BranchName, CommitToProcess, OutStream)
-        ->  format(user_error, "[DEBUG] indexer_worker: indexer_process_commit SUCCEEDED for ~w~n", [CommitToProcess])
-        ;   format(user_error, "[DEBUG] indexer_worker: indexer_process_commit FAILED for ~w~n", [CommitToProcess])
+        ->  true
+        ;   format(user_error, "[ERROR] indexer_worker: indexer_process_commit FAILED for ~w~n", [CommitToProcess])
         ),
         Error,
         (   with_output_to(atom(Error_Atom),
                 write_term(Error, [quoted(false)])),
-            format(user_error, "[DEBUG] indexer_worker: indexer_process_commit ERROR for ~w: ~w~n", [CommitToProcess, Error_Atom]),
+            format(user_error, "[ERROR] indexer_worker: indexer_process_commit ERROR for ~w: ~w~n", [CommitToProcess, Error_Atom]),
             Error_Json = json{op:"Error", message:Error_Atom},
             json_write_dict(OutStream, Error_Json, []),
             nl(OutStream),

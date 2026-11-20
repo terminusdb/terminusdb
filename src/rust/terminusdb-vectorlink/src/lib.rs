@@ -21,16 +21,23 @@ use std::sync::{Arc, RwLock};
 
 use futures::StreamExt;
 use swipl::prelude::*;
+#[cfg(test)]
+use terminusdb_webserver::indexer::ByteStream;
 use terminusdb_webserver::indexer::{
     boxed_sync_stream, set_engine_transport, EngineRequest, EngineResponse, EngineTransport,
 };
-#[cfg(test)]
-use terminusdb_webserver::indexer::ByteStream;
 
 /// The embedded vectorlink engine: its axum router, built without the
 /// auth layer — in-process requests are already authorized by the host.
+///
+/// `read_only` mirrors `SearchService::is_read_only` (the embed-cache
+/// write lock is held by another process) and `index_task_dir` is the
+/// shared `<data_dir>/index_tasks` directory where read-only instances
+/// drop index-task files for the lock holder to execute.
 struct EmbeddedEngine {
     router: axum::Router,
+    read_only: bool,
+    index_task_dir: std::path::PathBuf,
 }
 
 impl EmbeddedEngine {
@@ -100,6 +107,14 @@ impl EngineTransport for EmbeddedEngine {
         Box::pin(self.call(req))
     }
 
+    fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+
+    fn index_task_dir(&self) -> Option<std::path::PathBuf> {
+        Some(self.index_task_dir.clone())
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -150,14 +165,22 @@ fn init_engine(data_dir: String, tokenizer_path: String) -> Result<(), String> {
         config.tokenizer_path = tokenizer_path;
     }
 
-    let tokenizer = vectorlink::chunk::io_load_tokenizer(std::path::Path::new(
-        &config.tokenizer_path,
-    ))
-    .map_err(|e| format!("failed to load tokenizer {}: {}", config.tokenizer_path, e))?;
+    let tokenizer =
+        vectorlink::chunk::io_load_tokenizer(std::path::Path::new(&config.tokenizer_path))
+            .map_err(|e| format!("failed to load tokenizer {}: {}", config.tokenizer_path, e))?;
 
     let data_path = std::path::Path::new(&config.data_dir);
     std::fs::create_dir_all(data_path)
         .map_err(|e| format!("failed to create data dir {}: {}", config.data_dir, e))?;
+
+    // Probe the embed cache first: a held sled lock means another process
+    // owns this data dir — the engine then runs read-only (search queries
+    // only, no writes). The cache must be opened exactly once — a second
+    // open would see this process's own lock and falsely report read-only.
+    let embed_cache = vectorlink::embed::cache::EmbedCache::open(
+        &data_path.join("embed_cache"),
+        config.embed_cache_size,
+    );
 
     let dim = config.embed_provider.expected_dim();
     let store = Arc::new(vectorlink::store::lance::LanceStore::new(
@@ -167,25 +190,42 @@ fn init_engine(data_dir: String, tokenizer_path: String) -> Result<(), String> {
         config.lance_metadata_cache_bytes,
     ));
 
+    let service = vectorlink::service::SearchService::new_with_cache(
+        store.clone(),
+        config.clone(),
+        tokenizer,
+        embed_cache,
+    );
+
     // Startup cleanup: remove stale compaction branches left by a
     // crashed compaction (mirrors vectorlink's own server startup).
-    let cleanup_store = store.clone();
-    let cleaned = handle
-        .block_on(async move { cleanup_store.io_cleanup_compaction_branches().await })
-        .map_err(|e| format!("compaction branch cleanup failed: {}", e))?;
-    if !cleaned.is_empty() {
-        terminusdb_webserver::log::log_info(format!(
-            "[vectorlink] cleaned {} stale compaction branch(es) from crashed compaction(s)",
-            cleaned.len()
-        ));
+    // A write — skipped entirely in read-only mode.
+    if service.is_read_only() {
+        terminusdb_webserver::log::log_info(
+            "[vectorlink] read-only mode: skipping startup compaction cleanup".to_string(),
+        );
+    } else {
+        let cleanup_store = store.clone();
+        let cleaned = handle
+            .block_on(async move { cleanup_store.io_cleanup_compaction_branches().await })
+            .map_err(|e| format!("compaction branch cleanup failed: {}", e))?;
+        if !cleaned.is_empty() {
+            terminusdb_webserver::log::log_info(format!(
+                "[vectorlink] cleaned {} stale compaction branch(es) from crashed compaction(s)",
+                cleaned.len()
+            ));
+        }
     }
-
-    let service = vectorlink::service::SearchService::new(store, config.clone(), tokenizer);
     // No auth layer: requests only reach this router through the FFI from
     // already-authorized Prolog handlers.
+    let read_only = service.is_read_only();
     let router = vectorlink::http_api::trusted_router(service, config.clone());
 
-    let engine = Arc::new(EmbeddedEngine { router });
+    let engine = Arc::new(EmbeddedEngine {
+        router,
+        read_only,
+        index_task_dir: data_path.join("index_tasks"),
+    });
     *ENGINE.write().unwrap() = Some(engine.clone());
     set_engine_transport(engine);
 
@@ -470,9 +510,7 @@ mod tests {
             )
             .route(
                 "/status",
-                get(|| async {
-                    (axum::http::StatusCode::SERVICE_UNAVAILABLE, "retry later")
-                }),
+                get(|| async { (axum::http::StatusCode::SERVICE_UNAVAILABLE, "retry later") }),
             )
             .route(
                 "/chunks",
@@ -483,7 +521,11 @@ mod tests {
                     ]))
                 }),
             );
-        EmbeddedEngine { router }
+        EmbeddedEngine {
+            router,
+            read_only: false,
+            index_task_dir: std::path::PathBuf::new(),
+        }
     }
 
     fn get_req(path: &str) -> EngineRequest {
@@ -556,12 +598,10 @@ mod tests {
             vectorlink::config::Config::new("admin".to_string(), "root".to_string(), 0);
         config.data_dir = dir.to_string_lossy().into_owned();
         let dim = config.embed_provider.expected_dim();
-        let tokenizer = vectorlink::chunk::io_load_tokenizer(std::path::Path::new(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../../builtin_plugins/assets/tokenizer.json.bz2"
-            ),
-        ))
+        let tokenizer = vectorlink::chunk::io_load_tokenizer(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../builtin_plugins/assets/tokenizer.json.bz2"
+        )))
         .unwrap();
         let store = Arc::new(vectorlink::store::lance::LanceStore::new(
             &dir,
@@ -572,6 +612,8 @@ mod tests {
         let service = vectorlink::service::SearchService::new(store, config.clone(), tokenizer);
         let engine = EmbeddedEngine {
             router: vectorlink::http_api::trusted_router(service, config),
+            read_only: false,
+            index_task_dir: dir.join("index_tasks"),
         };
 
         let resp = engine

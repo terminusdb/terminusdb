@@ -4,8 +4,11 @@ use juniper::{self, FromInputValue, InputValue, ID};
 use ordered_float::OrderedFloat;
 use regex::{Regex, RegexBuilder, RegexSet};
 use rug::Integer;
-use tdb_succinct::tfc::interval::parse_iso_interval;
-use tdb_succinct::{DateTimeInterval, Decimal, TdbDataType, TypedDictEntry};
+use tdb_succinct::tfc::lexical_interval::{
+    cmp_interval_bounds, decode_lexical_entry, interval_relation, literal_as_interval,
+    AllenRelation,
+};
+use tdb_succinct::{Decimal, TdbDataType, TypedDictEntry};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
@@ -27,8 +30,8 @@ use super::frame::{
     Prefixes, TypeDefinition,
 };
 use super::schema::{
-    TerminusResolveContext, BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue,
-    TerminusOrderBy, TerminusOrdering,
+    BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue, TerminusOrderBy, TerminusOrdering,
+    TerminusResolveContext,
 };
 
 use crate::path::compile::{compile_path, path_to_class};
@@ -108,6 +111,8 @@ enum FilterValue {
     BigFloat(GenericOperation, BigFloat, String),
     DateTime(GenericOperation, DateTime, String),
     String(GenericOperation, String, String),
+    // typed relation: rel atom + interval-or-instant literal
+    Relation(String, String),
     Enum { op: EnumOperation, value: IriName },
     Foreign(IdOperation, String),
 }
@@ -168,8 +173,11 @@ fn compile_string_input_value(string_type: &str, value: StringFilterInputObject)
         FilterValue::String(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
         FilterValue::String(GenericOperation::Ge, val, string_type.to_string())
+    } else if let Some(val) = value.relationship {
+        FilterValue::Relation(val.rel, val.value)
     } else if let Some(val) = value.regex {
-        let regex = compile_safe_regex(&val).expect("Could not compile regex (pattern rejected by size limit or invalid syntax)");
+        let regex = compile_safe_regex(&val)
+            .expect("Could not compile regex (pattern rejected by size limit or invalid syntax)");
         FilterValue::Text(TextOperation::Regex(regex), string_type.to_string())
     } else if let Some(val) = value.startsWith {
         FilterValue::Text(TextOperation::StartsWith(val), string_type.to_string())
@@ -216,6 +224,8 @@ fn compile_datetime_input_value(
         FilterValue::DateTime(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
         FilterValue::DateTime(GenericOperation::Ge, val, string_type.to_string())
+    } else if let Some(val) = value.relationship {
+        FilterValue::Relation(val.rel, val.value)
     } else {
         panic!("Unable to compile string input value to a filter")
     }
@@ -725,23 +735,50 @@ fn object_type_filter<'a>(
             let op = *op;
             let val = val.clone();
             let g = g.clone();
-            // Use TypedDictEntry ordering for dateTimeInterval (binary sorts chronologically)
-            let interval_entry = if type_str == "dateTimeInterval" {
-                parse_iso_interval(&val)
-                    .ok()
-                    .map(|iv| DateTimeInterval::make_entry(&iv))
+            // dateTimeInterval compares by interval bounds, not literal
+            // bytes: spellings denoting the same period (a date pair and its
+            // zoneless datetime twin, a point and the equal-bound pair) are
+            // the same value for eq/ne and order chronologically for
+            // lt/le/ge/gt
+            let reference = if type_str == "dateTimeInterval" {
+                literal_as_interval(&val).ok()
             } else {
                 None
             };
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let cmp = if let Some(ref entry) = interval_entry {
-                    object_value.cmp(entry)
+                let cmp = if let Some(ref iv) = reference {
+                    let object_iv = decode_lexical_entry(&object_value.to_bytes())
+                        .expect("object value must decode as a lexical interval");
+                    cmp_interval_bounds(&object_iv, iv)
                 } else {
                     let object_string = value_to_string(&object_value).to_string();
                     object_string.cmp(&val)
                 };
                 ordering_matches_op(cmp, op)
+            }))
+        }
+        FilterValue::Relation(rel, val) => {
+            let relation = rel
+                .parse::<AllenRelation>()
+                .expect("unknown relation name in relationship filter");
+            let reference = literal_as_interval(val)
+                .expect("relationship value must be an interval or instant literal");
+            // index candidates — a superset; the literal check below keeps
+            // the verdict exact on members only
+            let candidates: std::collections::HashSet<u64> = g
+                .interval_relation_object_ids(relation, &reference)
+                .into_iter()
+                .collect();
+            let g = g.clone();
+            ClonableIterator::new(iter.filter(move |object| {
+                candidates.contains(object) && {
+                    let object_value = g.id_object_value(*object).expect("Object value must exist");
+                    let object_string = value_to_string(&object_value);
+                    literal_as_interval(&object_string)
+                        .map(|iv| interval_relation(&iv, relation, &reference))
+                        .unwrap_or(false)
+                }
             }))
         }
         FilterValue::Enum { op, value } => {
@@ -794,7 +831,8 @@ fn compile_query<'a, C: TerminusResolveContext>(
     if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
             let restriction_name = all_frames.graphql_to_short_name(&restriction_name);
-            context.id_matches_restriction(restriction_name, *id)
+            context
+                .id_matches_restriction(restriction_name, *id)
                 .unwrap()
                 .is_some()
         }));
@@ -1538,7 +1576,10 @@ mod regex_tests {
         let evil = "a".repeat(10_000);
         let pattern = format!("({})+", evil);
         let re = compile_safe_regex(&pattern);
-        assert!(re.is_err(), "Huge NFA pattern should be rejected by size_limit");
+        assert!(
+            re.is_err(),
+            "Huge NFA pattern should be rejected by size_limit"
+        );
     }
 
     #[test]

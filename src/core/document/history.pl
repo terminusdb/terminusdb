@@ -285,7 +285,7 @@ enrich_history_entry(Repo, Descriptor, Id, Options, Info0, Info) :-
 
 collect_goal(Acc, Entry) :-
     nb_getval(Acc, Entries),
-    nb_setval(Acc, [Entry|Entries]).
+    nb_linkval(Acc, [Entry|Entries]).
 
 document_history(Descriptor, Id, Start, Count, History) :-
     document_history(Descriptor, Id, Start, Count, History, []).

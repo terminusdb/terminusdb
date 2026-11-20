@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, document, woql } = require('../lib')
+const { Agent, db, document, woql, util } = require('../lib')
 const Decimal = require('decimal.js')
 const { ApolloClient, InMemoryCache, HttpLink, gql, ApolloLink, concat } = require('@apollo/client/core')
 const fetch = require('cross-fetch')
@@ -119,6 +119,111 @@ describe('decimal-precision', function () {
       expect(price.equals(new Decimal('19.99'))).to.be.true
       expect(taxRate.equals(new Decimal('0.075'))).to.be.true
       expect(quantity.equals(new Decimal('3.5'))).to.be.true
+    })
+  })
+
+  describe('XSD Canonical Form (issue #2632)', function () {
+    // XSD 1.1: an integer-valued xsd:decimal canonicalizes without the
+    // fraction — "1.0" reads back as "1". Non-integral values keep their
+    // significant digits with trailing zeros trimmed.
+    it('returns integer-valued decimals without the fraction', async function () {
+      const docs = [
+        { '@type': 'HighPrecision', '@id': 'HighPrecision/canon1', value20digits: 1, value15digits: 1.0, calculation: 1.5 },
+        { '@type': 'HighPrecision', '@id': 'HighPrecision/canon2', value20digits: 100000.00, value15digits: 0.0, calculation: -1.0 },
+      ]
+
+      await document.insert(agent, { instance: docs })
+
+      const r1 = await document.get(agent, { body: { id: 'HighPrecision/canon1' } })
+      const r2 = await document.get(agent, { body: { id: 'HighPrecision/canon2' } })
+
+      // Compare against the raw lexical in the JSON text, not the parsed
+      // number — the assertion is about the canonical spelling.
+      expect(r1.text.match(/"value20digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1')
+      expect(r1.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1')
+      expect(r1.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1.5')
+      expect(r2.text.match(/"value20digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('100000')
+      expect(r2.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('0')
+      expect(r2.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('-1')
+    })
+
+    it('trims insignificant zeros in submitted decimal strings', async function () {
+      const doc = {
+        '@type': 'HighPrecision',
+        '@id': 'HighPrecision/canon3',
+        value20digits: '1.50',
+        value15digits: '+100000.00',
+        calculation: '2.500',
+      }
+
+      await document.insert(agent, { instance: doc })
+      const response = await document.get(agent, { body: { id: 'HighPrecision/canon3' } })
+
+      expect(response.text.match(/"value20digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1.5')
+      expect(response.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('100000')
+      expect(response.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('2.5')
+    })
+
+    it('accepts xsd=1.1 explicitly and renders the XSD 1.1 canonical form', async function () {
+      const response = await document.get(agent, {
+        body: { id: 'HighPrecision/canon1' },
+        query: { xsd: '1.1' },
+      })
+
+      expect(response.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1')
+      expect(response.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1.5')
+    })
+
+    it('rejects xsd=1.0 on the document endpoint without enterprise edition', async function () {
+      const response = await document.get(agent, {
+        body: { id: 'HighPrecision/canon1' },
+        query: { xsd: '1.0' },
+      }).unverified()
+
+      if (util.enterprise) {
+        expect(response.status).to.equal(200)
+        expect(response.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1.0')
+      } else {
+        expect(response.status).to.equal(400)
+        expect(response.body['api:message']).to.include('enterprise')
+      }
+    })
+
+    it('rejects xsd=1.0 on the WOQL endpoint without enterprise edition', async function () {
+      const query = {
+        '@type': 'Eval',
+        expression: {
+          '@type': 'ArithmeticValue',
+          data: { '@type': 'xsd:decimal', '@value': '1.0' },
+        },
+        result: { '@type': 'ArithmeticValue', variable: 'R' },
+      }
+      const response = await agent
+        .post(`${api.path.woqlResource({ dbName: agent.dbName, orgName: agent.orgName })}?xsd=1.0`)
+        .send({ query })
+
+      if (util.enterprise) {
+        expect(response.status).to.equal(200)
+        expect(response.text.match(/"@value"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1.0')
+      } else {
+        expect(response.status).to.equal(400)
+        expect(response.body['api:message']).to.include('enterprise')
+      }
+    })
+
+    it('rejects xsd=1.0 on the GraphQL endpoint without enterprise edition', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const response = await agent
+        .post(`${graphqlPath}?xsd=1.0`)
+        .send({ query: '{ HighPrecision { value15digits } }' })
+
+      if (util.enterprise) {
+        expect(response.status).to.equal(200)
+        expect(response.text).to.match(/"value15digits"\s*:\s*1\.0(?![0-9])/)
+      } else {
+        expect(response.status).to.equal(400)
+        expect(response.text).to.include('enterprise')
+      }
     })
   })
 

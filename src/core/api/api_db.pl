@@ -3,7 +3,8 @@
               list_database/6,
               list_existing_databases/4,
               pretty_print_databases/1,
-              db_exists_api/4
+              db_exists_api/4,
+              system_database_serve_ready/0
           ]).
 
 :- use_module(core(transaction)).
@@ -49,6 +50,30 @@ get_user_databases(System_DB, Auth, Organization, User_Databases) :-
 get_user_database(System_DB, Auth, Organization, Name, User_Database-Db_Uri) :-
     user_accessible_database_id(System_DB, Auth, Organization, Name, Db_Uri),
     format(string(User_Database),"~s/~s",[Organization,Name]).
+
+%% system_database_serve_ready is det.
+%% system_database_serve_ready(+Retries) is det.
+%
+%  Verify that the system database resolves and enumerates through the
+%  request path — the machinery every request needs to locate its target
+%  database. Startup gates the `dbs` readiness component on this so HTTP
+%  requests can only dispatch once databases are findable at all.
+%
+%  Individual user databases are intentionally not probed here: boot must
+%  not load every database, and a single damaged database must never
+%  abort startup. Each database is verified lazily at first touch inside
+%  open_descriptor — a database that exists but cannot open is marked
+%  unservable in memory (descriptor:db_failed/3) and answers a real
+%  error rather than a phantom not-found.
+system_database_serve_ready :-
+    system_database_serve_ready(120).
+
+system_database_serve_ready(Retries) :-
+    do_or_die(
+        retry_startup(Retries,
+            (   create_context(system_descriptor{}, System_DB),
+                get_all_databases(System_DB, _Organization, _Databases))),
+        error(system_database_not_serve_ready, _)).
 
 list_databases(System_DB, Auth, Database_Objects, Options) :-
     ignore(option(organization(Organization), Options)),
@@ -188,5 +213,91 @@ test(list_existing_no_branches,
 
     forall(member(Object, Database_Objects),
            member(Object, Expected_Objects)).
+
+% system_database_serve_ready/1 — the `dbs` readiness check. It proves the
+% system database resolves and enumerates through the request path; user
+% databases are verified lazily at first touch instead, so a damaged or
+% still-loading database never blocks boot and never looks like absent
+% data — it is marked unservable in memory and answers a real error.
+% Tests pass zero retries so a transient check resolves immediately.
+
+test(serve_ready_empty_store,
+     [setup(setup_temp_store(State)),
+      cleanup(teardown_temp_store(State))]) :-
+    system_database_serve_ready(0).
+
+test(serve_ready_with_databases,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"),
+             create_db_without_schema("admin","bar"))),
+      cleanup(teardown_temp_store(State))]) :-
+    system_database_serve_ready(0).
+
+test(serve_ready_ignores_unresolvable_database,
+     [setup(setup_temp_store(State)),
+      cleanup(teardown_temp_store(State))]) :-
+    % A finalized record whose backing store cannot resolve must not block
+    % or fail serve-readiness — one damaged database never takes the
+    % server down.
+    create_context(system_descriptor{}, System_Context),
+    with_transaction(System_Context,
+        system_entity:insert_db_object(System_Context, "admin", "ghostdb",
+                                       "ghost label", "ghost comment", Db_Uri),
+        _),
+    db_create:finalize_db(Db_Uri),
+    system_database_serve_ready(0).
+
+test(unresolvable_database_marks_failed,
+     [setup(setup_temp_store(State)),
+      cleanup((ignore(retract(descriptor:db_failed(_,_,_))),
+               ignore(retract(descriptor:db_unservable_loading(_,_,_))),
+               teardown_temp_store(State)))]) :-
+    % The finalized-but-unresolvable database is marked loading at first
+    % touch and the single background attempt fails, so the request waits
+    % for that attempt and then answers a 500-class error — never a
+    % phantom not-found. Later requests fail fast on the fresh mark.
+    create_context(system_descriptor{}, System_Context),
+    with_transaction(System_Context,
+        system_entity:insert_db_object(System_Context, "admin", "ghostdb",
+                                       "ghost label", "ghost comment", Db_Uri),
+        _),
+    db_create:finalize_db(Db_Uri),
+    resolve_absolute_string_descriptor("admin/ghostdb", Descriptor),
+    assertion(catch(open_descriptor(Descriptor, _Transaction),
+                    error(database_unservable("admin", "ghostdb"), _),
+                    true)),
+    assertion(descriptor:db_failed("admin", "ghostdb", _Since)),
+    assertion(catch(open_descriptor(Descriptor, _Transaction2),
+                    error(database_unservable("admin", "ghostdb"), _),
+                    true)).
+
+test(loading_database_answers_retryable_error,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","realdb"),
+             setenv('TERMINUSDB_DB_LOAD_WAIT','0'))),
+      cleanup((unsetenv('TERMINUSDB_DB_LOAD_WAIT'),
+               ignore(retract(descriptor:db_unservable_loading(_,_,_))),
+               teardown_temp_store(State)))]) :-
+    % While a load is in flight the request waits out its grace window,
+    % then answers a retryable 503-class error — never a phantom not-found.
+    get_time(Now),
+    assertz(descriptor:db_unservable_loading("admin", "realdb", Now)),
+    resolve_absolute_string_descriptor("admin/realdb", Descriptor),
+    assertion(catch(open_descriptor(Descriptor, _Transaction),
+                    error(database_loading("admin", "realdb"), _),
+                    true)).
+
+test(expired_failed_mark_retries_open,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","realdb"))),
+      cleanup((ignore(retract(descriptor:db_failed(_,_,_))),
+               teardown_temp_store(State)))]) :-
+    % A failure mark older than 30 minutes is retracted and the database
+    % gets a fresh attempt — the 500 is sticky, not permanent.
+    get_time(Now), Stale is Now - 1801,
+    assertz(descriptor:db_failed("admin", "realdb", Stale)),
+    resolve_absolute_string_descriptor("admin/realdb", Descriptor),
+    open_descriptor(Descriptor, _Transaction),
+    assertion(\+ descriptor:db_failed("admin", "realdb", _)).
 
 :- end_tests(db).

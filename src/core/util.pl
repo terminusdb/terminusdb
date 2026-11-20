@@ -116,6 +116,7 @@
               op(700,xfy,<>),
               '<>'/2,
               do_or_die/2,
+              retry_startup/2,
               option_or_die/2,
               die_if/2,
               whole_arg/2,
@@ -133,6 +134,7 @@
               convlist/4,
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
+              iso8601_to_epoch/2,
               json_read_term/2,
               json_read_term_stream/2,
               json_read_list_stream/2,
@@ -189,7 +191,7 @@
               gMonth//2,
               gMonthDay//3,
               gDay//2,
-              duration//7,
+              duration//8,
               yearMonthDuration//3,
               dayTimeDuration//5,
               string/3,
@@ -203,6 +205,7 @@
               dateRange//2,
               dateTimeInterval//2,
               dateTimeInterval//3,
+              dateTimeIntervalComponent//1,
               decimalRange//2,
               email//0,
               gYearRange//2,
@@ -276,10 +279,15 @@
               transaction_data_version/2,
               validation_data_version/3,
               meta_data_version/3,
+              expected_label_version/2,
+              expected_label_version/4,
+              record_expected_label_version/4,
+              data_version_guarded_options/4,
 
               % json_stream.pl
               json_stream_start/2,
               json_stream_end/1,
+              json_stream_write/3,
               json_stream_write_dict/3,
 
               % iana.pl

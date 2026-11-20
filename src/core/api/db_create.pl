@@ -209,6 +209,9 @@ create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Sch
             % Mark as creating so other threads are blocked by the gate in
             % open_descriptor. The flag is retracted in cleanup.
             assert(db_currently_creating(Org_S, DB_S)),
+            % A recreated database gets a clean slate: any unservable mark
+            % left by the previous database of this name is stale.
+            ignore(retract(descriptor:db_failed(Org_S, DB_S, _))),
             % update system with finalized
             % This reopens system graph internally, as it was advanced
             finalize_db(Db_Uri)

@@ -2,6 +2,8 @@
     % Push driver
     io_push_delta/4,
     io_index_branch/3,
+    io_index_branch/4,
+    io_delete_branch_index/3,
     path_to_domain/2,
     validate_index_path/1,
     % Search fronting
@@ -52,6 +54,7 @@ Activates when TERMINUSDB_VECTORLINK_ENDPOINT is set. Provides:
 :- use_module(core(api/api_indexer),
              [commit_ops_begin/0, commit_op/8,
               embedding_refresh_purge_types/6]).
+:- use_module(core(api/api_access_control), [api_add_role/4]).
 :- use_module(core(util)).
 :- use_module(library(base64)).
 :- use_module(library(json)).
@@ -807,11 +810,22 @@ io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
     ).
 
 io_index_branch(System_DB, Auth, Path) :-
+    io_index_branch(System_DB, Auth, Path, _Target_Commit).
+
+%% io_index_branch(+System_DB, +Auth, +Path, -Target_Commit) is det.
+%%
+%%  Catch-up trigger: asks the engine to index every commit from its
+%%  last-indexed one to HEAD — never blocks, never rebuilds (a rebuild
+%%  is io_delete_branch_index/3 + this). Has_Embeddings=true so manual
+%%  indexing covers schemas with embedding metadata but no
+%%  store_indices. Target_Commit is the branch head at trigger time.
+io_index_branch(System_DB, Auth, Path, Target_Commit) :-
     validate_index_path(Path),
     do_or_die(
         vectorlink_endpoint(_Endpoint),
         error(vectorlink_endpoint_not_configured(io_index_branch), _)),
-    plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+    plugin_api:resolve_descriptor_action_auth(
+        '@schema':'Action/reindex_write', System_DB, Auth, Path, Descriptor),
     do_or_die(
         (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
         ->  true
@@ -819,14 +833,40 @@ io_index_branch(System_DB, Auth, Path) :-
         ->  branch_for_commit(Repo_Desc, Commit_Id, Branch_Name)
         ),
         error(push_requires_branch_descriptor(Path), _)),
+    (   branch_head_commit(Descriptor.repository_descriptor, Branch_Name, Head_Uri)
+    ->  commit_id_uri(Descriptor.repository_descriptor, Target_Commit, Head_Uri)
+    ;   Target_Commit = null
+    ),
     vectorlink:branch_path_for_notify(Path, Branch_Name, Branch_Path),
+    % Hold the trigger until the engine transport exists — without this a
+    % POST landing inside the detached init window would 200 while the
+    % notify can only be parked, so the caller gets no signal that indexing
+    % has not actually started. No-op when the component is undeclared
+    % (remote HTTP backend).
+    embedded_await_engine(post, Path),
     (   plugin_api:indexer_available
     ->  (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
-            plugin_api:indexer_reindex(Branch_Path, Branch_Name, Store_Clustering)
+            plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering, true)
         ->  true
-        ;   throw(error(indexer_reindex_failed(io_index_branch), _))
+        ;   throw(error(indexer_notify_failed(io_index_branch), _))
         )
     ;   throw(error(indexer_ffi_not_loaded(io_index_branch), _))
+    ).
+
+%% io_delete_branch_index(+System_DB, +Auth, +Path) is det.
+%%
+%%  Wipe the branch's domain index — the wipe half of an explicit
+%%  rebuild. On a read-only instance enqueues a delete handoff task.
+io_delete_branch_index(System_DB, Auth, Path) :-
+    plugin_api:resolve_descriptor_action_auth(
+        '@schema':'Action/reindex_write', System_DB, Auth, Path, Descriptor),
+    do_or_die(
+        vectorlink_endpoint(Endpoint),
+        error(vectorlink_endpoint_not_configured(io_delete_branch_index), _)),
+    descriptor_domain(Descriptor, Domain),
+    (   plugin_api:indexer_engine_read_only
+    ->  plugin_api:indexer_enqueue_delete(Domain)
+    ;   io_delete_domain(Endpoint, Domain)
     ).
 
 %% branch_for_commit(+Repo_Desc, +Commit_Id, -Branch_Name) is semidet.
@@ -1466,29 +1506,42 @@ plugins:post_server_startup_hook(_Port) :-
 %  $vectorlink FFI is unavailable — the embedded backend cannot run
 %  without the Rust dylib.
 init_embedded_engine :-
-    do_or_die(
-        current_predicate('$vectorlink':vectorlink_init/2),
-        error(vectorlink_ffi_not_loaded(vectorlink_init), _)),
-    embedded_data_dir(Data_Dir),
-    embedded_tokenizer_path(Tokenizer_Path),
-    do_or_die(
-        '$vectorlink':vectorlink_init(Data_Dir, Tokenizer_Path),
-        error(vectorlink_engine_init_failed(Data_Dir), _)).
+    (   embedded_data_dir(Data_Dir)
+    ->  do_or_die(
+            current_predicate('$vectorlink':vectorlink_init/2),
+            error(vectorlink_ffi_not_loaded(vectorlink_init), _)),
+        embedded_tokenizer_path(Tokenizer_Path),
+        do_or_die(
+            '$vectorlink':vectorlink_init(Data_Dir, Tokenizer_Path),
+            error(vectorlink_engine_init_failed(Data_Dir), _))
+    ;   format(user_error,
+               '[INFO] [vectorlink] embedded engine disabled: neither TERMINUSDB_STORE nor VECTORLINK_DATA_DIR is set — set one to enable the index~n',
+               [])).
 
 %% embedded_data_dir(-Path) is det.
 %
+%% embedded_data_dir(-Path) is semidet.
+%
 %  Data directory for the embedded engine's Lance store and embed cache.
-%  VECTORLINK_DATA_DIR wins when set; otherwise a 'vectorlink' directory
-%  next to the database store (db_path is <storage>/db by convention, so
-%  its parent is the storage root).
+%  VECTORLINK_DATA_DIR wins when set; then TERMINUSDB_STORE
+%  <root>/vectorlink (the storage root informs vectorlink even when a
+%  legacy TERMINUSDB_SERVER_DB_PATH points the db elsewhere). With
+%  nothing configured the default storage root applies —
+%  ~/.terminusdb/vectorlink — so local users get indexing out of the
+%  box. Fails only when a legacy TERMINUSDB_SERVER_DB_PATH is set
+%  without STORE/VECTORLINK_DATA_DIR: those installs must opt in, or a
+%  stray index dir would appear at an unintended location.
 embedded_data_dir(Path) :-
     (   getenv('VECTORLINK_DATA_DIR', Env_Path),
         Env_Path \== ''
     ->  Path = Env_Path
-    ;   config:db_path(Db_Path),
-        file_directory_name(Db_Path, Storage_Dir),
-        atomic_list_concat([Storage_Dir, 'vectorlink'], '/', Path)
-    ).
+    ;   getenv('TERMINUSDB_STORE', Store),
+        Store \== ''
+    ->  expand_file_name(Store, [Store_Abs]),
+        atomic_list_concat([Store_Abs, 'vectorlink'], '/', Path)
+    ;   getenv('TERMINUSDB_SERVER_DB_PATH', _)
+    ->  fail
+    ;   expand_file_name('~/.terminusdb/vectorlink', [Path])).
 
 %% embedded_tokenizer_path(-Path) is det.
 %
@@ -1682,7 +1735,8 @@ search_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(search_handler), _)),
             do_or_die(
@@ -1699,6 +1753,7 @@ search_handler(post, Path, Request, System_DB, Auth) :-
             vectorlink:compress_flag(Search, Compress),
             vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             vectorlink:search_extra_params(Search, Body, Prefixes, Extra_Params),
+            vectorlink:assert_snippets_authorized(System_DB, Auth, Descriptor, Extra_Params),
             catch(
                 (   vectorlink:io_search_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                       Extra_Params, Response_Body, Data_Version_Header),
@@ -1725,7 +1780,8 @@ suggest_handler(get, Path, Request, System_DB, Auth) :-
         suggest,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(suggest_handler), _)),
             do_or_die(
@@ -1741,6 +1797,7 @@ suggest_handler(get, Path, Request, System_DB, Auth) :-
             vectorlink:compress_flag(Search, Compress),
             vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             vectorlink:search_extra_params(Search, _{}, Prefixes, Extra_Params),
+            vectorlink:assert_snippets_authorized(System_DB, Auth, Descriptor, Extra_Params),
             catch(
                 (   vectorlink:io_suggest_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                       Extra_Params, Response_Body, Data_Version_Header),
@@ -1768,7 +1825,8 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(similar_handler), _)),
             do_or_die(
@@ -1785,6 +1843,7 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
             vectorlink:compress_flag(Search, Compress),
             vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             vectorlink:similar_extra_params(Search, Body, Prefixes, Extra_Params),
+            vectorlink:assert_snippets_authorized(System_DB, Auth, Descriptor, Extra_Params),
             (   memberchk(text=Text, Extra_Params),
                 vectorlink:search_scalar_present(Text)
             ->  Post_Body = _{text: Text},
@@ -1831,7 +1890,8 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(duplicates_handler), _)),
             do_or_die(
@@ -1847,6 +1907,7 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
             vectorlink:compress_flag(Search, Compress),
             vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             vectorlink:duplicates_extra_params(Search, Body, Prefixes, Extra_Params),
+            vectorlink:assert_snippets_authorized(System_DB, Auth, Descriptor, Extra_Params),
             catch(
                 (   vectorlink:io_duplicates_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                           Extra_Params, Response_Body, Data_Version_Header),
@@ -1872,7 +1933,8 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(resolve_handler), _)),
             do_or_die(
@@ -2016,6 +2078,27 @@ search_request_body(Request, Body) :-
 search_scalar_present(V) :- string(V), !, V \== "".
 search_scalar_present(V) :- number(V), !.
 search_scalar_present(V) :- atom(V), !, V \== '', V \== null.
+
+%% assert_snippets_authorized(+System_DB, +Auth, +Descriptor,
+%%                            +Extra_Params) is det.
+%
+%  Snippets disclose document contents — a separate disclosure tier
+%  from search admission. A request carrying a snippet parameter that
+%  asks for content (any value except false/0/empty) requires the
+%  search_snippets action on the descriptor's scope.
+assert_snippets_authorized(System_DB, Auth, Descriptor, Extra_Params) :-
+    (   member(snippet=Value, Extra_Params),
+        snippet_value_requests_content(Value)
+    ->  plugin_api:check_descriptor_auth(
+            System_DB, Descriptor, '@schema':'Action/search_snippets', Auth)
+    ;   true).
+
+snippet_value_requests_content(Value) :-
+    search_scalar_present(Value),
+    Value \== false,
+    Value \== 'false',
+    Value \== "false",
+    Value \== 0.
 
 merged_scalar_param(Key, Body, Search, Value) :-
     (   get_dict(Key, Body, Body_Value),
@@ -2171,15 +2254,17 @@ reply_embeddings_stream_headers(Request, Served_Commit, Store_Clustering, Total_
 % ==========================================================================
 
 %% assemble_index_status_response(+Indexer_Progress, +Branch_Name,
-%%                                 +Last_Commit, +Engine_Stats, -Response) is det.
+%%                                 +Last_Commit, +Branch_Head,
+%%                                 +Engine_Stats, -Response) is det.
 %
 %  Constructs the index status API response dict from the Rust FFI
-%  progress dict, the last indexed commit from vectorlink, and the
-%  engine statistics. Handles missing keys defensively — Indexer_Progress
-%  may be a minimal dict like json{status:not_found} with no
-%  branch_processing key.
+%  progress dict, the last indexed commit from vectorlink, the branch
+%  head commit, and the engine statistics. Handles missing keys
+%  defensively — Indexer_Progress may be a minimal dict like
+%  json{status:not_found} with no branch_processing key.
 assemble_index_status_response(Indexer_Progress, Branch_Name,
-                               Last_Commit, Engine_Stats, Response) :-
+                               Last_Commit, Branch_Head,
+                               Engine_Stats, Response) :-
     get_dict(status, Indexer_Progress, Status_Raw),
     % atom_json_dict/3 parses JSON string values as Prolog strings,
     % not atoms. Normalise to atom for reliable == comparison.
@@ -2199,6 +2284,22 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
         Last_Commit \= null
     ->  Status_Value = completed
     ;   Status_Value = Status_Raw
+    ),
+    % A lagging index must not report completed: when no task is working
+    % (not_found, indexer_unavailable, or a finished task kept as
+    % completed) and the engine's last-indexed commit is not the branch
+    % head, the status is "behind" with both commits exposed so the gap
+    % is visible. Indexing and error states own their status — the gap
+    % they report is already honest. A null Last_Commit means no index
+    % exists (not_found is the honest answer); a null Branch_Head means
+    % the head could not be resolved (commit descriptors, empty branch)
+    % and no comparison is possible.
+    (   memberchk(Status_Value, [completed, not_found, indexer_unavailable]),
+        Last_Commit \= null,
+        Branch_Head \= null,
+        Last_Commit \= Branch_Head
+    ->  Status_Final = behind
+    ;   Status_Final = Status_Value
     ),
     (   get_dict(error, Indexer_Progress, Error_Value)
     ->  true
@@ -2263,6 +2364,17 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
         )
     ;   Store_Clustering = null
     ),
+    % Read-only engines hand index work to the write-lock holder via the
+    % task queue, so the response carries the local engine mode plus the
+    % queue state for this ref (pending/underway; null when no task file).
+    (   get_dict(read_only, Indexer_Progress, Read_Only)
+    ->  true
+    ;   Read_Only = false
+    ),
+    (   get_dict(handoff, Indexer_Progress, Handoff)
+    ->  true
+    ;   Handoff = null
+    ),
     Engine_Section = json{
         processed_documents:Processed_Docs,
         total_documents:Total_Docs,
@@ -2280,10 +2392,13 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
         upcoming_commit:Upcoming_Commit
     },
     Response = json{
-        status:Status_Value,
+        status:Status_Final,
         error:Error_Value,
+        read_only:Read_Only,
+        handoff:Handoff,
         branch:Branch_Name,
         last_indexed_commit:Last_Commit,
+        branch_head_commit:Branch_Head,
         branch_processing:Branch_Processing_Section,
         engine:Engine_Section
     }.
@@ -2297,7 +2412,8 @@ index_handler(get, Path, Request, System_DB, Auth) :-
     plugin_api:api_report_errors(
         index,
         Request,
-        (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+        (   plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(index_handler), _)),
             do_or_die(
@@ -2330,9 +2446,19 @@ index_handler(get, Path, Request, System_DB, Auth) :-
                 _,
                 Last_Commit = null
             ),
-            % 2b. (not_found → completed override is handled in
-            %     assemble_index_status_response, where it's unit-tested.)
-            
+            % 2b. Resolve the branch head so the status can distinguish a
+            %     lagging index (behind) from a caught-up one (completed).
+            %     Commit descriptors name no branch — head stays null and
+            %     assembly skips the comparison.
+            (   branch_descriptor{repository_descriptor: Repo_Desc} :< Descriptor,
+                branch_head_commit(Repo_Desc, Branch_Name, Head_Uri)
+            ->  commit_id_uri(Repo_Desc, Branch_Head, Head_Uri)
+            ;   Branch_Head = null
+            ),
+            % 2c. (not_found → completed and lagging → behind overrides are
+            %     handled in assemble_index_status_response, where they're
+            %     unit-tested.)
+
             % 3. Query vectorlink /statistics?domain=... for engine-side counts.
             catch(
                 vectorlink:io_statistics_for_domain(Endpoint, Domain, Engine_Stats),
@@ -2343,38 +2469,36 @@ index_handler(get, Path, Request, System_DB, Auth) :-
             ),
             % 4. Assemble the response using the extracted predicate.
             vectorlink:assemble_index_status_response(
-                Indexer_Progress, Branch_Name, Last_Commit, Engine_Stats,
-                Response0),
+                Indexer_Progress, Branch_Name, Last_Commit, Branch_Head,
+                Engine_Stats, Response0),
             plugin_api:write_cors_headers(Request),
             format("Content-Type: application/json~n~n"),
             json:json_write_dict(current_output, Response0, [width(0)])
         )
     ).
 
+index_handler(put, Path, Request, System_DB, Auth) :-
+    index_handler(post, Path, Request, System_DB, Auth).
+
 index_handler(post, Path, Request, System_DB, Auth) :-
     plugin_api:api_report_errors(
         index,
         Request,
-        (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, _Descriptor),
-            catch(
-                (   vectorlink:io_index_branch(System_DB, Auth, Path),
-                    plugin_api:write_cors_headers(Request),
-                    format("Content-Type: application/json~n~n"),
-                    json:json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success'}, [width(0)])
-                ),
-                Error,
-                (   (   Error = error(vectorlink_409_resolution_timeout, _)
-                    ->  true
-                    ;   Error = error(socket_error(epipe, _), _)
-                    ->  true
-                    ;   throw(Error)
-                    ),
-                    plugin_api:write_cors_headers(Request),
-                    format("Content-Type: application/json~n~n"),
-                    json:json_write_dict(current_output, json{'@type':'api:IndexResponse',
-                                'api:status':'api:success',
-                                'api:message':'Index already in progress for this branch'}, [width(0)])
-                )
+        (   plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/reindex_write', System_DB, Auth, Path, _Descriptor),
+            vectorlink:io_index_branch(System_DB, Auth, Path, Target_Commit),
+            plugin_api:write_cors_headers(Request),
+            format("Content-Type: application/json~n~n"),
+            (   plugin_api:indexer_engine_read_only
+            ->  % This instance is read-only: the request was
+                % written to the shared task queue for the
+                % write-lock holder — no local task was spawned.
+                json:json_write_dict(current_output, json{'@type':'api:IndexResponse',
+                        'api:status':'api:success',
+                        'api:target_commit':Target_Commit,
+                        'api:message':'Index request handed off to the instance holding the index write lock'}, [width(0)])
+            ;   json:json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success',
+                        'api:target_commit':Target_Commit}, [width(0)])
             )
         )
     ).
@@ -2383,12 +2507,11 @@ index_handler(delete, Path, Request, System_DB, Auth) :-
     plugin_api:api_report_errors(
         index,
         Request,
-        (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
-                      error(vectorlink_endpoint_not_configured(index_handler), _)),
-            vectorlink:descriptor_domain(Descriptor, Domain),
-            vectorlink:io_delete_domain(Endpoint, Domain),
-            format(string(Message), "Index for ~w deleted", [Path]),
+        (   vectorlink:io_delete_branch_index(System_DB, Auth, Path),
+            (   plugin_api:indexer_engine_read_only
+            ->  Message = "Index delete handed off to the instance holding the index write lock"
+            ;   format(string(Message), "Index for ~w deleted", [Path])
+            ),
             plugin_api:write_cors_headers(Request),
             format("Content-Type: application/json~n~n"),
             json:json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success',
@@ -2648,7 +2771,8 @@ embeddings_handler(get, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(embeddings_handler), _)),
             do_or_die(
@@ -2694,7 +2818,8 @@ embeddings_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(embeddings_handler), _)),
             do_or_die(
@@ -2767,7 +2892,7 @@ embeddings_extra_param(Params, count=Count) :-
 :- plugin_api:register_route(api(index/Path),
     plugin_api:cors_handler(Method, vectorlink:index_handler(Path)),
     [method(Method), prefix, time_limit(infinite),
-     methods([options,get,post,delete])]).
+     methods([options,get,post,put,delete])]).
 
 :- plugin_api:register_route(api(search/Path),
     plugin_api:cors_handler(Method, vectorlink:search_handler(Path)),
@@ -4009,7 +4134,7 @@ test("authz parity: denied caller cannot search (resolve_descriptor_auth throws)
      ]) :-
     open_descriptor(system_descriptor{}, System_DB),
     user_key_user_id(System_DB, 'UnprivUser', 'pass123', Auth),
-    resolve_descriptor_auth(read, System_DB, Auth, "admin/secretdb", instance, _Descriptor).
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth, "admin/secretdb", _Descriptor).
 
 test("authz parity: authorised caller passes resolve_descriptor_auth",
      [ setup((setup_temp_store(State),
@@ -4019,7 +4144,7 @@ test("authz parity: authorised caller passes resolve_descriptor_auth",
      ]) :-
     open_descriptor(system_descriptor{}, System_DB),
     super_user_authority(Auth),
-    resolve_descriptor_auth(read, System_DB, Auth, "admin/opendb", instance, _Descriptor).
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth, "admin/opendb", _Descriptor).
 
 test("authz parity: denied caller search never reaches engine stub",
      [ setup((setup_temp_store(State),
@@ -4037,8 +4162,8 @@ test("authz parity: denied caller search never reaches engine stub",
     once(( open_descriptor(system_descriptor{}, System_DB),
            user_key_user_id(System_DB, 'DeniedUser', 'pass456', Auth),
            catch(
-               (   resolve_descriptor_auth(read, System_DB, Auth,
-                                           "admin/guardeddb", instance, _Desc),
+               (   resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth,
+                                           "admin/guardeddb", _Desc),
                    vectorlink:vectorlink_endpoint(Endpoint),
                    io_search_forward(Endpoint, "admin/guardeddb", commit("fake_commit"),
                                      [], [], _Response, _DV)
@@ -4058,7 +4183,7 @@ test("authz parity: denied caller cannot get statistics (resolve_descriptor_auth
      ]) :-
     open_descriptor(system_descriptor{}, System_DB),
     user_key_user_id(System_DB, 'StatsBlockedUser', 'pass789', Auth),
-    resolve_descriptor_auth(read, System_DB, Auth, "admin/statsdb", instance, _Descriptor).
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth, "admin/statsdb", _Descriptor).
 
 test("authz parity: denied caller statistics never reaches engine stub",
      [ setup((setup_temp_store(State),
@@ -4076,8 +4201,8 @@ test("authz parity: denied caller statistics never reaches engine stub",
     once(( open_descriptor(system_descriptor{}, System_DB),
            user_key_user_id(System_DB, 'StatsDeniedUser', 'pass012', Auth),
            catch(
-               (   resolve_descriptor_auth(read, System_DB, Auth,
-                                           "admin/guardedstatsdb", instance, _Desc),
+               (   resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth,
+                                           "admin/guardedstatsdb", _Desc),
                    vectorlink:vectorlink_endpoint(Endpoint),
                    io_statistics_forward(Endpoint, "admin/guardedstatsdb", commit("fake_commit"),
                                          [], _Response, _DV)
@@ -4115,7 +4240,7 @@ test("authz parity: denied caller cannot resolve (resolve_descriptor_auth throws
      ]) :-
     open_descriptor(system_descriptor{}, System_DB),
     user_key_user_id(System_DB, 'ResolveDeniedUser', 'pass321', Auth),
-    resolve_descriptor_auth(read, System_DB, Auth, "admin/resolvedb", instance, _Descriptor).
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth, "admin/resolvedb", _Descriptor).
 
 test("authz parity: authorised caller passes resolve for resolve endpoint",
      [ setup((setup_temp_store(State),
@@ -4125,7 +4250,7 @@ test("authz parity: authorised caller passes resolve for resolve endpoint",
      ]) :-
     open_descriptor(system_descriptor{}, System_DB),
     super_user_authority(Auth),
-    resolve_descriptor_auth(read, System_DB, Auth, "admin/resolveopendb", instance, _Descriptor).
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth, "admin/resolveopendb", _Descriptor).
 
 test("authz parity: denied caller resolve never reaches engine stub",
      [ setup((setup_temp_store(State),
@@ -4143,8 +4268,8 @@ test("authz parity: denied caller resolve never reaches engine stub",
     once(( open_descriptor(system_descriptor{}, System_DB),
            user_key_user_id(System_DB, 'ResolveBlockedUser', 'pass654', Auth),
            catch(
-               (   resolve_descriptor_auth(read, System_DB, Auth,
-                                           "admin/guardedresolvedb", instance, _Desc),
+               (   resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth,
+                                           "admin/guardedresolvedb", _Desc),
                    vectorlink:vectorlink_endpoint(Endpoint),
                    io_resolve_forward(Endpoint, "admin/guardedresolvedb", commit("fake_commit"),
                                       [], _{}, _Response, _DV)
@@ -4163,6 +4288,36 @@ test("commit_timestamp throws search_served_commit_not_found for non-existent co
     resolve_absolute_string_descriptor("admin/timestampdb", Descriptor),
     get_dict(repository_descriptor, Descriptor, Repo_Desc),
     vectorlink:commit_timestamp(Repo_Desc, "nonexistent_commit_id", _Timestamp).
+
+%% add_searcher_role is det.
+%
+%  Insert a Role/searcher document granting only the search action —
+%  a caller who may search but not read.
+add_searcher_role :-
+    super_user_authority(Auth),
+    api_access_control:api_add_role(
+        _, Auth,
+        json{'@id': "Role/searcher",
+             name: "searcher",
+             action: ["search"]},
+        _).
+
+test("authz parity: search-only caller passes search gate but not document read",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "searchonlydb"),
+              add_searcher_role)),
+       cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    Auth = jwt_scopes([scope_db("admin", "searchonlydb", searcher)]),
+    % search gate passes — search != read
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth,
+                                   "admin/searchonlydb", _Descriptor),
+    % but direct document read is denied
+    catch(resolve_descriptor_auth(read, System_DB, Auth,
+                                  "admin/searchonlydb", instance, _),
+          error(access_not_authorised(_, _, _), _),
+          true).
 
 :- end_tests(vectorlink_search_fronting).
 
@@ -4312,7 +4467,7 @@ test("not_found response has status not_found and empty branch_processing",
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", null, Engine_Stats, Response),
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(branch_processing, Response, BP).
 
@@ -4333,7 +4488,7 @@ test("indexing response includes document progress in engine section",
     Engine_Stats = json{documents:50, chunks:120, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+        Indexer_Progress, "main", "abc123", "abc123", Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(engine, Response, Engine),
     get_dict(processed_documents, Engine, Processed),
@@ -4355,7 +4510,7 @@ test("indexing response does not include document counters in branch_processing"
     Engine_Stats = json{documents:50, chunks:120, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+        Indexer_Progress, "main", "abc123", "abc123", Engine_Stats, Response),
     get_dict(branch_processing, Response, BP).
 
 test("completed response has status completed and engine shows totals",
@@ -4373,7 +4528,7 @@ test("completed response has status completed and engine shows totals",
     Engine_Stats = json{documents:150, chunks:300, indexed_commits:3,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "head123", Engine_Stats, Response),
+        Indexer_Progress, "main", "head123", "head123", Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(branch_processing, Response, BP),
     get_dict(commits_processed, BP, Commits_Processed),
@@ -4396,9 +4551,52 @@ test("error response includes error message",
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", null, Engine_Stats, Response),
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(error, Response, Error).
+
+test("read_only response surfaces handoff pending state",
+     [true((Status == not_found, RO == true, HO == "pending"))]) :-
+    Indexer_Progress = json{status:not_found, read_only:true, handoff:"pending"},
+    Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
+    get_dict(status, Response, Status),
+    get_dict(read_only, Response, RO),
+    get_dict(handoff, Response, HO).
+
+test("read_only response surfaces handoff underway state",
+     [true((RO == true, HO == "underway"))]) :-
+    Indexer_Progress = json{status:not_found, read_only:true, handoff:"underway"},
+    Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
+    get_dict(read_only, Response, RO),
+    get_dict(handoff, Response, HO).
+
+test("writable engine response defaults read_only false and handoff null",
+     [true((RO == false, HO == null))]) :-
+    Indexer_Progress = json{status:completed},
+    Engine_Stats = json{documents:5, chunks:10, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
+    get_dict(read_only, Response, RO),
+    get_dict(handoff, Response, HO).
+
+test("read_only with indexed data still reports completed from last commit",
+     [true((Status == completed, RO == true))]) :-
+    % A read-only instance can still read last-indexed from the shared
+    % data dir — a valid commit overrides not_found as on any engine.
+    Indexer_Progress = json{status:not_found, read_only:true, handoff:null},
+    Engine_Stats = json{documents:5, chunks:10, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "abc123", "abc123", Engine_Stats, Response),
+    get_dict(status, Response, Status),
+    get_dict(read_only, Response, RO).
 
 test("engine section includes searchable_documents and text_segments_indexed from engine stats",
      [true((Searchable == 75, Segments == 200, Sent == 60))]) :-
@@ -4408,7 +4606,7 @@ test("engine section includes searchable_documents and text_segments_indexed fro
     Engine_Stats = json{documents:75, chunks:200, indexed_commits:1,
                         pending_index_fragments:2},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(searchable_documents, Engine, Searchable),
     get_dict(text_segments_indexed, Engine, Segments),
@@ -4812,7 +5010,7 @@ test("index status response includes store_clustering true from engine stats",
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0, store_clustering:true},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(store_clustering, Engine, Store_Clustering).
 
@@ -4822,7 +5020,7 @@ test("index status response includes store_clustering false from engine stats",
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0, store_clustering:false},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(store_clustering, Engine, Store_Clustering).
 
@@ -4832,7 +5030,7 @@ test("index status response defaults store_clustering to null when absent",
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(store_clustering, Engine, Store_Clustering).
 
@@ -4850,7 +5048,7 @@ test("not_found with valid last_indexed commit should be overridden to completed
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+        Indexer_Progress, "main", "abc123", "abc123", Engine_Stats, Response),
     get_dict(status, Response, Status).
 
 test("not_found with null last_indexed commit stays not_found",
@@ -4859,7 +5057,7 @@ test("not_found with null last_indexed commit stays not_found",
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", null, Engine_Stats, Response),
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
     get_dict(status, Response, Status).
 
 test("indexer_unavailable with valid last_indexed commit becomes completed",
@@ -4868,7 +5066,7 @@ test("indexer_unavailable with valid last_indexed commit becomes completed",
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+        Indexer_Progress, "main", "abc123", "abc123", Engine_Stats, Response),
     get_dict(status, Response, Status).
 
 test("indexer_unavailable with null last_indexed commit stays indexer_unavailable",
@@ -4877,7 +5075,135 @@ test("indexer_unavailable with null last_indexed commit stays indexer_unavailabl
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", null, Engine_Stats, Response),
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
     get_dict(status, Response, Status).
 
 :- end_tests(vectorlink_not_found_override).
+
+:- begin_tests(vectorlink_behind_status).
+
+test("completed becomes behind when the branch head moved past last indexed",
+     [true(Status == behind)]) :-
+    Indexer_Progress = json{status:completed},
+    Engine_Stats = json{documents:100, chunks:200, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("completed stays completed when last indexed is the branch head",
+     [true(Status == completed)]) :-
+    Indexer_Progress = json{status:completed},
+    Engine_Stats = json{documents:100, chunks:200, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("not_found becomes behind when a delivered task was lost mid-push",
+     [true(Status == behind)]) :-
+    % The dead man's switch abort scenario: the in-memory registry dropped
+    % the task (not_found) while the engine's last-indexed commit lags the
+    % branch head — reporting completed here is the lie this suite guards.
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:500, chunks:1000, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("behind response carries both commits for the caller to compare",
+     [true((Status == behind, Last == "c1", Head == "c2"))]) :-
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:500, chunks:1000, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status),
+    get_dict(last_indexed_commit, Response, Last),
+    get_dict(branch_head_commit, Response, Head).
+
+test("indexing is not overridden by a moved head",
+     [true(Status == indexing)]) :-
+    % A task in flight owns the status — the gap it is closing is not a
+    % lie and behind would double-report it.
+    Indexer_Progress = json{status:indexing,
+        branch_processing:json{commits_processed:1, total_commits:2,
+            current_commit:"c2", processed_documents:10, total_documents:100}},
+    Engine_Stats = json{documents:500, chunks:1000, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("error is preserved over behind",
+     [true(Status == error)]) :-
+    Indexer_Progress = json{status:error, error:"embed failed"},
+    Engine_Stats = json{documents:500, chunks:1000, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("null branch head keeps the completed override — behind needs a head to compare",
+     [true(Status == completed)]) :-
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:500, chunks:1000, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", null, Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("never-indexed stays not_found even with a branch head",
+     [true(Status == not_found)]) :-
+    % No last-indexed commit: the index does not exist, so not_found is
+    % more honest than behind.
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", null, "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+:- end_tests(vectorlink_behind_status).
+
+:- begin_tests(vectorlink_embedded_paths).
+
+% The engine is opt-in for legacy installs: TERMINUSDB_SERVER_DB_PATH
+% alone (no STORE/VECTORLINK_DATA_DIR) disables it — a stray index dir
+% must never appear next to a store the operator never named.
+test(embedded_data_dir_fails_on_legacy_db_path_only,
+     [cleanup((unsetenv('VECTORLINK_DATA_DIR'), unsetenv('TERMINUSDB_STORE'),
+               unsetenv('TERMINUSDB_SERVER_DB_PATH')))]) :-
+    unsetenv('VECTORLINK_DATA_DIR'),
+    unsetenv('TERMINUSDB_STORE'),
+    setenv('TERMINUSDB_SERVER_DB_PATH', '/tmp/legacy-db'),
+    \+ embedded_data_dir(_).
+
+% Local default users get indexing out of the box: nothing configured →
+% ~/.terminusdb/vectorlink, sibling of the default ~/.terminusdb/db.
+test(embedded_data_dir_defaults_to_home_store,
+     [cleanup((unsetenv('VECTORLINK_DATA_DIR'), unsetenv('TERMINUSDB_STORE'),
+               unsetenv('TERMINUSDB_SERVER_DB_PATH')))]) :-
+    unsetenv('VECTORLINK_DATA_DIR'),
+    unsetenv('TERMINUSDB_STORE'),
+    unsetenv('TERMINUSDB_SERVER_DB_PATH'),
+    expand_file_name('~/.terminusdb/vectorlink', [Default_VL]),
+    embedded_data_dir(Default_VL).
+
+test(embedded_data_dir_env_wins,
+     [cleanup(unsetenv('VECTORLINK_DATA_DIR'))]) :-
+    setenv('VECTORLINK_DATA_DIR', '/tmp/vl-explicit'),
+    embedded_data_dir('/tmp/vl-explicit').
+
+:- end_tests(vectorlink_embedded_paths).
+
+:- begin_tests(vectorlink_store_informs_vl).
+
+test(embedded_data_dir_store_env_wins,
+     [cleanup((unsetenv('VECTORLINK_DATA_DIR'), unsetenv('TERMINUSDB_STORE')))]) :-
+    unsetenv('VECTORLINK_DATA_DIR'),
+    setenv('TERMINUSDB_STORE', '/tmp/store-root'),
+    embedded_data_dir('/tmp/store-root/vectorlink').
+
+:- end_tests(vectorlink_store_informs_vl).

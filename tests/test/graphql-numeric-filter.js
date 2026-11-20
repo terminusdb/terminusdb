@@ -52,6 +52,28 @@ describe('GraphQL numeric filters', function () {
       unsignedLong: { '@type': 'xsd:unsignedLong', '@value': '18446744073709551615' },
       decimalValue: 15.5,
     },
+    {
+      // 20 fractional digits: collapses to 1.0 under double precision.
+      '@type': 'Measure',
+      name: 'e',
+      smallValue: 0,
+      bigValue: 0,
+      floatValue: 0,
+      unsignedInt: 0,
+      unsignedLong: 0,
+      decimalValue: { '@type': 'xsd:decimal', '@value': '1.00000000000000000001' },
+    },
+    {
+      // 10^320: beyond the double finite range (~1.8e308).
+      '@type': 'Measure',
+      name: 'f',
+      smallValue: 0,
+      bigValue: 0,
+      floatValue: 0,
+      unsignedInt: 0,
+      unsignedLong: 0,
+      decimalValue: { '@type': 'xsd:decimal', '@value': `1${'0'.repeat(320)}` },
+    },
   ]
 
   before(async function () {
@@ -144,14 +166,42 @@ describe('GraphQL numeric filters', function () {
     const result = await client.query({
       query: gql`{ Measure(filter: { decimalValue: { ge: 5.05 } }) { name } }`,
     })
-    expect(names(result)).to.deep.equal(['b', 'c', 'd'])
+    expect(names(result)).to.deep.equal(['b', 'c', 'd', 'f'])
   })
 
   it('filters an xsd:decimal field with a string bound', async function () {
     const result = await client.query({
       query: gql`{ Measure(filter: { decimalValue: { ge: "5.05" } }) { name } }`,
     })
-    expect(names(result)).to.deep.equal(['b', 'c', 'd'])
+    expect(names(result)).to.deep.equal(['b', 'c', 'd', 'f'])
+  })
+
+  it('matches an xsd:decimal value at full stored precision', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { decimalValue: { eq: "1.00000000000000000001" } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['e'])
+  })
+
+  it('orders an xsd:decimal bound at the 21st digit', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { decimalValue: { gt: "1.000000000000000000005" } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['b', 'c', 'd', 'e', 'f'])
+  })
+
+  it('does not collapse an xsd:decimal value to its double approximation', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { decimalValue: { eq: "1.0" } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal([])
+  })
+
+  it('filters an xsd:decimal value beyond the double finite range', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { decimalValue: { gt: "9e319" } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['f'])
   })
 
   it('rejects a malformed BigFloat bound with a validation error, not a 500', async function () {

@@ -182,5 +182,103 @@ describe('data-version', function () {
         })
       })
     })
+
+    describe('concurrent writes with the same data version', function () {
+      const type = util.randomString()
+      const N = 4
+
+      before(async function () {
+        await document.insert(agent, { schema: { '@id': type, '@type': 'Class', x: { '@type': 'Optional', '@class': 'xsd:string' } } })
+      })
+
+      async function currentVersion () {
+        const r = await document.get(agent, { query: { as_list: true } })
+        const h = dataVersionHeader(r)
+        expect(h).to.match(/^branch:/)
+        return h
+      }
+
+      function documentRequest (method, query, body, version) {
+        return agent[method](api.path.document(agent))
+          .query({ graph_type: 'instance', author: 'a', message: 'm', ...query })
+          .set('TerminusDB-Data-Version', version)
+          .send(body)
+      }
+
+      async function expectExactlyOneWinner (rs) {
+        expect(rs).to.have.length(N)
+        const winners = rs.filter((r) => r.status >= 200 && r.status < 300)
+        expect(winners, `statuses: ${rs.map((r) => r.status)}`).to.have.length(1)
+        for (const r of rs) {
+          if (r.status >= 300) {
+            expect(r.status, JSON.stringify(r.body)).to.equal(400)
+            expect(r.body['api:error']['@type']).to.equal('api:DataVersionMismatch')
+          }
+        }
+      }
+
+      it('insert: exactly one of N concurrent writes commits', async function () {
+        const h = await currentVersion()
+        const rs = await Promise.all(
+          Array.from({ length: N }, (_, i) =>
+            documentRequest('post', {}, { '@id': `${type}/post-${i}`, '@type': type }, h)))
+        await expectExactlyOneWinner(rs)
+      })
+
+      it('replace: exactly one of N concurrent writes commits', async function () {
+        await document.insert(agent, { instance: { '@id': `${type}/repl`, '@type': type } })
+        const h = await currentVersion()
+        const rs = await Promise.all(
+          Array.from({ length: N }, (_, i) =>
+            documentRequest('put', {}, { '@id': `${type}/repl`, '@type': type, x: `v${i}` }, h)))
+        await expectExactlyOneWinner(rs)
+      })
+
+      it('replace by id: exactly one of N concurrent writes commits', async function () {
+        await document.insert(agent, { instance: { '@id': `${type}/byid`, '@type': type } })
+        const h = await currentVersion()
+        const rs = await Promise.all(
+          Array.from({ length: N }, (_, i) =>
+            documentRequest('put', { id: `${type}/byid` }, { '@id': `${type}/byid`, '@type': type, x: `v${i}` }, h)))
+        await expectExactlyOneWinner(rs)
+      })
+
+      it('delete: exactly one of N concurrent writes commits', async function () {
+        for (let i = 0; i < N; i++) {
+          await document.insert(agent, { instance: { '@id': `${type}/del-${i}`, '@type': type } })
+        }
+        const h = await currentVersion()
+        const rs = await Promise.all(
+          Array.from({ length: N }, (_, i) =>
+            agent.delete(api.path.document(agent))
+              .query({ graph_type: 'instance', author: 'a', message: 'm', id: `${type}/del-${i}` })
+              .set('TerminusDB-Data-Version', h)))
+        await expectExactlyOneWinner(rs)
+      })
+
+      it('woql: exactly one of N concurrent writes commits', async function () {
+        const h = await currentVersion()
+        const insertDoc = (i) => ({
+          '@type': 'InsertDocument',
+          identifier: { '@type': 'NodeValue', node: `${type}/woql-${i}` },
+          document: {
+            '@type': 'Value',
+            dictionary: {
+              '@type': 'DictionaryTemplate',
+              data: [
+                { '@type': 'FieldValuePair', field: '@type', value: { '@type': 'Value', data: type } },
+                { '@type': 'FieldValuePair', field: '@id', value: { '@type': 'Value', data: `${type}/woql-${i}` } },
+              ],
+            },
+          },
+        })
+        const rs = await Promise.all(
+          Array.from({ length: N }, (_, i) =>
+            agent.post(api.path.woqlResource(agent))
+              .set('TerminusDB-Data-Version', h)
+              .send({ commit_info: { author: 'a', message: 'm' }, query: insertDoc(i), optimize: true })))
+        await expectExactlyOneWinner(rs)
+      })
+    })
   })
 })

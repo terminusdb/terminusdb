@@ -3,8 +3,8 @@ use std::{
     io,
 };
 
-use swipl::{atom, predicates, prelude::Atom, result::PrologError};
 use swipl::prelude::PrologText;
+use swipl::{atom, predicates, prelude::Atom, result::PrologError};
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::{
@@ -489,7 +489,11 @@ pub const JSON_TEMPLATE: &str = "http://terminusdb.com/schema/json#template";
 
 /// Embedding nodes directly under the given metadata roots in the merged
 /// layer view (state at this commit).
-fn embedding_nodes(layer: &SyncStoreLayer, embedding_pred: u64, roots: &HashSet<u64>) -> HashSet<u64> {
+fn embedding_nodes(
+    layer: &SyncStoreLayer,
+    embedding_pred: u64,
+    roots: &HashSet<u64>,
+) -> HashSet<u64> {
     let mut out = HashSet::new();
     for r in roots {
         for t in layer.triples_sp(*r, embedding_pred) {
@@ -533,15 +537,17 @@ pub fn changed_embedding_type_ids(layer: &SyncStoreLayer) -> io::Result<HashSet<
     for ty in removed_roots.keys().chain(added_roots.keys()) {
         // Old roots whose subtrees were deleted outright only show in the
         // delta's removed edges; surviving subtrees are in the merged view.
-        let mut old = embedding_nodes(layer, embedding_pred,
-                                      removed_roots.get(ty).unwrap_or(&empty));
+        let mut old = embedding_nodes(
+            layer,
+            embedding_pred,
+            removed_roots.get(ty).unwrap_or(&empty),
+        );
         for r in removed_roots.get(ty).into_iter().flatten() {
             if let Some(objs) = removed_embed.get(r) {
                 old.extend(objs.iter().copied());
             }
         }
-        let new = embedding_nodes(layer, embedding_pred,
-                                  added_roots.get(ty).unwrap_or(&empty));
+        let new = embedding_nodes(layer, embedding_pred, added_roots.get(ty).unwrap_or(&empty));
         if old != new {
             result.insert(*ty);
         }
@@ -613,11 +619,21 @@ mod embedding_change_tests {
     const META_B: &str = "terminusdb:///json/JSON/SHA1/ccccccccccccccccccccccccccccccccccc001";
     const EMB_B: &str = "terminusdb:///json/JSON/SHA1/ccccccccccccccccccccccccccccccccccc002";
 
-    fn metadata_chain(b: &terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayerBuilder, ty: &str, root: &str, emb: &str, template: &str) {
-        b.add_value_triple(ValueTriple::new_node(ty, SYS_METADATA, root)).unwrap();
-        b.add_value_triple(ValueTriple::new_node(root, JSON_EMBEDDING, emb)).unwrap();
-        b.add_value_triple(ValueTriple::new_string_value(emb, JSON_QUERY, "q")).unwrap();
-        b.add_value_triple(ValueTriple::new_string_value(emb, JSON_TEMPLATE, template)).unwrap();
+    fn metadata_chain(
+        b: &terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayerBuilder,
+        ty: &str,
+        root: &str,
+        emb: &str,
+        template: &str,
+    ) {
+        b.add_value_triple(ValueTriple::new_node(ty, SYS_METADATA, root))
+            .unwrap();
+        b.add_value_triple(ValueTriple::new_node(root, JSON_EMBEDDING, emb))
+            .unwrap();
+        b.add_value_triple(ValueTriple::new_string_value(emb, JSON_QUERY, "q"))
+            .unwrap();
+        b.add_value_triple(ValueTriple::new_string_value(emb, JSON_TEMPLATE, template))
+            .unwrap();
     }
 
     /// v1 layer: types A and B each with a metadata chain.
@@ -662,10 +678,18 @@ mod embedding_change_tests {
         // edges churn → chain incomplete → no report.
         let other_old = "terminusdb:///json/JSON/SHA1/ddddddddddddddddddddddddddddddddddd001";
         let other_new = "terminusdb:///json/JSON/SHA1/ddddddddddddddddddddddddddddddddddd002";
-        b.remove_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_A1)).unwrap();
-        b.add_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_A2)).unwrap();
-        b.add_value_triple(ValueTriple::new_node(META_A2, JSON_EMBEDDING, EMB_A1)).unwrap();
-        b.add_value_triple(ValueTriple::new_string_value(META_A2, "http://terminusdb.com/schema/json#other", "x")).unwrap();
+        b.remove_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_A1))
+            .unwrap();
+        b.add_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_A2))
+            .unwrap();
+        b.add_value_triple(ValueTriple::new_node(META_A2, JSON_EMBEDDING, EMB_A1))
+            .unwrap();
+        b.add_value_triple(ValueTriple::new_string_value(
+            META_A2,
+            "http://terminusdb.com/schema/json#other",
+            "x",
+        ))
+        .unwrap();
         let _ = (other_old, other_new);
         let layer = b.commit().unwrap();
 
@@ -700,11 +724,13 @@ mod embedding_change_tests {
         let store = open_sync_memory_store();
         let b = store.create_base_layer().unwrap();
         metadata_chain(&b, TYPE_A, META_A1, EMB_A1, "T {{t}}");
-        b.add_value_triple(ValueTriple::new_node(TYPE_B, SYS_METADATA, META_A1)).unwrap();
+        b.add_value_triple(ValueTriple::new_node(TYPE_B, SYS_METADATA, META_A1))
+            .unwrap();
         let base = b.commit().unwrap();
 
         let b = base.open_write().unwrap();
-        b.remove_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_A1)).unwrap();
+        b.remove_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_A1))
+            .unwrap();
         let layer = b.commit().unwrap();
 
         let changed = changed_embedding_type_ids(&layer).unwrap();
@@ -722,7 +748,8 @@ mod embedding_change_tests {
         let base = b.commit().unwrap();
 
         let b = base.open_write().unwrap();
-        b.add_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_B)).unwrap();
+        b.add_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_B))
+            .unwrap();
         let layer = b.commit().unwrap();
 
         let changed = changed_embedding_type_ids(&layer).unwrap();

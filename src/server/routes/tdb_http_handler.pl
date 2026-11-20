@@ -242,10 +242,16 @@ rust_handler_safe(Request, Response) :-
 %% store_ready_for(+Path) is semidet.
 %
 %  /api/ok bypasses the wait so readiness probes answer during startup.
+%  Every other path waits for the system store *and* for user databases
+%  to be verified servable (`dbs`): dispatching earlier is what let
+%  committed data answer 404/empty during startup. An unregistered `dbs`
+%  component returns ready immediately, so untracked deployments behave
+%  exactly as before.
 store_ready_for(Path) :-
     (   Path == '/api/ok'
     ->  true
-    ;   await_readiness(store, ready)).
+    ;   await_readiness(store, ready),
+        await_readiness(dbs, ready)).
 
 %% http_dispatch_with_expansion(+Request) is det.
 %%
@@ -466,5 +472,46 @@ test("server_not_ready renders through the standard error machinery",
     assertion(sub_string(Text, _, _, _, "503")),
     assertion(sub_string(Text, _, _, _, "api:service_unavailable")),
     assertion(sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
+
+% The `dbs` component covers user-database resolvability after the store
+% opens. Requests must keep waiting until every finalized user database
+% can serve — never dispatch early into phantom 404/empty responses.
+
+test("store_ready_for holds a gated path until user databases are ready",
+     [setup(readiness:reset_readiness), cleanup(readiness:reset_readiness)]) :-
+    readiness:readiness_ready(store),
+    readiness:readiness_pending(dbs),
+    thread_create((sleep(0.2), readiness:readiness_ready(dbs)), _, [detached(true)]),
+    get_time(Start),
+    assertion(store_ready_for('/api/document/admin/db')),
+    get_time(End),
+    assertion(End - Start >= 0.2).
+
+test("store_ready_for fails fast when user database init has failed",
+     [setup((readiness:reset_readiness,
+             readiness:readiness_failed(dbs, init_broken))),
+      cleanup(readiness:reset_readiness)]) :-
+    get_time(Start),
+    assertion(\+ store_ready_for('/api/document/admin/db')),
+    get_time(End),
+    assertion(End - Start < 1).
+
+test("store_ready_for fails when user database readiness never reports",
+     [setup((readiness:reset_readiness,
+             setenv('TERMINUSDB_READINESS_TIMEOUT', '0.2'),
+             readiness:readiness_pending(dbs))),
+      cleanup((unsetenv('TERMINUSDB_READINESS_TIMEOUT'),
+               readiness:reset_readiness))]) :-
+    assertion(\+ store_ready_for('/api/document/admin/db')).
+
+test("dispatch_when_ready throws server_not_ready while databases come up",
+     [setup((readiness:reset_readiness,
+             setenv('TERMINUSDB_READINESS_TIMEOUT', '0.2'),
+             readiness:readiness_ready(store),
+             readiness:readiness_pending(dbs))),
+      cleanup((unsetenv('TERMINUSDB_READINESS_TIMEOUT'),
+               readiness:reset_readiness))]) :-
+    assertion(catch(dispatch_when_ready([path('/api/document/admin/db')]),
+                    error(server_not_ready, _), true)).
 
 :- end_tests(tdb_http_handler).
