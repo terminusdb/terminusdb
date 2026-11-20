@@ -5,7 +5,8 @@
               api_diff_id/8,
               api_diff_id_document/8,
               api_diff_all_documents/7,
-              api_apply_squash_commit/7
+              api_apply_squash_commit/7,
+              api_check_apply_squash_commit/8
           ]).
 
 :- use_module(core(util)).
@@ -16,15 +17,21 @@
 :- use_module(core(api/api_document), [
                   idlists_duplicates_toplevel/3,
                   nonground_captures/2,
-                  compress_doc_ids/4
+                  compress_doc_ids/4,
+                  check_validation_witnesses/3,
+                  compress_witness_json/3
               ]).
 :- use_module(core(document/apply), [apply_diff_ids_captures/7]).
+:- use_module(core(transaction/database),
+              [pre_transaction_tabling/0, post_transaction_tabling/0]).
 :- use_module(core(document/history),
               [changed_document_id/2,
                commits_changed_id/5
               ]).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
+:- use_module(library(pairs)).
+:- use_module(library(ordsets)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).
 :- use_module(library(error), [must_be/2]).
@@ -124,7 +131,8 @@ api_diff(System_DB, Auth, Before, After, Diff, Options) :-
     do_or_die((ground(Before),
                ground(After)),
               error(unground_patch, _)),
-    simple_diff(Before,After,Diff,Options).
+    do_or_die(simple_diff(Before,After,Diff,Options),
+              error(unable_to_diff_documents, _)).
 
 coerce_to_commit(Branch_Descriptor, Commit_Or_Version, Commit_Id) :-
     do_or_die(
@@ -166,14 +174,7 @@ document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction
         open_descriptor(Commit_Descriptor, commit_info{}, Transaction, Map_In, Map_Out),
         error(unresolvable_collection(Commit_Descriptor),_)),
 
-    option(unfold(Unfold), Options, true),
-    must_be(boolean, Unfold),
-
-    Get_Document_Options = options{
-                  compress_ids : true,
-                  unfold: Unfold,
-                  keep_json_type: true
-              },
+    commit_doc_options(Options, Get_Document_Options),
     get_document(Transaction, Doc_Id, Document, Get_Document_Options).
 
 api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Diff, Options) :-
@@ -183,12 +184,13 @@ api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Diff, 
 
     (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map, Options)
     ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _, Options)
-        ->  simple_diff(Before,After,Diff,Options)
-        ;   Diff = json{ '@op' : 'Delete',
+        ->  do_or_die(simple_diff(Before,After,Diff,Options),
+                      error(unable_to_diff_document(Doc_Id), _))
+        ;   Diff = json{ '@op' : "Delete",
                          '@delete' : Before }
         )
     ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _, Options)
-        ->  Diff = json{ '@op' : 'Insert',
+        ->  Diff = json{ '@op' : "Insert",
                          '@insert' : After }
         ;   fail)
     ).
@@ -200,12 +202,50 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
     document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, Transaction, [], _, Options),
 
     normalize_document(Transaction, After_Document, Normal_Document),
-    simple_diff(Before,Normal_Document,Diff,Options).
+    do_or_die(simple_diff(Before,Normal_Document,Diff,Options),
+              error(unable_to_diff_document(Doc_Id), _)).
 
 commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed) :-
     commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed, options{}).
 
+%% commit_doc_options(+Options, -Doc_Options) is det.
+%
+%  The fixed option set get_document sees when reading a document at a
+%  commit — shared by enumeration and theirs-resolution.
+commit_doc_options(Options, Doc_Options) :-
+    option(unfold(Unfold), Options, true),
+    must_be(boolean, Unfold),
+    Doc_Options = options{compress_ids:true,
+                          unfold:Unfold,
+                          keep_json_type:true}.
+
+%% open_commit_transaction(+Branch_Descriptor, +Commit_Id, -Transaction)
+%
+%  Opens the commit's read transaction once — callers reuse it across
+%  every changed document instead of reopening the descriptor per doc.
+open_commit_transaction(Branch_Descriptor, Commit_Id, Transaction) :-
+    resolve_relative_descriptor(Branch_Descriptor,
+                                ["commit", Commit_Id],
+                                Commit_Descriptor),
+    do_or_die(
+        open_descriptor(Commit_Descriptor, Transaction),
+        error(unresolvable_collection(Commit_Descriptor),_)).
+
 document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Diff, Options) :-
+    commit_doc_options(Options, Doc_Options),
+    once(open_commit_transaction(Branch_Descriptor, Before_Commit_Id,
+                                 Before_Transaction)),
+    once(open_commit_transaction(Branch_Descriptor, After_Commit_Id,
+                                 After_Transaction)),
+    document_diffs_from_transactions(Branch_Descriptor, Before_Commit_Id,
+                                     After_Commit_Id, Before_Transaction,
+                                     After_Transaction, Doc_Options, Diff,
+                                     Options).
+
+document_diffs_from_transactions(Branch_Descriptor, Before_Commit_Id,
+                                 After_Commit_Id, Before_Transaction,
+                                 After_Transaction, Doc_Options, Diff,
+                                 Options) :-
     option(start(Start), Options),
     option(count(Count), Options),
     limit(
@@ -213,14 +253,16 @@ document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id
         offset(
             Start,
             (   commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
-                (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map, Options)
-                ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _, Options)
-                    ->  simple_diff(Before,After,Diff,Options)
-                    ;   Diff = json{ '@op' : 'Delete',
+                (   get_document(Before_Transaction, Doc_Id, Before, Doc_Options)
+                ->  (   get_document(After_Transaction, Doc_Id, After, Doc_Options)
+                    ->  do_or_die(simple_diff(Before,After,Diff,Options),
+                                  error(unable_to_diff_document(Doc_Id),
+                                        _))
+                    ;   Diff = json{ '@op' : "Delete",
                                      '@delete' : Before }
                     )
-                ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _, Options)
-                    ->  Diff = json{ '@op' : 'Insert',
+                ;   (   get_document(After_Transaction, Doc_Id, After, Doc_Options)
+                    ->  Diff = json{ '@op' : "Insert",
                                      '@insert' : After }
                     ;   fail)
                 ),
@@ -243,31 +285,245 @@ api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Dif
            ).
 
 api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, After_Version, Options) :-
-    resolve_descriptor_auth(write, System_DB, Auth, Path, instance, Branch_Descriptor),
-    coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
-    coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
-    create_context(Branch_Descriptor, Commit_Info, Context),
-    merge_options(Options, options{keep:json{'@id':true, '@type':true},
-                                   count:inf,
-                                   start:0}, Merged_Options),
+    squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
+                       After_Version, Options, Context, Branch_Descriptor,
+                       Before_Commit_Id, After_Commit_Id, Resolution,
+                       Merged_Options),
     with_transaction(
         Context,
-        (   findall(Witness,
-                    (   document_diffs_from_commits(Branch_Descriptor,
-                                                    Before_Commit_Id,
-                                                    After_Commit_Id,
-                                                    Diff,
-                                                    Merged_Options),
-                        apply_diff(Context,Diff,Witness,Merged_Options),
-                        \+ Witness = null
-                    ),
-                    Witnesses),
+        (   squash_merge_witnesses(Context, Branch_Descriptor,
+                                   Before_Commit_Id, After_Commit_Id,
+                                   Resolution, Merged_Options, Witnesses),
             (   Witnesses = []
             ->  true
             ;   throw(error(apply_squash_witnesses(Witnesses)))
             )
         ),
         _
+    ).
+
+/* api_check_apply_squash_commit — dry-run for POST /api/apply.
+ *
+ *  Runs the same merge against a context whose transaction is never run:
+ *  the uncommitted layer is discarded when the call returns, so the
+ *  branch head does not move. Witnesses carry @expected/@found so a
+ *  caller can render both sides of a conflict before committing.
+ */
+api_check_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, After_Version, Options, Result) :-
+    squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
+                       After_Version, Options, Context, Branch_Descriptor,
+                       Before_Commit_Id, After_Commit_Id, Resolution,
+                       Merged_Options),
+    once(query_context_transaction_objects(Context, [Transaction])),
+    database_prefixes(Transaction, Prefixes),
+    setup_call_cleanup(
+        pre_transaction_tabling,
+        once(catch(
+            (   squash_merge_witnesses(Context, Branch_Descriptor,
+                                       Before_Commit_Id, After_Commit_Id,
+                                       Resolution,
+                                       Merged_Options.put(_{dry_run:true}),
+                                       Merge_Witnesses),
+                check_validation_witnesses(Context, Options,
+                                           Validation_Witnesses0),
+                maplist(compress_witness_json(Prefixes),
+                        Validation_Witnesses0, Validation_Witnesses),
+                append(Merge_Witnesses, Validation_Witnesses, Witnesses),
+                check_apply_result(Witnesses, Result)
+            ),
+            error(schema_check_failure(Witnesses0), _),
+            (   maplist(compress_witness_json(Prefixes),
+                        Witnesses0, Witnesses),
+                check_apply_result(Witnesses, Result)))),
+        post_transaction_tabling).
+
+check_apply_result(Witnesses, Result) :-
+    (   Witnesses = []
+    ->  Result = json{'@type':'api:CheckResponse',
+                      'api:valid':true,
+                      'api:witnesses':[]}
+    ;   Result = json{'@type':'api:CheckResponse',
+                      'api:valid':false,
+                      'api:witnesses':Witnesses}).
+
+squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
+                   After_Version, Options, Context, Branch_Descriptor,
+                   Before_Commit_Id, After_Commit_Id, Resolution,
+                   Merged_Options) :-
+    resolve_descriptor_auth(write, System_DB, Auth, Path, instance, Branch_Descriptor),
+    option(type(Type), Options, squash),
+    do_or_die(Type = squash,
+              error(bad_apply_type(Type), _)),
+    coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
+    coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
+    % Squash merges instance documents only — a schema delta between the
+    % endpoints cannot be applied, so refuse it instead of dropping it.
+    create_context(Branch_Descriptor.repository_descriptor, Repo_Context),
+    ref_entity:commit_id_uri(Repo_Context, Before_Commit_Id, Before_Commit_Uri),
+    ref_entity:commit_id_uri(Repo_Context, After_Commit_Id, After_Commit_Uri),
+    (   ref_entity:layer_uri_for_commit(Repo_Context, Before_Commit_Uri,
+                                        schema, Before_Schema_Uri)
+    ->  true
+    ;   Before_Schema_Uri = none),
+    (   ref_entity:layer_uri_for_commit(Repo_Context, After_Commit_Uri,
+                                        schema, After_Schema_Uri)
+    ->  true
+    ;   After_Schema_Uri = none),
+    do_or_die(Before_Schema_Uri = After_Schema_Uri,
+              error(apply_schema_delta(Before_Commit_Id, After_Commit_Id), _)),
+    create_context(Branch_Descriptor, Commit_Info, Context),
+    option(conflict_resolution(Raw_Resolution), Options, error),
+    normalize_conflict_resolution(Raw_Resolution, Context, Resolution),
+    merge_options(Options, options{keep:json{'@id':true, '@type':true},
+                                   count:inf,
+                                   start:0}, Merged_Options).
+
+squash_merge_witnesses(Context, Branch_Descriptor, Before_Commit_Id,
+                       After_Commit_Id, Resolution, Merged_Options,
+                       Witnesses) :-
+    commit_doc_options(Merged_Options, Doc_Options),
+    once(open_commit_transaction(Branch_Descriptor, Before_Commit_Id,
+                                 Before_Transaction)),
+    once(open_commit_transaction(Branch_Descriptor, After_Commit_Id,
+                                 After_Transaction)),
+    findall(Witness,
+            (   document_diffs_from_transactions(Branch_Descriptor,
+                                                 Before_Commit_Id,
+                                                 After_Commit_Id,
+                                                 Before_Transaction,
+                                                 After_Transaction,
+                                                 Doc_Options, Diff,
+                                                 Merged_Options),
+                apply_diff(Context,Diff,Witness0,Merged_Options),
+                resolve_squash_conflict(Context, After_Transaction,
+                                        Doc_Options, Diff,
+                                        Witness0, Resolution, Witness),
+                \+ Witness = null
+            ),
+            Witnesses).
+
+%% normalize_conflict_resolution(+Raw, +Context, -Resolution) is det.
+%
+% Accepts a bare winner atom/string ("error", "ours", "theirs") or a dict
+% with `default` and `documents` keys. `documents` maps each winner atom
+% to a list of document ids — `{"theirs": ["Person/Jane"], "ours": [...]}` —
+% so arbitrary document ids never sit in JSON object keys. Ids may be
+% @base-compressed, prefixed or absolute IRIs; all are expanded against
+% the context prefixes and stored id->winner so lookup happens in the
+% expanded form the diffs carry. An id listed under two winners is
+% ambiguous and rejected.
+normalize_conflict_resolution(Raw, Context, resolution{default:Default, documents:Documents}) :-
+    (   is_dict(Raw)
+    ->  (   get_dict(default, Raw, Default0)
+        ->  true
+        ;   Default0 = error
+        ),
+        (   get_dict(documents, Raw, Documents0)
+        ->  do_or_die(is_dict(Documents0),
+                      error(bad_conflict_resolution(Raw), _)),
+            get_dict(prefixes, Context, Prefixes),
+            dict_pairs(Documents0, json, Winner_Pairs),
+            findall(Id-Winner,
+                    (   member(Win_Raw-Ids, Winner_Pairs),
+                        (   resolution_winner_value(Win_Raw, Winner)
+                        ->  do_or_die(is_list(Ids),
+                                      error(bad_conflict_resolution(Raw), _)),
+                            member(Id0, Ids),
+                            (   catch((atom_string(Id_Atom, Id0),
+                                       prefix_expand(Id_Atom, Prefixes, Id)),
+                                      error(_, _), fail)
+                            ->  true
+                            ;   throw(error(bad_conflict_resolution(Raw), _)))
+                        ;   throw(error(bad_conflict_resolution(Raw), _))
+                        )
+                    ),
+                    Doc_Pairs0),
+            keysort(Doc_Pairs0, Sorted_Pairs),
+            group_pairs_by_key(Sorted_Pairs, Grouped),
+            (   member(_-Winners, Grouped),
+                sort(Winners, Distinct_Winners),
+                length(Distinct_Winners, N), N > 1
+            ->  throw(error(bad_conflict_resolution(Raw), _))
+            ;   true),
+            maplist([Id-[W|_], Id-W]>>true, Grouped, Doc_Pairs),
+            dict_create(Documents, json, Doc_Pairs)
+        ;   Documents = json{}
+        ),
+        (   resolution_winner_value(Default0, Default)
+        ->  true
+        ;   throw(error(bad_conflict_resolution(Raw), _))
+        )
+    ;   resolution_winner_value(Raw, Default)
+    ->  Documents = json{}
+    ;   throw(error(bad_conflict_resolution(Raw), _))
+    ).
+
+%% resolution_winner_value(+Raw, -Winner) is semidet.
+%
+% Winner values are atoms in {error, ours, theirs}; raw strings are
+% converted, atoms pass through.
+resolution_winner_value(Raw, Winner) :-
+    (   atom(Raw)
+    ->  Winner = Raw
+    ;   catch(atom_string(Winner, Raw), _, fail)
+    ),
+    memberchk(Winner, [error, ours, theirs]).
+
+%% resolution_winner(+Resolution, +Doc_Id, -Winner) is det.
+resolution_winner(resolution{default:Default, documents:Documents}, Doc_Id, Winner) :-
+    atom_string(Key, Doc_Id),
+    (   get_dict(Key, Documents, Winner)
+    ->  true
+    ;   Winner = Default
+    ).
+
+%% resolve_squash_conflict(+Context, +After_Transaction, +Doc_Options,
+%%                         +Diff, +Witness0, +Resolution, -Witness) is det.
+%
+% Decides the outcome of a conflict witness under the resolution recipe:
+% `error` keeps the witness (the apply will fail with it), `ours` keeps
+% the target state, and `theirs` applies the incoming side — a delete for
+% delete diffs, otherwise the document read through After_Transaction.
+resolve_squash_conflict(_Context, _After_Transaction, _Doc_Options, _Diff, null, _Resolution, null) :-
+    !.
+resolve_squash_conflict(Context, After_Transaction, Doc_Options, Diff, Witness0, Resolution, Witness) :-
+    % Documents map keys are expanded at normalize time, so the expanded
+    % IRI carried by the diff is the lookup key directly.
+    patch_id(Diff, Doc_Id),
+    resolution_winner(Resolution, Doc_Id, Winner),
+    (   Winner = error
+    ->  Witness = Witness0
+    ;   Winner = ours
+    ->  Witness = null
+    ;   Winner = theirs
+    ->  squash_apply_theirs(Context, After_Transaction, Doc_Options, Diff, Doc_Id),
+        Witness = null
+    ).
+
+squash_apply_theirs(Context, _After_Transaction, _Doc_Options, Diff, Doc_Id) :-
+    get_dict('@delete', Diff, _),
+    !,
+    catch(delete_document(Context, Doc_Id),
+          error(document_not_found(_), _),
+          true).
+squash_apply_theirs(Context, After_Transaction, Doc_Options, Diff, Doc_Id) :-
+    (   get_dict('@insert', Diff, Doc)
+    ->  true
+    ;   get_document(After_Transaction, Doc_Id, Doc, Doc_Options)
+    ),
+    squash_force_document(Context, Doc, _Id).
+
+%% squash_force_document(+Context, +Doc, -Id) is det.
+%
+% Writes Doc as the target state whether or not it already exists,
+% mirroring the raw-JSON bypass in apply_replace_document for
+% JSONDocument instances.
+squash_force_document(Context, Doc, Id) :-
+    (   get_dict('@type', Doc, Type),
+        is_json_document_type(Type)
+    ->  del_dict('@type', Doc, _, Raw_Doc),
+        replace_document(Context, Raw_Doc, true, true, Id)
+    ;   replace_document(Context, Doc, true, false, Id)
     ).
 
 
@@ -405,6 +661,858 @@ test(schemaless_apply_insert_modify_delete,
     get_dict(n, Doc_A, 99),
     get_document(Dev_Transaction, 'item/b', _Doc_B),
     \+ get_document(Dev_Transaction, 'item/c', _Doc_C).
+
+/* Three-way merge setup shared by the delete-edit tests:
+ *
+ *   Commit1 (base)        documents exist
+ *      |-- target branch: Main_Body runs (edits and/or deletes)
+ *      `-- dev branch:     Dev_Body runs (does the opposite)
+ *
+ * apply diff(Commit1 -> dev head) onto the target head must report a
+ * DeleteEditConflict witness instead of silently dropping a side.
+ */
+
+% Bodies are arity-5 call targets: (SystemDB, Auth, Path, Head, Options).
+% Head is bound only for the dev run; the main run leaves it anonymous.
+delete_edit_setup(SystemDB, Auth, Main_Path, Dev_Path, Commit1, Dev_Head,
+                  Docs_Base, Main_Body, Dev_Body) :-
+    delete_edit_setup(SystemDB, Auth, Main_Path, Dev_Path, Commit1, Dev_Head,
+                      [author("gavin"), message("test."), raw_json(true)],
+                      Docs_Base, Main_Body, Dev_Body).
+
+delete_edit_setup(SystemDB, Auth, Main_Path, Dev_Path, Commit1, Dev_Head,
+                  Options, Docs_Base, Main_Body, Dev_Body) :-
+    open_string(Docs_Base, S1),
+    api_insert_documents(SystemDB, Auth, Main_Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+
+    call(Main_Body, SystemDB, Auth, Main_Path, _Main_Head, Options),
+
+    atomic_list_concat([Main_Path,'/local/branch/dev'], Dev_Path),
+    atomic_list_concat([Main_Path,'/local/commit/',Commit1], Commit_Path),
+    branch_create(SystemDB, Auth, Dev_Path, branch(Commit_Path), _Branch_Uri),
+
+    call(Dev_Body, SystemDB, Auth, Dev_Path, Dev_Head, Options).
+
+delete_doc_body(SystemDB, Auth, Path, Head, Options) :-
+    open_string('["item/a"]', S),
+    api_delete_documents(SystemDB, Auth, Path, S, no_data_version,
+                         data_version(branch,Head), _, _, Options).
+
+edit_doc_body(SystemDB, Auth, Path, Head, Options) :-
+    open_string('{"@id":"item/a","name":"alpha","n":2}', S),
+    api_replace_documents(SystemDB, Auth, Path, S, no_data_version,
+                          data_version(branch,Head), _, _,
+                          [create(false)|Options]).
+
+% Finds the diff in Diffs whose document id — '@id' on field diffs,
+% '@insert'.'@id' on inserts, '@delete'.'@id' on deletes — expands to
+% the compressed form under the test @base.
+diff_id_in(Diffs, Compressed_Id, Diff) :-
+    member(Diff, Diffs),
+    (   get_dict('@insert', Diff, Doc)
+    ->  get_dict('@id', Doc, Raw_Id)
+    ;   get_dict('@delete', Diff, Doc)
+    ->  get_dict('@id', Doc, Raw_Id)
+    ;   get_dict('@id', Diff, Raw_Id)),
+    atom_string(Id_Atom, Raw_Id),
+    atomic_list_concat(['http://somewhere.for.now/document/',
+                        Compressed_Id], Id_Atom).
+
+test(apply_delete_edit_conflict_diff_deletes,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+                      '[{"@id":"item/a","name":"alpha","n":1}]',
+                      edit_doc_body, delete_doc_body),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                Commit1, Dev_Head, []),
+        E,
+        true),
+    E = error(apply_squash_witnesses(Witnesses)),
+    member(W, Witnesses),
+    json{'@op':'DeleteEditConflict',
+         '@id':"item/a",
+         '@deleted_by':"theirs"} :< W,
+    % witnesses are identities only — @expected/@found belong to dry_run
+    \+ get_dict('@expected', W, _),
+    \+ get_dict('@found', W, _),
+
+    % nothing was written: ours' edit survives
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'item/a', Doc_A),
+    get_dict(n, Doc_A, 2).
+
+test(apply_delete_edit_conflict_target_deletes,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+                      '[{"@id":"item/a","name":"alpha","n":1}]',
+                      delete_doc_body, edit_doc_body),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                Commit1, Dev_Head, []),
+        E,
+        true),
+    E = error(apply_squash_witnesses(Witnesses)),
+    member(W, Witnesses),
+    json{'@op':'DeleteEditConflict',
+         '@id':"item/a",
+         '@deleted_by':"ours"} :< W,
+
+    % nothing was written: ours' delete survives
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    \+ get_document(Main_T, 'item/a', _).
+
+test(apply_delete_edit_resolution_ours_keeps_target,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    % diff deletes item/a, ours edited it: ours wins, doc keeps n=2
+    delete_edit_setup(SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+                      '[{"@id":"item/a","name":"alpha","n":1}]',
+                      edit_doc_body, delete_doc_body),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                            Commit1, Dev_Head,
+                            [conflict_resolution(ours)]),
+
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'item/a', Doc_A),
+    get_dict(n, Doc_A, 2).
+
+test(apply_delete_edit_resolution_theirs_deletes,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    % diff deletes item/a, ours edited it: theirs wins, doc is gone
+    delete_edit_setup(SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+                      '[{"@id":"item/a","name":"alpha","n":1}]',
+                      edit_doc_body, delete_doc_body),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                            Commit1, Dev_Head,
+                            [conflict_resolution(theirs)]),
+
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    \+ get_document(Main_T, 'item/a', _).
+
+test(apply_delete_edit_resolution_theirs_resurrects,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    % diff edits item/a, ours deleted it: theirs wins, doc back at n=2
+    delete_edit_setup(SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+                      '[{"@id":"item/a","name":"alpha","n":1}]',
+                      delete_doc_body, edit_doc_body),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                            Commit1, Dev_Head,
+                            [conflict_resolution(theirs)]),
+
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'item/a', Doc_A),
+    get_dict(n, Doc_A, 2).
+
+test(apply_delete_edit_resolution_per_document,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    % ours deletes item/a and edits item/b; the diff edits item/a and
+    % deletes item/b. Recipe: item/a -> theirs (resurrect at n=2),
+    % item/b -> default ours (keep ours' edit at n=9).
+    delete_edit_setup(
+        SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+        '[{"@id":"item/a","name":"alpha","n":1},{"@id":"item/b","name":"beta","n":1}]',
+        {SystemDB, Auth}/[_, _, Main_Path, _Main_Head, Options]>>(
+            open_string('["item/a"]', SD),
+            api_delete_documents(SystemDB, Auth, Main_Path, SD, no_data_version,
+                                 _, _, _, Options),
+            open_string('{"@id":"item/b","name":"beta","n":9}', SE),
+            api_replace_documents(SystemDB, Auth, Main_Path, SE, no_data_version,
+                                  _, _, _, [create(false)|Options])
+        ),
+        {SystemDB, Auth}/[_, _, Dev_Path_In, Dev_Head_Out, Options]>>(
+            open_string('{"@id":"item/a","name":"alpha","n":2}', SE),
+            api_replace_documents(SystemDB, Auth, Dev_Path_In, SE, no_data_version,
+                                  _, _, _, [create(false)|Options]),
+            open_string('["item/b"]', SD),
+            api_delete_documents(SystemDB, Auth, Dev_Path_In, SD, no_data_version,
+                                 data_version(branch,Dev_Head_Out), _, _, Options)
+        )),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                            Commit1, Dev_Head,
+                            [conflict_resolution(
+                                 json{default:"ours",
+                                      documents:json{theirs:["item/a"]}})]),
+
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'item/a', Doc_A),
+    get_dict(n, Doc_A, 2),
+    get_document(Main_T, 'item/b', Doc_B),
+    get_dict(n, Doc_B, 9).
+
+test(apply_rejects_unknown_type,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [author("gavin"), message("test."), raw_json(true)],
+    open_string('[{"@id":"item/a","name":"alpha","n":1}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                Commit1, Commit1, [type(banana)]),
+        E,
+        true),
+    E = error(bad_apply_type(banana), _).
+
+test(apply_rejects_malformed_conflict_resolution,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [author("gavin"), message("test."), raw_json(true)],
+    open_string('[{"@id":"item/a","name":"alpha","n":1}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                Commit1, Commit1,
+                                [conflict_resolution(json{documents:"item/a"})]),
+        E1,
+        true),
+    E1 = error(bad_conflict_resolution(_), _),
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                Commit1, Commit1,
+                                [conflict_resolution(5)]),
+        E2,
+        true),
+    E2 = error(bad_conflict_resolution(5), _).
+
+/* Schema'd documents exercise the same compare as schemaless ones but
+ * through a different render path: the delete proceeds only when the
+ * target document is structurally equal to the base embedded in the
+ * @delete dict. */
+test(apply_delete_edit_schema_delete_untouched,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [graph_type(instance), author("gavin"), message("test."),
+               full_replace(false), json(false)],
+
+    delete_edit_setup(
+        SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head, Options,
+        '{"@id":"City/a","@type":"City","name":"Warsaw"}',
+        {}/[_, _, _, _, _]>>true,
+        {}/[SystemDB_, Auth_, Path_, Head_, Options_]>>(
+            open_string('["City/a"]', SD),
+            api_delete_documents(SystemDB_, Auth_, Path_, SD, no_data_version,
+                                 data_version(branch,Head_), _, _, Options_))),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                            Commit1, Dev_Head, []),
+
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    \+ get_document(Main_T, 'City/a', _).
+
+test(apply_delete_edit_conflict_schema,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [graph_type(instance), author("gavin"), message("test."),
+               full_replace(false), json(false)],
+
+    delete_edit_setup(
+        SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head, Options,
+        '{"@id":"City/a","@type":"City","name":"Warsaw"}',
+        {}/[SystemDB_, Auth_, Path_, _Head, Options_]>>(
+            open_string('{"@id":"City/a","@type":"City","name":"Krakow"}', SE),
+            api_replace_documents(SystemDB_, Auth_, Path_, SE, no_data_version,
+                                  _, _, _, [create(false)|Options_])),
+        {}/[SystemDB_, Auth_, Path_, Head_, Options_]>>(
+            open_string('["City/a"]', SD),
+            api_delete_documents(SystemDB_, Auth_, Path_, SD, no_data_version,
+                                 data_version(branch,Head_), _, _, Options_))),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                Commit1, Dev_Head, []),
+        E,
+        true),
+    E = error(apply_squash_witnesses(Witnesses)),
+    member(W, Witnesses),
+    json{'@op':'DeleteEditConflict',
+         '@id':"City/a",
+         '@deleted_by':"theirs"} :< W,
+
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'City/a', Doc_A),
+    get_dict(name, Doc_A, "Krakow").
+
+/* match_final_state tolerates a delete that is already the target state;
+ * a target that diverged from base is a real conflict, not the final
+ * state, so the witness still fires. */
+test(apply_delete_edit_match_final_state_still_conflicts,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+                      '[{"@id":"item/a","name":"alpha","n":1}]',
+                      edit_doc_body, delete_doc_body),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                Commit1, Dev_Head, [match_final_state(true)]),
+        E,
+        true),
+    E = error(apply_squash_witnesses(Witnesses)),
+    member(W, Witnesses),
+    json{'@op':'DeleteEditConflict', '@deleted_by':"theirs"} :< W.
+
+test(apply_delete_edit_match_final_state_still_conflicts_schema,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [graph_type(instance), author("gavin"), message("test."),
+               full_replace(false), json(false)],
+
+    delete_edit_setup(
+        SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head, Options,
+        '{"@id":"City/a","@type":"City","name":"Warsaw"}',
+        {}/[SystemDB_, Auth_, Path_, _Head, Options_]>>(
+            open_string('{"@id":"City/a","@type":"City","name":"Krakow"}', SE),
+            api_replace_documents(SystemDB_, Auth_, Path_, SE, no_data_version,
+                                  _, _, _, [create(false)|Options_])),
+        {}/[SystemDB_, Auth_, Path_, Head_, Options_]>>(
+            open_string('["City/a"]', SD),
+            api_delete_documents(SystemDB_, Auth_, Path_, SD, no_data_version,
+                                 data_version(branch,Head_), _, _, Options_))),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                Commit1, Dev_Head, [match_final_state(true)]),
+        E,
+        true),
+    E = error(apply_squash_witnesses(Witnesses)),
+    member(W, Witnesses),
+    json{'@op':'DeleteEditConflict', '@deleted_by':"theirs"} :< W.
+
+/* theirs on an InsertConflict: the incoming document replaces the
+ * conflicting target document entirely. */
+test(apply_resolution_theirs_insert_conflict,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(
+        SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+        '[{"@id":"item/a","name":"alpha","n":1}]',
+        {}/[SystemDB_, Auth_, Path_, _Head, Options_]>>(
+            open_string('[{"@id":"item/x","name":"main","n":1}]', SM),
+            api_insert_documents(SystemDB_, Auth_, Path_, SM, no_data_version,
+                                 _, _, _, Options_)),
+        {}/[SystemDB_, Auth_, Path_, Head_, Options_]>>(
+            open_string('[{"@id":"item/x","name":"dev","n":7}]', SD),
+            api_insert_documents(SystemDB_, Auth_, Path_, SD, no_data_version,
+                                 data_version(branch,Head_), _, _, Options_))),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                            Commit1, Dev_Head,
+                            [conflict_resolution(theirs)]),
+
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'item/x', Doc_X),
+    get_dict(n, Doc_X, 7).
+
+/* theirs on a field-level Conflict: the whole incoming document state
+ * wins, not just the conflicting field. */
+test(apply_resolution_theirs_field_conflict,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(
+        SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+        '[{"@id":"item/a","name":"alpha","n":1}]',
+        edit_doc_body,
+        {}/[SystemDB_, Auth_, Path_, Head_, Options_]>>(
+            open_string('{"@id":"item/a","name":"alpha","n":3}', SD),
+            api_replace_documents(SystemDB_, Auth_, Path_, SD, no_data_version,
+                                  data_version(branch,Head_), _, _,
+                                  [create(false)|Options_]))),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                            Commit1, Dev_Head,
+                            [conflict_resolution(theirs)]),
+
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'item/a', Doc_A),
+    get_dict(n, Doc_A, 3).
+
+/* Every conflicting document must surface in a single witnesses list so
+ * callers resolve them in one pass instead of discovering them serially. */
+test(apply_delete_edit_conflict_reports_all_witnesses,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(
+        SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+        '[{"@id":"item/a","name":"alpha","n":1},{"@id":"item/b","name":"beta","n":1}]',
+        {SystemDB, Auth}/[_, _, Main_Path, _Main_Head, Options]>>(
+            open_string('["item/a"]', SD),
+            api_delete_documents(SystemDB, Auth, Main_Path, SD, no_data_version,
+                                 _, _, _, Options),
+            open_string('{"@id":"item/b","name":"beta","n":9}', SE),
+            api_replace_documents(SystemDB, Auth, Main_Path, SE, no_data_version,
+                                  _, _, _, [create(false)|Options])
+        ),
+        {SystemDB, Auth}/[_, _, Dev_Path_In, Dev_Head_Out, Options]>>(
+            open_string('{"@id":"item/a","name":"alpha","n":2}', SE),
+            api_replace_documents(SystemDB, Auth, Dev_Path_In, SE, no_data_version,
+                                  _, _, _, [create(false)|Options]),
+            open_string('["item/b"]', SD),
+            api_delete_documents(SystemDB, Auth, Dev_Path_In, SD, no_data_version,
+                                 data_version(branch,Dev_Head_Out), _, _, Options)
+        )),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                Commit1, Dev_Head, []),
+        E,
+        true),
+    E = error(apply_squash_witnesses(Witnesses)),
+    length(Witnesses, 2),
+    once((member(W_A, Witnesses),
+          json{'@op':'DeleteEditConflict',
+               '@id':"item/a",
+               '@deleted_by':"ours"} :< W_A)),
+    once((member(W_B, Witnesses),
+          json{'@op':'DeleteEditConflict',
+               '@id':"item/b",
+               '@deleted_by':"theirs"} :< W_B)).
+
+test(apply_dry_run_reports_conflict_without_committing,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+                      '[{"@id":"item/a","name":"alpha","n":1}]',
+                      edit_doc_body, delete_doc_body),
+
+    Commit_Info = commit_info{author:"gavin", message:"preview"},
+    api_check_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                  Commit1, Dev_Head, [], Result),
+    json{'@type':'api:CheckResponse',
+         'api:valid':false} :< Result,
+    [W] = Result.'api:witnesses',
+    json{'@op':'DeleteEditConflict',
+         '@id':"item/a",
+         '@deleted_by':"theirs"} :< W,
+    get_dict('@expected', W, Expected),
+    get_dict(n, Expected, 1),
+    get_dict('@found', W, Found),
+    get_dict(n, Found, 2),
+
+    % the dry run wrote nothing: ours' edit is still the live state
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'item/a', Doc_A),
+    get_dict(n, Doc_A, 2).
+
+test(apply_dry_run_clean_merge_reports_valid,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(
+        SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+        '[{"@id":"item/a","name":"alpha","n":1}]',
+        edit_doc_body,
+        {SystemDB, Auth}/[_, _, Dev_Path_In, Dev_Head_Out, Options]>>(
+            open_string('[{"@id":"item/b","name":"beta"}]', S),
+            api_insert_documents(SystemDB, Auth, Dev_Path_In, S,
+                                 no_data_version,
+                                 data_version(branch,Dev_Head_Out), _, _,
+                                 Options))),
+
+    Commit_Info = commit_info{author:"gavin", message:"preview"},
+    api_check_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                  Commit1, Dev_Head, [], Result),
+    json{'@type':'api:CheckResponse',
+         'api:valid':true,
+         'api:witnesses':[]} :< Result,
+
+    % nothing committed: item/b does not exist on main
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    \+ get_document(Main_T, 'item/b', _).
+
+test(apply_dry_run_resolution_reports_verdict,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    delete_edit_setup(SystemDB, Auth, Path, _Dev_Path, Commit1, Dev_Head,
+                      '[{"@id":"item/a","name":"alpha","n":1}]',
+                      edit_doc_body, delete_doc_body),
+
+    Commit_Info = commit_info{author:"gavin", message:"preview"},
+    api_check_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                  Commit1, Dev_Head,
+                                  [conflict_resolution(theirs)], Result),
+    json{'@type':'api:CheckResponse',
+         'api:valid':true,
+         'api:witnesses':[]} :< Result,
+
+    % still nothing committed: ours' edit survives
+    resolve_absolute_string_descriptor(Path, Main_Desc),
+    open_descriptor(Main_Desc, Main_T),
+    get_document(Main_T, 'item/a', Doc_A),
+    get_dict(n, Doc_A, 2).
+
+/* A dry run must run the same validation the commit would: a merge that
+ * produces a schema-invalid document reports api:valid:false, not a
+ * clean preview that fails at commit time. */
+test(apply_dry_run_reports_schema_invalid_merge,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [graph_type(instance), author("gavin"), message("test."),
+               full_replace(false), json(false)],
+
+    % Commit1: a valid City on main
+    open_string('[{"@id":"City/a","@type":"City","name":"Warsaw"}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+
+    % Fork dev at Commit1.
+    atomic_list_concat([Path, "/local/branch/dev"], Dev_Path),
+    branch_create(system_descriptor{}, Auth, Dev_Path, branch(Path), _),
+
+    % main tightens the Person schema after the fork — no Person exists
+    % on main yet, so the update itself validates.
+    open_string('{"@id":"Person","@type":"Class","@inherits":"Named","occupation":"xsd:string","address":"xsd:string","parent":{"@type":"Optional","@class":"Person"},"birthday":{"@type":"Optional","@class":"xsd:dateTime"}}', SS),
+    api_replace_documents(SystemDB, Auth, Path, SS, no_data_version,
+                          data_version(branch,_), _, _,
+                          [create(false), graph_type(schema)|Options]),
+
+    % dev inserts a Person under the loose base schema — invalid under
+    % main's tightened schema when merged.
+    open_string('[{"@id":"Person/p","@type":"Person","name":"Jo","address":"here"}]', SP),
+    api_insert_documents(SystemDB, Auth, Dev_Path, SP, no_data_version,
+                         data_version(branch,Dev_Head), _, _, Options),
+
+    Commit_Info = commit_info{author:"gavin", message:"preview"},
+    api_check_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                  Commit1, Dev_Head, [], Result),
+    % The merged Person lacks occupation — invalid under the new schema.
+    json{'@type':'api:CheckResponse',
+         'api:valid':false} :< Result,
+    get_dict('api:witnesses', Result, Witnesses),
+    Witnesses = [_|_].
+
+test(commits_changed_id_enumerates_touched_documents,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [author("gavin"), message("test."), raw_json(true)],
+
+    % Commit1: base with the docs each case exercises
+    open_string('[{"@id":"keep/a"},{"@id":"gone/a"},{"@id":"revert/a"},{"@id":"untouched/a"}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+    % Commit2: create created/a (positive -> insert diff)
+    open_string('[{"@id":"created/a"}]', S2),
+    api_insert_documents(SystemDB, Auth, Path, S2, no_data_version,
+                         data_version(branch,_), _, _, Options),
+    % Commit3: modify keep/a (positive -> field diff)
+    open_string('{"@id":"keep/a","name":"edited"}', S3),
+    api_replace_documents(SystemDB, Auth, Path, S3, no_data_version,
+                          data_version(branch,_), _, _, [create(false)|Options]),
+    % Commit4: delete gone/a (positive -> delete diff)
+    open_string('["gone/a"]', S4),
+    api_delete_documents(SystemDB, Auth, Path, S4, no_data_version,
+                         data_version(branch,_), _, _, Options),
+    % Commit5a/5b: insert then delete flash/a — touched inside the range
+    % but absent at both ends: enumerated here, no diff produced.
+    open_string('[{"@id":"flash/a"}]', S5),
+    api_insert_documents(SystemDB, Auth, Path, S5, no_data_version,
+                         data_version(branch,_), _, _, Options),
+    open_string('["flash/a"]', S5b),
+    api_delete_documents(SystemDB, Auth, Path, S5b, no_data_version,
+                         data_version(branch,_), _, _, Options),
+    % Commit6a/6b: modify revert/a then put it back — touched inside the
+    % range, identical at both ends: zero-cost diff is filtered.
+    open_string('{"@id":"revert/a","name":"changed"}', S6),
+    api_replace_documents(SystemDB, Auth, Path, S6, no_data_version,
+                          data_version(branch,_), _, _, [create(false)|Options]),
+    open_string('{"@id":"revert/a"}', S6b),
+    api_replace_documents(SystemDB, Auth, Path, S6b, no_data_version,
+                          data_version(branch,Head), _, _, [create(false)|Options]),
+
+    resolve_absolute_string_descriptor(Path, Desc),
+    Enum_Options = options{start:0, count:inf,
+                           keep:json{'@id':true, '@type':true}},
+    findall(C, commits_changed_id(Desc, Commit1, Head, C,
+                                  Enum_Options),
+            Changed),
+    sort(Changed, Sorted_Changed),
+
+    % Positive set: documents whose state differs between the endpoints —
+    % the range squashes to a net delta, so flash/a and revert/a net out
+    % and are never enumerated.
+    maplist([Compressed, Expanded]>>(
+                atomic_list_concat(
+                    ['http://somewhere.for.now/document/', Compressed],
+                    Expanded)),
+            ["created/a", "gone/a", "keep/a"],
+            Expected_Changed),
+    ord_subset(Expected_Changed, Sorted_Changed),
+    % Negative set: untouched, net-zero and untouched-by-diff documents are
+    % never enumerated.
+    \+ member('http://somewhere.for.now/document/untouched/a', Sorted_Changed),
+    \+ member('http://somewhere.for.now/document/flash/a', Sorted_Changed),
+    \+ member('http://somewhere.for.now/document/revert/a', Sorted_Changed),
+
+    % Diff-level contract — this is what the apply semantics need.
+    % JSONDocument ids stay expanded (anyURI), so compare by expansion.
+    findall(D, document_diffs_from_commits(Desc, Commit1, Head, D,
+                                           Enum_Options), Diffs),
+    once(diff_id_in(Diffs, 'created/a', Insert_Diff)),
+    get_dict('@op', Insert_Diff, "Insert"),
+    once(diff_id_in(Diffs, 'keep/a', Keep_Diff)),
+    get_dict(name, Keep_Diff, Name_Diff),
+    get_dict('@op', Name_Diff, "SwapValue"),
+    once(diff_id_in(Diffs, 'gone/a', Gone_Diff)),
+    get_dict('@op', Gone_Diff, "Delete"),
+    % Negative set at diff level: nothing for flash, revert, untouched.
+    \+ diff_id_in(Diffs, 'flash/a', _),
+    \+ diff_id_in(Diffs, 'revert/a', _),
+    \+ diff_id_in(Diffs, 'untouched/a', _).
+
+/* Squash merges instance documents only — a schema delta between the
+ * endpoints cannot be applied, so the apply refuses it rather than
+ * dropping the schema change silently. */
+test(apply_squash_refuses_a_schema_delta,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [graph_type(instance), author("gavin"), message("test."),
+               full_replace(false), json(false)],
+
+    open_string('[{"@id":"City/a","@type":"City","name":"Warsaw"}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+
+    % Same branch, second commit tightens the Person schema.
+    open_string('{"@id":"Person","@type":"Class","@inherits":"Named","occupation":"xsd:string","address":"xsd:string","parent":{"@type":"Optional","@class":"Person"},"birthday":{"@type":"Optional","@class":"xsd:dateTime"}}', SS),
+    api_replace_documents(SystemDB, Auth, Path, SS, no_data_version,
+                          data_version(branch,Head), _, _,
+                          [create(false), graph_type(schema)|Options]),
+
+    Commit_Info = commit_info{author:"gavin", message:"merge"},
+    catch(api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                  Commit1, Head, []),
+          E, true),
+    E = error(apply_schema_delta(Commit1, Head), _),
+
+    % The dry run refuses identically — the preview must share the
+    % commit path's verdict.
+    catch(api_check_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                        Commit1, Head, [], _),
+          E2, true),
+    E2 = error(apply_schema_delta(Commit1, Head), _).
+
+test(commits_changed_id_enumerates_over_a_layerless_base,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema(admin, X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [author("gavin"), message("test.")],
+
+    % The schema commit has no instance layer — the squash anchor below
+    % the merge base is absent, so enumeration must squash the head
+    % segment fully instead of stopping at a base layer.
+    open_string('[{"@type":"City","name":"one"},{"@type":"City","name":"two"}]',
+                S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Head), _, Ids, Options),
+
+    resolve_absolute_string_descriptor(Path, Desc),
+    create_context(Desc.repository_descriptor, Repo_Ctx),
+    ref_entity:commit_id_to_parent_uri(Repo_Ctx, Head, Parent_Uri),
+    ref_entity:commit_id_uri(Repo_Ctx, Base_Id, Parent_Uri),
+    % Fixture sanity: the base commit really has no instance layer.
+    \+ 'document/history':commit_graph_layer(Repo_Ctx, Base_Id, instance, _),
+
+    findall(C, commits_changed_id(Desc, Base_Id, Head, C,
+                                  options{start:0, count:inf}),
+            Changed),
+    sort(Changed, Sorted_Changed),
+    maplist([Compressed, Expanded]>>(
+                atomic_list_concat(
+                    ['http://example.com/data/world/', Compressed],
+                    Expanded)),
+            Ids, Expected_Changed),
+    sort(Expected_Changed, Expected_Sorted),
+    ord_subset(Expected_Sorted, Sorted_Changed).
+
+test(document_diffs_throw_when_a_document_cannot_be_diffed,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(missing_diff_option(keep), _))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [author("gavin"), message("test."), raw_json(true)],
+
+    open_string('[{"@id":"keep/a"}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+    open_string('{"@id":"keep/a","name":"edited"}', S2),
+    api_replace_documents(SystemDB, Auth, Path, S2, no_data_version,
+                          data_version(branch,Head), _, _,
+                          [create(false)|Options]),
+
+    resolve_absolute_string_descriptor(Path, Desc),
+    % No `keep` option: simple_diff cannot produce a diff for the
+    % modified document. Enumeration must surface that as an error —
+    % a document that cannot be diffed may not silently drop out.
+    findall(D, document_diffs_from_commits(Desc, Commit1, Head, D,
+                                           options{start:0, count:inf}),
+            _Diffs).
 
 :- end_tests(apply).
 
