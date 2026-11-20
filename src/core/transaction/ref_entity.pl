@@ -14,6 +14,8 @@
               descriptor_commit_id_uri/4,
               layer_uri_for_commit/4,
               insert_branch_object/3,
+              insert_branch_object/4,
+              descriptor_spec_string/2,
               delete_branch_object/2,
               insert_base_commit_object/5,
               insert_base_commit_object/6,
@@ -47,6 +49,7 @@
           ]).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
+:- use_module(library(assoc)).
 :- use_module(library(yall)).
 :- use_module(library(apply)).
 :- use_module(library(plunit)).
@@ -132,6 +135,12 @@ commit_id_uri(Askable, Commit_Id, Commit_Uri) :-
     once(ask(Askable,
              t(Commit_Uri, identifier, Commit_Id^^xsd:string))).
 
+%  Callers carry commit ids as atoms while the store holds strings.
+commit_id_string(Commit_Id, String) :-
+    (   atom(Commit_Id)
+    ->  atom_string(Commit_Id, String)
+    ;   String = Commit_Id).
+
 commit_uri_to_metadata(Askable, Commit_Uri, Author, Message, Timestamp) :-
     once(ask(Askable,
              (   t(Commit_Uri, author, Author^^xsd:string),
@@ -148,11 +157,20 @@ commit_uri_to_user(Askable, Commit_Uri, User) :-
     !.
 
 maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info) :-
+    % Merge provenance is engine-stamped by merge operations; a request
+    % dict may not carry it.
+    (   del_dict(merge_source, Commit_Info0, _, Commit_Info1)
+    ->  true
+    ;   Commit_Info1 = Commit_Info0),
     (   nonvar(Auth)
     ->  atom_string(Auth, User_String),
-        put_dict(user, Commit_Info0, User_String, Commit_Info)
-    ;   Commit_Info = Commit_Info0
+        put_dict(user, Commit_Info1, User_String, Commit_Info)
+    ;   Commit_Info = Commit_Info1
     ).
+
+commit_uri_to_timestamp(Askable, Commit_Uri, Timestamp) :-
+    once(ask(Askable,
+             t(Commit_Uri, timestamp, Timestamp^^xsd:decimal))).
 
 commit_uri_to_parent_uri(Askable, Commit_Uri, Parent_Commit_Uri) :-
     once(ask(Askable,
@@ -168,11 +186,35 @@ layer_uri_for_commit(Askable, Commit_Uri, Type, Layer_Uri) :-
         t(Commit_Uri, Type, Layer_Uri)).
 
 insert_branch_object(Context, Branch_Name, Branch_Uri) :-
-    insert_document(
-        Context,
-        _{ '@type' : 'Branch',
-           'name' : Branch_Name },
-        Branch_Uri).
+    insert_branch_object(Context, Branch_Name, none, Branch_Uri).
+
+insert_branch_object(Context, Branch_Name, Created_From, Branch_Uri) :-
+    Branch_Document = _{ '@type' : 'Branch',
+                         'name' : Branch_Name },
+    (   Created_From = none
+    ->  insert_document(Context, Branch_Document, Branch_Uri)
+    ;   insert_document(Context,
+                        Branch_Document.put(created_from, Created_From),
+                        Branch_Uri)).
+
+/**
+ * descriptor_spec_string(+Descriptor, -Spec) is det.
+ *
+ * The absolute path spec naming a branch or commit descriptor — the
+ * form a client would use to address it (org/db/repo/branch/name or
+ * org/db/repo/commit/id). Recorded as branch creation provenance.
+ */
+descriptor_spec_string(Descriptor, Spec) :-
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    atomic_list_concat([Database_Descriptor.organization_name,
+                        Database_Descriptor.database_name,
+                        Repository_Descriptor.repository_name],
+                       '/', Prefix),
+    (   branch_descriptor{branch_name: Name} :< Descriptor
+    ->  atomic_list_concat([Prefix, "branch", Name], '/', Spec)
+    ;   commit_descriptor{commit_id: Id} :< Descriptor
+    ->  atomic_list_concat([Prefix, "commit", Id], '/', Spec)).
 
 delete_branch_object(Context, Branch_Uri) :-
     delete_document(Context, Branch_Uri).
@@ -234,6 +276,10 @@ insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Ti
         put_dict(metadata, Commit_Document3, Metadata, Commit_Document4)
     ;   Commit_Document4 = Commit_Document3),
 
+    (   get_dict(merge_source, Commit_Info, Merge_Source)
+    ->  put_dict(merge_source, Commit_Document4, Merge_Source, Commit_Document5)
+    ;   Commit_Document5 = Commit_Document4),
+
     foldl({Commit_Info}/[Key, DocIn, DocOut]>>(
               (   get_dict(Key, Commit_Info, Val),
                   Val \= []
@@ -241,7 +287,7 @@ insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Ti
               ;   DocOut = DocIn)),
           [instance_added, instance_updated, instance_removed,
            schema_added, schema_updated, schema_removed],
-          Commit_Document4, Commit_Document),
+          Commit_Document5, Commit_Document),
 
     insert_document(
         Context,
@@ -511,6 +557,56 @@ test(commit_on_branch_insert,
 
     % ensure it does have a parent
     commit_id_to_parent_uri(Descriptor2, Commit2_Id, _).
+
+test(base_commit_insert_records_merge_source,
+     [setup((setup_temp_store(State),
+             ensure_label(testlabel))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    ref_schema_context_from_label_descriptor("testlabel", Descriptor, Context),
+
+    with_transaction(
+        Context,
+        (
+            insert_layer_object(Context,
+                                "a3a29522ec767aa1a1cf321122f833726c102749",
+                                Schema_Layer_Uri),
+            insert_base_commit_object(Context,
+                                      Schema_Layer_Uri,
+                                      _,
+                                      commit_info{author:"author",
+                                                  message:"message",
+                                                  merge_source:
+                                                  _{operation: apply,
+                                                    commits:
+                                                    ["http://example.com/commit/one",
+                                                     "http://example.com/commit/two"]}},
+                                      1234.567,
+                                      _Commit_Id,
+                                      Commit_Uri)
+        ),
+        _),
+
+    create_context(Descriptor, Read_Context),
+    get_document(Read_Context, Commit_Uri, Commit_Doc),
+    get_dict(merge_source, Commit_Doc, Merge_Source),
+    get_dict(operation, Merge_Source, apply),
+    get_dict(commits, Merge_Source, ["http://example.com/commit/one",
+                                     "http://example.com/commit/two"]).
+
+test(maybe_inject_auth_user_strips_request_merge_source, []) :-
+    Commit_Info0 = commit_info{author:"author",
+                               message:"message",
+                               merge_source: _{operation: apply,
+                                               commits: ["http://example.com/x"]}},
+    maybe_inject_auth_user('User/test', Commit_Info0, Commit_Info),
+    \+ get_dict(merge_source, Commit_Info, _),
+    get_dict(user, Commit_Info, "User/test"),
+
+    maybe_inject_auth_user(_, commit_info{author:"a",message:"m"}, Info2),
+    \+ get_dict(merge_source, Info2, _).
 
 :- end_tests(commit_objects).
 
@@ -836,7 +932,9 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
     % create new commit info
     commit_id_uri(Them_Repo_Askable, Them_Commit_Id, Them_Commit_Uri),
     commit_id_to_metadata(Them_Repo_Askable, Them_Commit_Id, _Them_Author, Message, _Them_Timestamp),
-    Commit_Info = commit_info{author: Author, message: Message},
+    Commit_Info = commit_info{author: Author, message: Message,
+                              merge_source: _{operation: rebase,
+                                              commits: [Them_Commit_Uri]}},
 
     % A commit that touched only the schema graph has no instance
     % layer to apply — carry ours forward unchanged instead of
@@ -1143,29 +1241,77 @@ most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id
     % Commit1_Id and Commit2_Id are not initial commits.
     commit_id_uri(Repo1_Context, Commit1_Id, Commit1_Uri),
     commit_id_uri(Repo2_Context, Commit2_Id, Commit2_Uri),
+    commit_uri_to_timestamp(Repo1_Context, Commit1_Uri, Timestamp1),
+    commit_uri_to_timestamp(Repo2_Context, Commit2_Uri, Timestamp2),
+    commit_id_string(Commit1_Id, Commit1_Id_String),
+    commit_id_string(Commit2_Id, Commit2_Id_String),
+    empty_assoc(Seen1),
+    empty_assoc(Seen2),
+    zip_commit_chains(Repo1_Context, Commit1_Uri, Commit1_Id_String, Timestamp1, Seen1,
+                      Repo2_Context, Commit2_Uri, Commit2_Id_String, Timestamp2, Seen2,
+                      Common_Commit_Id),
+    Common_Commit_Id_Option = some(Common_Commit_Id),
+    commit_path_to_ancestor(Repo1_Context, Commit1_Uri, Common_Commit_Id, [],
+                          Commit1_Path),
+    commit_path_to_ancestor(Repo2_Context, Commit2_Uri, Common_Commit_Id, [],
+                          Commit2_Path).
 
-    % Backtrack until we find the first common commit.
-    % Note: this isn't great time complexity
-    ask(Repo1_Context, path(Commit1_Uri, (star(p(parent)), p(identifier)), Common_Commit1_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
-    ask(Repo2_Context, path(Commit2_Uri, (star(p(parent)), p(identifier)), Common_Commit2_Id^^xsd:string, Commit2_Edge_Path_Reversed)),
-    Common_Commit1_Id = Common_Commit2_Id,
-    !,
+%% zip_descend(+Context, +Commit_Uri, -Parent_Uri, -Parent_Id, -Parent_Ts)
+zip_descend(Context, Commit_Uri, Parent_Uri, Parent_Id, Parent_Ts) :-
+    once(ask(Context,
+             (   t(Commit_Uri, parent, Parent_Uri),
+                 t(Parent_Uri, identifier, Parent_Id^^xsd:string),
+                 t(Parent_Uri, timestamp, Parent_Ts^^xsd:decimal)))).
 
-    Common_Commit_Id_Option = some(Common_Commit1_Id),
+%% zip_commit_chains(+R1, +U1, +Id1, +T1, +Seen1,
+%%                   +R2, +U2, +Id2, +T2, +Seen2,
+%%                   -Common_Id)
+%
+%  Two-pointer walk toward genesis, descending the side with the newer
+%  candidate. Timestamps only choose which side moves: a candidate that
+%  equals the other candidate or that the other side has already visited is
+%  the most recent common ancestor, so a timestamp tie or an unordered pair
+%  can overshoot a side but cannot skip the ancestor. A side that cannot
+%  descend — its candidate has no parent — yields to the other side.
+zip_commit_chains(_R1, _U1, Id1, _T1, Seen1,
+                  _R2, _U2, Id2, _T2, Seen2,
+                  Common_Id) :-
+    (   Id1 = Id2
+    ->  Common_Id = Id1
+    ;   get_assoc(Id1, Seen2, _)
+    ->  Common_Id = Id1
+    ;   get_assoc(Id2, Seen1, _)
+    ->  Common_Id = Id2
+    ),
+    !.
+zip_commit_chains(R1, U1, Id1, T1, Seen1,
+                  R2, U2, Id2, T2, Seen2,
+                  Common_Id) :-
+    (   T1 >= T2,
+        zip_descend(R1, U1, PU1, PId1, PT1)
+    ->  put_assoc(Id1, Seen1, true, Seen1_N),
+        zip_commit_chains(R1, PU1, PId1, PT1, Seen1_N,
+                          R2, U2, Id2, T2, Seen2,
+                          Common_Id)
+    ;   zip_descend(R2, U2, PU2, PId2, PT2),
+        put_assoc(Id2, Seen2, true, Seen2_N),
+        zip_commit_chains(R1, U1, Id1, T1, Seen1,
+                          R2, PU2, PId2, PT2, Seen2_N,
+                          Common_Id)
+    ).
 
-    reverse(Commit1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
-    reverse(Commit2_Edge_Path_Reversed, [_|Commit2_Edge_Path]),
-
-    maplist({Repo1_Context}/[Commit_Edge, Intermediate_Commit_Id]>>(
-                get_dict('http://terminusdb.com/schema/woql#subject',Commit_Edge, Intermediate_Commit_Uri),
-                commit_id_uri(Repo1_Context, Intermediate_Commit_Id, Intermediate_Commit_Uri)),
-            Commit1_Edge_Path,
-            Commit1_Path),
-    maplist({Repo2_Context}/[Commit_Edge, Intermediate_Commit_Id]>>(
-                get_dict('http://terminusdb.com/schema/woql#subject',Commit_Edge, Intermediate_Commit_Uri),
-                commit_id_uri(Repo2_Context, Intermediate_Commit_Id, Intermediate_Commit_Uri)),
-            Commit2_Edge_Path,
-            Commit2_Path).
+%% commit_path_to_ancestor(+Context, +Uri, +Ancestor_Id, +Acc, -Path)
+%
+%  Commit identifiers strictly above Ancestor_Id on Uri's parent chain,
+%  oldest first: each visited commit is prepended before descending.
+commit_path_to_ancestor(Context, Uri, Ancestor_Id, Acc, Path) :-
+    commit_id_uri(Context, Id, Uri),
+    (   Id = Ancestor_Id
+    ->  Path = Acc
+    ;   commit_uri_to_parent_uri(Context, Uri, Parent_Uri),
+        commit_path_to_ancestor(Context, Parent_Uri, Ancestor_Id, [Id|Acc],
+                                Path)
+    ).
 
 :- begin_tests(common_ancestor).
 :- use_module(core(util/test_utils)).
@@ -1234,6 +1380,67 @@ test(common_ancestor_after_branch_and_some_commits,
 
     Branch1_Path = [CommitC_Id, CommitD_Id],
     Branch2_Path = [CommitE_Id, CommitF_Id],
+    commit_id_to_metadata(Repo_Descriptor, CommitC_Id, _, "commit c", _),
+    commit_id_to_metadata(Repo_Descriptor, CommitD_Id, _, "commit d", _),
+    commit_id_to_metadata(Repo_Descriptor, CommitE_Id, _, "commit e", _),
+    commit_id_to_metadata(Repo_Descriptor, CommitF_Id, _, "commit f", _).
+
+test(common_ancestor_asymmetric_depth,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    % main: a -> b -> c -> d -> e   (three commits past the fork)
+    % second forked at b: f         (one commit)
+    Origin_Path = "admin/testdb",
+    resolve_absolute_string_descriptor(Origin_Path, Descriptor),
+    forall(member(Message-Triple,
+                  ["commit a"-insert(a,b,c), "commit b"-insert(d,e,f)]),
+           (   create_context(Descriptor,
+                              commit_info{author:"test",message:Message},
+                              Ctx),
+               with_transaction(Ctx, ask(Ctx, Triple), _))),
+
+    super_user_authority(Auth),
+    Destination_Path = "admin/testdb/local/branch/second",
+    branch_create(system_descriptor{}, Auth, Destination_Path,
+                  branch(Origin_Path), _),
+
+    forall(member(Message-Triple,
+                  ["commit c"-insert(g,h,i), "commit d"-insert(k,l,m),
+                   "commit e"-insert(u,v,w)]),
+           (   create_context(Descriptor,
+                              commit_info{author:"test",message:Message},
+                              Ctx),
+               with_transaction(Ctx, ask(Ctx, Triple), _))),
+
+    resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
+    create_context(Second_Descriptor,
+                   commit_info{author:"test",message:"commit f"},
+                   Commit_F_Context),
+    with_transaction(Commit_F_Context,
+                     ask(Commit_F_Context, insert(n,o,p)), _),
+
+    Repo_Descriptor = Descriptor.repository_descriptor,
+    create_context(Repo_Descriptor, Repo_Context),
+
+    branch_head_commit(Repo_Context, "main", Head1_Commit_Uri),
+    commit_id_uri(Repo_Context, Head1_Commit_Id, Head1_Commit_Uri),
+    branch_head_commit(Repo_Context, "second", Head2_Commit_Uri),
+    commit_id_uri(Repo_Context, Head2_Commit_Id, Head2_Commit_Uri),
+
+    most_recent_common_ancestor(Repo_Context, Repo_Context,
+                                Head1_Commit_Id, Head2_Commit_Id,
+                                Common_Commit_Id_Option,
+                                Branch1_Path, Branch2_Path),
+    Common_Commit_Id_Option = some(Common_Commit_Id),
+    commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _,
+                          "commit b", _),
+
+    % Paths run oldest-to-newest away from the base on both sides.
+    Branch1_Path = [CommitC_Id, CommitD_Id, CommitE_Id],
+    Branch2_Path = [CommitF_Id],
     commit_id_to_metadata(Repo_Descriptor, CommitC_Id, _, "commit c", _),
     commit_id_to_metadata(Repo_Descriptor, CommitD_Id, _, "commit d", _),
     commit_id_to_metadata(Repo_Descriptor, CommitE_Id, _, "commit e", _),

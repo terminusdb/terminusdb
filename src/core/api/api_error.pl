@@ -507,6 +507,34 @@ api_global_error_jsonld(error(not_a_valid_commit_or_branch(Ref),_), Type, JSON) 
                               'api:ref' : Ref},
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(bad_apply_type(Apply_Type),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Unknown apply type ~q. Supported types: squash.", [Apply_Type]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadApplyType',
+                              'api:apply_type' : Apply_Type},
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(apply_schema_delta(Before, After),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The commits ~q and ~q carry different schemas. Squash apply merges instance documents only — merge the schema separately first.", [Before, After]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ApplySchemaDelta',
+                              'api:before_commit' : Before,
+                              'api:after_commit' : After},
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(bad_conflict_resolution(Resolution),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Invalid conflict_resolution ~q. Expected \"error\", \"ours\", \"theirs\", or an object with \"default\" and \"documents\" keys.", [Resolution]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadConflictResolution',
+                              'api:conflict_resolution' : Resolution},
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(server_outdated(Store_Version,Server_Version), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "The storage directory contains a store newer than this server supports. This server expects store version ~q but version ~q is in place.", [Server_Version, Store_Version]),
