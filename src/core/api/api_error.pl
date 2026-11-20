@@ -375,7 +375,7 @@ api_global_error_jsonld(error(casting_error(Val, Type), _), API, JSON) :-
     format(string(ValS), "~w", [Val]),
     format(string(Msg), "The value ~s could not be cast as ~q", [ValS, Type]),
     JSON = _{'@type' : Type_Displayed,
-             'api:status' : 'api:failure',
+             'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:BadCast',
                               'api:value' : ValS,
                               'api:type' : Type},
