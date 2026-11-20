@@ -88,7 +88,7 @@ describe('patch', function () {
           '@type': 'api:PatchConflict',
           'api:conflicts': [
             {
-              '@id': id1,
+              '@id': compress(id1),
               name: {
                 '@expected': 'quux',
                 '@found': 'foo',
@@ -139,7 +139,7 @@ describe('patch', function () {
           '@type': 'api:PatchConflict',
           'api:conflicts': [
             {
-              '@id': id2,
+              '@id': compress(id2),
               name: { '@expected': 'foo', '@found': 'bar', '@op': 'Conflict' },
             },
           ],

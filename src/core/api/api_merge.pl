@@ -22,7 +22,7 @@ api_concat(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
     check_descriptor_auth(System_DB, Target_Descriptor,
                           '@schema':'Action/commit_write_access', Auth),
 
-    maplist({System_DB, Auth}/[Source, Schema_Layer_Id, Instance_Layer_Id]>>(
+    maplist({System_DB, Auth}/[Source, Schema_Layer_Id, Instance_Layer_Id, Commit_Uri]>>(
                 do_or_die(
                     resolve_absolute_string_descriptor(Source, Descriptor),
                     error(invalid_absolute_path(Source),_)),
@@ -49,13 +49,12 @@ api_concat(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
             ),
             Sources,
             Schema_Layer_Ids,
-            Instance_Layer_Ids
+            Instance_Layer_Ids,
+            Source_Commit_Uris
            ),
     % todo, check all schema layers are compatible
     [Schema_Layer_Id|_] = Schema_Layer_Ids,
-    % todo: we should do something clever here to ensure this also works in tests
-    config:db_path(Store_Path),
-    open_raw_archive_store(Store_Path, Store),
+    triple_store(Store),
     config:tmp_path(Tmp_Path),
 
     catch(
@@ -92,7 +91,9 @@ api_concat(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
                 Target_Instance_Layer_Uri,
                 commit_info{
                     author: Author,
-                    message: Message
+                    message: Message,
+                    merge_source: _{operation: concat,
+                                    commits: Source_Commit_Uris}
                 },
                 Time,
                 Commit_Id,
@@ -100,5 +101,48 @@ api_concat(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
         ),
         _
     ).
+
+
+:- begin_tests(concat, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(document)).
+
+test(concat_records_merge_source,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"),
+             create_db_without_schema("admin","bar"))),
+      cleanup(teardown_temp_store(State))]) :-
+    super_user_authority(Auth),
+
+    resolve_absolute_string_descriptor("admin/foo", Foo_Descriptor),
+    create_context(Foo_Descriptor, commit_info{author:"test",message:"a"}, Foo_Ctx),
+    with_transaction(Foo_Ctx, ask(Foo_Ctx, insert(a,b,c)), _),
+
+    resolve_absolute_string_descriptor("admin/bar", Bar_Descriptor),
+    create_context(Bar_Descriptor, commit_info{author:"test",message:"d"}, Bar_Ctx),
+    with_transaction(Bar_Ctx, ask(Bar_Ctx, insert(d,e,f)), _),
+
+    api_concat(system_descriptor{}, Auth,
+               ["admin/foo/local/branch/main",
+                "admin/bar/local/branch/main"],
+               "admin/foo",
+               Commit_Id,
+               [author("test"), message("concat")]),
+
+    Foo_Repo_Descriptor = (Foo_Descriptor.repository_descriptor),
+    Bar_Repo_Descriptor = (Bar_Descriptor.repository_descriptor),
+    branch_head_commit(Foo_Repo_Descriptor, "main", Foo_Head_Uri),
+    branch_head_commit(Bar_Repo_Descriptor, "main", Bar_Head_Uri),
+
+    create_context(Foo_Repo_Descriptor, Repo_Ctx),
+    commit_id_uri(Repo_Ctx, Commit_Id, Commit_Uri),
+    get_document(Repo_Ctx, Commit_Uri, Commit_Doc),
+    get_dict(merge_source, Commit_Doc, Merge_Source),
+    get_dict(operation, Merge_Source, concat),
+    atom_string(Foo_Head_Uri, Foo_Head_String),
+    atom_string(Bar_Head_Uri, Bar_Head_String),
+    get_dict(commits, Merge_Source, [Foo_Head_String, Bar_Head_String]).
+
+:- end_tests(concat).
 
 

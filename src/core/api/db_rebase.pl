@@ -17,7 +17,9 @@
 :- use_module(core(api/api_document), [
                   producer_timeout/1,
                   get_commit_result/4,
-                  deliver_commit_result/2
+                  deliver_commit_result/2,
+                  api_insert_documents/9,
+                  api_replace_documents/9
               ]).
 :- use_module(core(document/commit_queue), [
                   enqueue_commit/2
@@ -26,7 +28,8 @@
 :- use_module(core(transaction/descriptor), [branch_key_from_descriptor/2]).
 :- use_module(core(transaction/ref_entity), [
                   commit_id_uri/3,
-                  commit_uri_to_parent_uri/3
+                  commit_uri_to_parent_uri/3,
+                  layer_uri_for_commit/4
               ]).
 
 :- dynamic rebase_pre_database_commit_hook/1.
@@ -159,6 +162,20 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
 
     apply_commit_chain(Our_Repo_Context3, Their_Repo_Context, New_Commit_Uri2, Author, Auth_Object, Their_Commit_Ids, Strategies, Final_Commit_Uri, Return_Context, Reports).
 
+% segment_writes_schema(+Repo_Context, +Commit_Ids) is semidet.
+%
+% Every commit stamps the effective schema layer — content-addressed, so
+% unchanged schema reuses the parent's URI. A commit wrote schema iff its
+% schema layer differs from its parent's (or it has none and has a layer).
+segment_writes_schema(Repo_Context, Commit_Ids) :-
+    member(Commit_Id, Commit_Ids),
+    commit_id_uri(Repo_Context, Commit_Id, Commit_Uri),
+    layer_uri_for_commit(Repo_Context, Commit_Uri, schema, Schema_Uri),
+    (   commit_uri_to_parent_uri(Repo_Context, Commit_Uri, Parent_Uri)
+    ->  \+ layer_uri_for_commit(Repo_Context, Parent_Uri, schema, Schema_Uri)
+    ;   true),
+    !.
+
 create_strategies([], _Strategy_Map, []).
 create_strategies([Commit_ID|Their_Branch_Path], Strategy_Map, [Strategy|Strategies]) :-
     (   memberchk(Commit_ID=Strategy, Strategy_Map)
@@ -206,7 +223,6 @@ rebase_on_branch_inner(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
         error(invalid_target_absolute_path(Our_Branch_Path),_)),
 
     check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action/commit_read_access', Auth),
-    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action/schema_write_access', Auth),
     check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action/instance_write_access', Auth),
 
     do_or_die(
@@ -228,16 +244,18 @@ rebase_on_branch_inner(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
     Our_Repo_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
     Their_Repo_Descriptor = (Their_Ref_Descriptor.repository_descriptor),
 
-    prepare_rebase_contract(Auth, Our_Branch_Descriptor, Their_Ref_Descriptor,
+    prepare_rebase_contract(System_DB, Auth, Our_Branch_Descriptor,
+                            Their_Ref_Descriptor,
                             Our_Repo_Descriptor, Their_Repo_Descriptor,
                             Our_Branch_Path, Their_Branch_Path, Author,
                             Strategy_Map, Optional_Common_Commit_Id,
                             Contract, Their_Branch_History).
 
-% prepare_rebase_contract/12 does all the rebase work that can safely happen
+% prepare_rebase_contract/13 does all the rebase work that can safely happen
 % outside the branch lock: history computation, commit copying, and replay.
 % It returns a rebase_contract dict that the worker will verify and commit.
-prepare_rebase_contract(Auth, Our_Branch_Descriptor, Their_Ref_Descriptor,
+prepare_rebase_contract(System_DB, Auth, Our_Branch_Descriptor,
+                        Their_Ref_Descriptor,
                         Our_Repo_Descriptor, Their_Repo_Descriptor,
                         Our_Branch_Path, Their_Branch_Path, Author,
                         Strategy_Map, Optional_Common_Commit_Id,
@@ -273,6 +291,17 @@ prepare_rebase_contract(Auth, Our_Branch_Descriptor, Their_Ref_Descriptor,
         Our_Branch_History = [],
         commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History)
     ),
+
+    % Rebase grafts the source commits wholesale and replays ours — schema
+    % content lands on the target whenever either segment contains a commit
+    % that wrote schema, which is what schema_write_access is charged for.
+    % A commit references a schema layer only when it wrote schema, so a
+    % segment carries schema iff some commit in it does.
+    (   (   segment_writes_schema(Their_Repo_Context, Their_Branch_History)
+        ;   segment_writes_schema(Our_Repo_Context, Our_Branch_History))
+    ->  check_descriptor_auth(System_DB, Our_Branch_Descriptor,
+                              '@schema':'Action/schema_write_access', Auth)
+    ;   true),
 
     % copy commits from their repo into ours, ensuring we got the latest
     copy_commits(Their_Repo_Context, Our_Repo_Context, Their_Commit_Id),
@@ -731,6 +760,50 @@ test(rebase_divergent_history,
 
     true.
 
+test(rebase_replayed_commit_records_merge_source,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ])
+:-
+    Master_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
+    with_transaction(Master_Context1,
+                     ask(Master_Context1,
+                         insert(a,b,c)),
+                    _),
+    Second_Path = "admin/foo/local/branch/second",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Second_Path, branch(Master_Path), _),
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
+    with_transaction(Second_Context1,
+                     ask(Second_Context1,
+                         insert(d,e,f)),
+                     _),
+
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit d"}, Master_Context2),
+    with_transaction(Master_Context2,
+                     ask(Master_Context2,
+                         insert(j,k,l)),
+                     _),
+
+    Repo_Descriptor = Master_Descriptor.repository_descriptor,
+    branch_head_commit(Repo_Descriptor, "main", Old_Commit_D_Uri),
+
+    rebase_on_branch(system_descriptor{}, Auth, Master_Path, Second_Path, "rebaser", [], none, _, _),
+
+    % The replayed copy of commit d records the commit it replays.
+    branch_head_commit(Repo_Descriptor, "main", New_Commit_D_Uri),
+    create_context(Repo_Descriptor, Repo_Ctx),
+    get_document(Repo_Ctx, New_Commit_D_Uri, New_Commit_D),
+    get_dict(merge_source, New_Commit_D, Merge_Source),
+    get_dict(operation, Merge_Source, rebase),
+    atom_string(Old_Commit_D_Uri, Old_Commit_D_Uri_String),
+    get_dict(commits, Merge_Source, [Old_Commit_D_Uri_String]).
+
 test(rebase_divergent_history_no_common_commit_option,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "foo"))),
@@ -1006,6 +1079,134 @@ test(rebase_conflict,
         _),
 
     rebase_on_branch(system_descriptor{}, Auth, "admin/foo", Path, "me", [], _Common_Commit_Id, _Their_Commit_Ids, _Reports).
+
+:- use_module(core(api/api_access_control),
+              [api_add_role/4,
+               api_grant_capability/3,
+               api_get_resource_from_name/5]).
+
+% A caller holding commit read + instance write on admin/foo, no schema
+% write. Rebase grafts the source segment wholesale and replays the
+% target segment — schema_write_access must be charged only when a
+% commit that is actually replayed or grafted wrote schema.
+grant_rebase_access(SystemDB, Admin_Auth, Db_Name, User_Auth) :-
+    api_add_role(SystemDB, Admin_Auth,
+                 _{name: "instance_writer",
+                   action: ["commit_read_access", "instance_write_access"]},
+                 Role_Id),
+    api_get_resource_from_name(SystemDB, Admin_Auth, Db_Name, database,
+                               Resource),
+    get_dict('@id', Resource, Scope_Id),
+    atom_string(User_Auth, User_Auth_String),
+    atom_string(Role_Id, Role_Id_String),
+    api_grant_capability(SystemDB, Admin_Auth,
+                         _{scope: Scope_Id, user: User_Auth_String,
+                           roles: [Role_Id_String]}).
+
+test(rebase_instance_only_history_needs_no_schema_write,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))]) :-
+    super_user_authority(Admin_Auth),
+    open_descriptor(system_descriptor{}, SystemDB),
+    Options = [author("test"), message("c"), graph_type(instance),
+               full_replace(false)],
+
+    Master_Path = "admin/foo",
+    open_string('[{"@id":"City/a","@type":"City","name":"Warsaw"}]', S1),
+    api_insert_documents(SystemDB, Admin_Auth, Master_Path, S1,
+                         no_data_version, data_version(branch,_), _, _, Options),
+
+    Second_Path = "admin/foo/local/branch/second",
+    branch_create(system_descriptor{}, Admin_Auth, Second_Path,
+                  branch(Master_Path), _),
+    resolve_absolute_string_descriptor(Second_Path, _),
+    open_string('[{"@id":"City/b","@type":"City","name":"Krakow"}]', S2),
+    api_insert_documents(SystemDB, Admin_Auth, Second_Path, S2,
+                         no_data_version, data_version(branch,_), _, _, Options),
+
+    add_user("mallory", some('password'), Mallory_Auth),
+    grant_rebase_access(system_descriptor{}, Admin_Auth, "admin/foo", Mallory_Auth),
+
+    rebase_on_branch(system_descriptor{}, Mallory_Auth, Master_Path,
+                     Second_Path, "mallory", [], _Base, _Ids, _Reports).
+
+test(rebase_schema_segment_on_source_requires_schema_write,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))]) :-
+    super_user_authority(Admin_Auth),
+    open_descriptor(system_descriptor{}, SystemDB),
+    Options = [author("test"), message("c"), graph_type(instance),
+               full_replace(false)],
+
+    Master_Path = "admin/foo",
+    open_string('[{"@id":"City/a","@type":"City","name":"Warsaw"}]', S1),
+    api_insert_documents(SystemDB, Admin_Auth, Master_Path, S1,
+                         no_data_version, data_version(branch,_), _, _, Options),
+
+    Second_Path = "admin/foo/local/branch/second",
+    branch_create(system_descriptor{}, Admin_Auth, Second_Path,
+                  branch(Master_Path), _),
+
+    % The source segment carries a schema-writing commit.
+    open_string('{"@type":"Class","@id":"Widget","f":"xsd:string"}', SW),
+    api_replace_documents(SystemDB, Admin_Auth, Second_Path, SW,
+                          no_data_version, data_version(branch,_), _, _,
+                          [create(true), graph_type(schema)|Options]),
+
+    % Divergent instance commit on the target so both segments exist.
+    open_string('[{"@id":"City/b","@type":"City","name":"Krakow"}]', S2),
+    api_insert_documents(SystemDB, Admin_Auth, Master_Path, S2,
+                         no_data_version, data_version(branch,_), _, _, Options),
+
+    add_user("mallory", some('password'), Mallory_Auth),
+    grant_rebase_access(system_descriptor{}, Admin_Auth, "admin/foo", Mallory_Auth),
+
+    catch(rebase_on_branch(system_descriptor{}, Mallory_Auth, Master_Path,
+                           Second_Path, "mallory", [], _Base, _Ids, _Reports),
+          E, true),
+    E = error(access_not_authorised(Mallory_Auth,
+                                    '@schema':'Action/schema_write_access',
+                                    _), _).
+
+test(rebase_schema_segment_on_target_requires_schema_write,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))]) :-
+    super_user_authority(Admin_Auth),
+    open_descriptor(system_descriptor{}, SystemDB),
+    Options = [author("test"), message("c"), graph_type(instance),
+               full_replace(false)],
+
+    Master_Path = "admin/foo",
+    open_string('[{"@id":"City/a","@type":"City","name":"Warsaw"}]', S1),
+    api_insert_documents(SystemDB, Admin_Auth, Master_Path, S1,
+                         no_data_version, data_version(branch,_), _, _, Options),
+
+    Second_Path = "admin/foo/local/branch/second",
+    branch_create(system_descriptor{}, Admin_Auth, Second_Path,
+                  branch(Master_Path), _),
+    open_string('[{"@id":"City/b","@type":"City","name":"Krakow"}]', S2),
+    api_insert_documents(SystemDB, Admin_Auth, Second_Path, S2,
+                         no_data_version, data_version(branch,_), _, _, Options),
+
+    % The target segment carries a schema-writing commit — the replay
+    % re-writes it, so the gate applies symmetrically.
+    open_string('{"@type":"Class","@id":"Widget","f":"xsd:string"}', SW),
+    api_replace_documents(SystemDB, Admin_Auth, Master_Path, SW,
+                          no_data_version, data_version(branch,_), _, _,
+                          [create(true), graph_type(schema)|Options]),
+
+    add_user("mallory", some('password'), Mallory_Auth),
+    grant_rebase_access(system_descriptor{}, Admin_Auth, "admin/foo", Mallory_Auth),
+
+    catch(rebase_on_branch(system_descriptor{}, Mallory_Auth, Master_Path,
+                           Second_Path, "mallory", [], _Base, _Ids, _Reports),
+          E, true),
+    E = error(access_not_authorised(Mallory_Auth,
+                                    '@schema':'Action/schema_write_access',
+                                    _), _).
 
 :- end_tests(rebase).
 

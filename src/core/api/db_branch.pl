@@ -127,12 +127,15 @@ branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name,
     % In this case, both source and destination branch exist in the same repository.
     % A new branch is trivial to create by inserting the branch object and pointing it at the head of the other branch.
     create_context(Repository_Descriptor, Context),
+    descriptor_spec_string(Branch_Descriptor, Origin_Spec),
     with_transaction(Context,
-                     (   insert_branch_object(Context,
-                                              New_Branch_Name,
-                                              Branch_Uri),
-                         (   branch_head_commit(Context, Branch_Descriptor.branch_name, Head_Commit_Uri)
-                         ->  link_commit_object_to_branch(Context, Branch_Uri, Head_Commit_Uri),
+                     (   (   branch_head_commit(Context, Branch_Descriptor.branch_name, Head_Commit_Uri)
+                         ->  insert_branch_object(Context,
+                                                  New_Branch_Name,
+                                                  _{commit: Head_Commit_Uri,
+                                                    source: Origin_Spec},
+                                                  Branch_Uri),
+                             link_commit_object_to_branch(Context, Branch_Uri, Head_Commit_Uri),
                              (   commit_id_uri(Context, Head_Commit_Id, Head_Commit_Uri)
                              ->  New_Branch_Descriptor = branch_descriptor{
                                                                      branch_name: New_Branch_Name,
@@ -151,7 +154,10 @@ branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name,
                                        true)
                              ;   true
                              )
-                         ;   true
+                         ;   insert_branch_object(Context,
+                                                  New_Branch_Name,
+                                                  _{source: Origin_Spec},
+                                                  Branch_Uri)
                          )),
                      _).
 branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name, Branch_Uri) :-
@@ -167,16 +173,22 @@ branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name,
     % We'll have to copy over the commit onformation into the destination commit graph
     create_context(Branch_Descriptor.repository_descriptor, Origin_Context),
     context_default_prefixes(Origin_Context, Origin_Context_Defaults),
+    descriptor_spec_string(Branch_Descriptor, Origin_Spec),
     create_context(Repository_Descriptor, Destination_Context),
     with_transaction(Destination_Context,
-                     (   insert_branch_object(Destination_Context,
-                                              New_Branch_Name,
-                                              Branch_Uri),
-                         (   branch_head_commit(Origin_Context_Defaults, Branch_Descriptor.branch_name, Head_Commit_Uri)
-                         ->  commit_id_uri(Origin_Context_Defaults, Head_Commit_Id, Head_Commit_Uri),
+                     (   (   branch_head_commit(Origin_Context_Defaults, Branch_Descriptor.branch_name, Head_Commit_Uri)
+                         ->  insert_branch_object(Destination_Context,
+                                                  New_Branch_Name,
+                                                  _{commit: Head_Commit_Uri,
+                                                    source: Origin_Spec},
+                                                  Branch_Uri),
+                             commit_id_uri(Origin_Context_Defaults, Head_Commit_Id, Head_Commit_Uri),
                              copy_commits(Origin_Context_Defaults, Destination_Context, Head_Commit_Id),
                              link_commit_object_to_branch(Destination_Context, Branch_Uri, Head_Commit_Uri)
-                         ;   true)),
+                         ;   insert_branch_object(Destination_Context,
+                                                  New_Branch_Name,
+                                                  _{source: Origin_Spec},
+                                                  Branch_Uri))),
                      _).
 branch_create_(Repository_Descriptor, _Auth, Commit_Descriptor, New_Branch_Name, Branch_Uri) :-
     commit_descriptor{repository_descriptor:Origin_Repository_Descriptor} :< Commit_Descriptor,
@@ -184,6 +196,7 @@ branch_create_(Repository_Descriptor, _Auth, Commit_Descriptor, New_Branch_Name,
     !,
 
     create_context(Repository_Descriptor, Context),
+    descriptor_spec_string(Commit_Descriptor, Origin_Spec),
     with_transaction(Context,
                      (   (   commit_id_uri(Context, Commit_Descriptor.commit_id, Commit_Uri)
                          ->  true
@@ -191,6 +204,8 @@ branch_create_(Repository_Descriptor, _Auth, Commit_Descriptor, New_Branch_Name,
 
                          (   insert_branch_object(Context,
                                                   New_Branch_Name,
+                                                  _{commit: Commit_Uri,
+                                                    source: Origin_Spec},
                                                   Branch_Uri),
                              link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri))),
                      _).
@@ -207,9 +222,12 @@ branch_create_(Destination_Repository_Descriptor, _Auth, Commit_Descriptor, New_
     ;   throw(error(origin_commit_does_not_exist(Commit_Descriptor.commit_id),_))),
 
     create_context(Destination_Repository_Descriptor, Destination_Context),
+    descriptor_spec_string(Commit_Descriptor, Origin_Spec),
     with_transaction(Destination_Context,
                      (   insert_branch_object(Destination_Context,
                                               New_Branch_Name,
+                                              _{commit: Commit_Uri,
+                                                source: Origin_Spec},
                                               Branch_Uri),
                          copy_commits(Origin_Context_Defaults, Destination_Context, Commit_Descriptor.commit_id),
                          link_commit_object_to_branch(Destination_Context, Branch_Uri, Commit_Uri)),
@@ -580,5 +598,113 @@ test(create_empty_branch_and_insert_schema_doc,
                                                      '@type': "Class",
                                                      '@id': "Thing"
                                                  })).
+
+test(create_branch_from_local_branch_records_created_from,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+    Origin_Branch_Path = "admin/foo/local/branch/main",
+    resolve_absolute_string_descriptor(Origin_Branch_Path, Origin_Branch_Descriptor),
+    Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
+
+    create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
+    with_transaction(Context1,
+                     once(ask(Context1, insert(foo,bar,baz))),
+                     _),
+
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, "admin/foo/local/branch/moo",
+                  branch(Origin_Branch_Path), _),
+
+    branch_head_commit(Repository_Descriptor, "main", Head_Commit_Uri),
+    branch_name_uri(Repository_Descriptor, "moo", Branch_Uri),
+    create_context(Repository_Descriptor, Repo_Ctx),
+    get_document(Repo_Ctx, Branch_Uri, Branch_Doc),
+    get_dict(created_from, Branch_Doc, Origin),
+    get_dict(commit, Origin, Head_Commit_Uri),
+    get_dict(source, Origin, "admin/foo/local/branch/main").
+
+test(create_branch_from_commit_records_created_from,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+    Origin_Branch_Path = "admin/foo/local/branch/main",
+    resolve_absolute_string_descriptor(Origin_Branch_Path, Origin_Branch_Descriptor),
+    Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
+
+    create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
+    with_transaction(Context1,
+                     once(ask(Context1, insert(foo,bar,baz))),
+                     _),
+
+    branch_head_commit(Repository_Descriptor, "main", Head_Commit_Uri),
+    commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+    atomic_list_concat(['admin/foo/local/commit/', Head_Commit_Id], Commit_Path),
+
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, "admin/foo/local/branch/moo",
+                  branch(Commit_Path), _),
+
+    branch_name_uri(Repository_Descriptor, "moo", Branch_Uri),
+    create_context(Repository_Descriptor, Repo_Ctx),
+    get_document(Repo_Ctx, Branch_Uri, Branch_Doc),
+    get_dict(created_from, Branch_Doc, Origin),
+    get_dict(commit, Origin, Head_Commit_Uri),
+    atomic_list_concat(['admin/foo/local/commit/', Head_Commit_Id], Expected_Spec_Atom),
+    atom_string(Expected_Spec_Atom, Expected_Spec),
+    get_dict(source, Origin, Expected_Spec).
+
+test(create_branch_from_remote_branch_records_created_from,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"),
+             create_db_without_schema("admin","bar"))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+    Origin_Path = "admin/foo/local/branch/main",
+    resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
+
+    create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
+    with_transaction(Context1,
+                     once(ask(Context1, insert(foo,bar,baz))),
+                     _),
+
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, "admin/bar/local/branch/moo",
+                  branch(Origin_Path), _),
+
+    resolve_absolute_string_descriptor("admin/bar/local/branch/moo", Destination_Descriptor),
+    Destination_Repository_Descriptor = (Destination_Descriptor.repository_descriptor),
+    branch_head_commit(Destination_Repository_Descriptor, "moo", Head_Commit_Uri),
+    branch_name_uri(Destination_Repository_Descriptor, "moo", Branch_Uri),
+    create_context(Destination_Repository_Descriptor, Repo_Ctx),
+    get_document(Repo_Ctx, Branch_Uri, Branch_Doc),
+    % The stamped commit resolves to the copied head in this repository,
+    % while the source names the origin's own spec.
+    get_dict(created_from, Branch_Doc, Origin),
+    get_dict(commit, Origin, Head_Commit_Uri),
+    get_dict(source, Origin, "admin/foo/local/branch/main"),
+    commit_uri_to_metadata(Repo_Ctx, Head_Commit_Uri, _, "first commit", _).
+
+test(create_branch_from_nothing_omits_created_from,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, "admin/foo/local/branch/moo",
+                  empty(_,_), _),
+
+    resolve_absolute_string_descriptor("admin/foo/local/branch/moo", D),
+    Repository_Descriptor = (D.repository_descriptor),
+    branch_name_uri(Repository_Descriptor, "moo", Branch_Uri),
+    create_context(Repository_Descriptor, Repo_Ctx),
+    get_document(Repo_Ctx, Branch_Uri, Branch_Doc),
+    \+ get_dict(created_from, Branch_Doc, _).
 
 :- end_tests(branch_api).

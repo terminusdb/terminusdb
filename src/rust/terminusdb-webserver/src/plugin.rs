@@ -16,6 +16,37 @@ fn term_to_string(term: &Term) -> PrologResult<String> {
     }
 }
 
+/// Shared body of `appserver_broadcast_subscribe/{3,4}` — subscribe the
+/// stream to the broadcast channel, optionally carrying bytes the
+/// forwarder writes to the stream after registering the subscriber.
+fn broadcast_subscribe(channel_term: &Term, stream_id_term: &Term, timeout_term: &Term, first_message: Option<axum::body::Bytes>) -> PrologResult<()> {
+    let channel = term_to_string(channel_term)?;
+    let stream_id: u64 = stream_id_term.get_ex()?;
+    let timeout_secs: i64 = timeout_term.get_ex()?;
+    let idle_timeout = if timeout_secs > 0 {
+        Some(std::time::Duration::from_secs(timeout_secs as u64))
+    } else {
+        None
+    };
+
+    // Clone the stream's mpsc::Sender so the forwarder task can
+    // write to it without holding the stream_registry mutex.
+    let stream_sender = {
+        let registry = crate::dispatch::stream_registry();
+        let registry = registry.lock().unwrap();
+        match registry.get_sender(stream_id) {
+            Some(sender) => sender,
+            None => return Err(PrologError::Failure),
+        }
+    };
+
+    crate::dispatch::broadcast_registry()
+        .lock()
+        .unwrap()
+        .subscribe(channel, stream_id, stream_sender, idle_timeout, first_message);
+    Ok(())
+}
+
 predicates! {
     /// Start the Rust webserver on the given port.
     ///
@@ -164,9 +195,9 @@ predicates! {
     /// Check if a stream with the given id is still active.
     ///
     /// Signature: `appserver_stream_exists(+StreamId)`. Succeeds if the
-    /// stream is in the registry, fails otherwise. Used by Prolog to
-    /// detect stale `commit_stream/3` entries when `timeout=false` (no
-    /// timeout thread to clean them up).
+    /// stream is in the registry, fails otherwise. The built-in plugins
+    /// no longer call it — stream teardown is driven by the
+    /// `appserver_stream_closed` hook — but external plugins may.
     #[module("$appserver")]
     pub semidet fn appserver_stream_exists(_context, stream_id_term) {
         let stream_id: u64 = stream_id_term.get_ex()?;
@@ -193,31 +224,18 @@ predicates! {
     /// timeout (stream stays open until client disconnects).
     #[module("$appserver")]
     pub semidet fn appserver_broadcast_subscribe(_context, channel_term, stream_id_term, timeout_term) {
-        let channel = term_to_string(channel_term)?;
-        let stream_id: u64 = stream_id_term.get_ex()?;
-        let timeout_secs: i64 = timeout_term.get_ex()?;
-        let idle_timeout = if timeout_secs > 0 {
-            Some(std::time::Duration::from_secs(timeout_secs as u64))
-        } else {
-            None
-        };
+        broadcast_subscribe(channel_term, stream_id_term, timeout_term, None)
+    }
 
-        // Clone the stream's mpsc::Sender so the forwarder task can
-        // write to it without holding the stream_registry mutex.
-        let stream_sender = {
-            let registry = crate::dispatch::stream_registry();
-            let registry = registry.lock().unwrap();
-            match registry.get_sender(stream_id) {
-                Some(sender) => sender,
-                None => return Err(PrologError::Failure),
-            }
-        };
-
-        crate::dispatch::broadcast_registry()
-            .lock()
-            .unwrap()
-            .subscribe(channel, stream_id, stream_sender, idle_timeout);
-        Ok(())
+    /// Signature: `appserver_broadcast_subscribe_with_first_message(+Channel, +StreamId, +IdleTimeout, +FirstMessage)`.
+    /// Same as `appserver_broadcast_subscribe/3`, plus bytes the forwarder
+    /// writes to the stream immediately after registering the subscriber —
+    /// a client that receives them knows its subscription is live on the
+    /// channel.
+    #[module("$appserver")]
+    pub semidet fn appserver_broadcast_subscribe_with_first_message(_context, channel_term, stream_id_term, timeout_term, first_message_term) {
+        let first_message = axum::body::Bytes::from(first_message_term.get_ex::<String>()?);
+        broadcast_subscribe(channel_term, stream_id_term, timeout_term, Some(first_message))
     }
 
     /// Unsubscribe a stream from a specific broadcast channel.
@@ -557,6 +575,7 @@ pub fn register() {
     register_appserver_stream_close();
     register_appserver_stream_exists();
     register_appserver_broadcast_subscribe();
+    register_appserver_broadcast_subscribe_with_first_message();
     register_appserver_broadcast_unsubscribe();
     register_appserver_broadcast_unsubscribe_all();
     register_appserver_broadcast_send();

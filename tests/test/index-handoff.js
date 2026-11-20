@@ -415,7 +415,12 @@ describe('Read-only index handoff', function () {
       return (Array.isArray(hits) ? hits.length > 0 : Object.keys(hits).length > 0) ? r : false
     }, 10000)
     expect(res.status).to.equal(200)
-    const status = await indexStatus(portB)
+    // Search visibility precedes handoff bookkeeping on the reader, so the
+    // cleared flag is polled rather than read once.
+    const status = await poll(async () => {
+      const s = await tryIndexStatus(portB)
+      return (s && s.handoff === null) ? s : false
+    }, 10000)
     expect(status.read_only).to.equal(true)
     expect(status.handoff).to.equal(null)
     expect(status.last_indexed_commit).to.be.a('string')

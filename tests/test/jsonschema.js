@@ -667,9 +667,9 @@ describe('jsonschema', function () {
     expect(r.body['api:status']).to.equal('api:failure')
   }
 
-  // The check surface lives behind `check=true` on the document
+  // The check surface lives behind `dry_run=true` on the document
   // endpoint — a dry run reports a verdict without writing.
-  describe('check=true dry run', function () {
+  describe('dry_run=true dry run', function () {
     let className
 
     before(async function () {
@@ -685,14 +685,14 @@ describe('jsonschema', function () {
     })
 
     it('reports an invalid document without committing it', async function () {
-      const path = `/api/document/admin/${agent.dbName}?check=true&author=a&message=m`
+      const path = `/api/document/admin/${agent.dbName}?dry_run=true&author=a&message=m`
       const r = await agent.post(path).send({ '@type': className })
       expect(r.body['api:valid']).to.equal(false)
       expect(r.body['api:witnesses']).to.not.be.empty
     })
 
     it('reports a valid document with generated ids', async function () {
-      const path = `/api/document/admin/${agent.dbName}?check=true&author=a&message=m`
+      const path = `/api/document/admin/${agent.dbName}?dry_run=true&author=a&message=m`
       const r = await agent.post(path).send({ '@type': className, name: 'Checked' })
       expect(r.body['api:valid']).to.equal(true)
       expect(r.body['api:extra'].ids).to.have.lengthOf(1)
@@ -709,7 +709,7 @@ describe('jsonschema', function () {
         instance: { '@type': className, name: 'ToDelete' },
       })
       const id = inserted.body[0]
-      const path = `/api/document/admin/${agent.dbName}?check=true&author=a&message=m&id=${id}`
+      const path = `/api/document/admin/${agent.dbName}?dry_run=true&author=a&message=m&id=${id}`
       const r = await agent.delete(path)
       expect(r.body['api:valid']).to.equal(true)
       const found = await agent.get(

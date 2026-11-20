@@ -14,23 +14,147 @@ use tdb_succinct::tfc::lexical_interval::{
 };
 use tdb_succinct::*;
 
-/// Range-checked numeric conversion: a Prolog value that does not fit the
-/// target width is a marshalling error, not a silent wrap.
-fn exact<T, U>(v: T) -> PrologResult<U>
+#[derive(Debug, PartialEq)]
+enum NumericEntryError {
+    OutOfRange,
+    NonFinite,
+    Malformed,
+}
+
+fn unsigned_int_entry<T>(inner_number: u64) -> Result<TypedDictEntry, NumericEntryError>
+where
+    T: TryFrom<u64> + TdbDataType,
+{
+    match T::try_from(inner_number) {
+        Ok(v) => Ok(T::make_entry(&v)),
+        Err(_) => Err(NumericEntryError::OutOfRange),
+    }
+}
+
+fn signed_int_entry<T>(inner_number: i64) -> Result<TypedDictEntry, NumericEntryError>
+where
+    T: TryFrom<i64> + TdbDataType,
+{
+    match T::try_from(inner_number) {
+        Ok(v) => Ok(T::make_entry(&v)),
+        Err(_) => Err(NumericEntryError::OutOfRange),
+    }
+}
+
+fn float32_entry(inner_number: f64) -> Result<TypedDictEntry, NumericEntryError> {
+    let narrowed = inner_number as f32;
+    if narrowed.is_finite() {
+        Ok(f32::make_entry(&narrowed))
+    } else {
+        Err(NumericEntryError::NonFinite)
+    }
+}
+
+fn float64_entry(inner_number: f64) -> Result<TypedDictEntry, NumericEntryError> {
+    if inner_number.is_finite() {
+        Ok(f64::make_entry(&inner_number))
+    } else {
+        Err(NumericEntryError::NonFinite)
+    }
+}
+
+fn decimal_entry(decimal_str: String) -> Result<TypedDictEntry, NumericEntryError> {
+    Decimal::new(decimal_str)
+        .map_err(|_| NumericEntryError::Malformed)
+        .map(|d| Decimal::make_entry(&d))
+}
+
+fn positive_integer_entry(integer: Integer) -> Result<TypedDictEntry, NumericEntryError> {
+    if integer <= 0 {
+        Err(NumericEntryError::OutOfRange)
+    } else {
+        Ok(PositiveInteger::make_entry(&PositiveInteger(integer)))
+    }
+}
+
+fn negative_integer_entry(integer: Integer) -> Result<TypedDictEntry, NumericEntryError> {
+    if integer >= 0 {
+        Err(NumericEntryError::OutOfRange)
+    } else {
+        Ok(NegativeInteger::make_entry(&NegativeInteger(integer)))
+    }
+}
+
+fn non_positive_integer_entry(integer: Integer) -> Result<TypedDictEntry, NumericEntryError> {
+    if integer > 0 {
+        Err(NumericEntryError::OutOfRange)
+    } else {
+        Ok(NonPositiveInteger::make_entry(&NonPositiveInteger(integer)))
+    }
+}
+
+fn non_negative_integer_entry(integer: Integer) -> Result<TypedDictEntry, NumericEntryError> {
+    if integer < 0 {
+        Err(NumericEntryError::OutOfRange)
+    } else {
+        Ok(NonNegativeInteger::make_entry(&NonNegativeInteger(integer)))
+    }
+}
+
+fn domain_error<C: QueryableContextType>(
+    context: &Context<C>,
+    ty_term: &Term,
+    inner_term: &Term,
+) -> PrologError {
+    match term! {context: error(domain_error(#ty_term, #inner_term), _)} {
+        Ok(exception) => context.raise_exception::<()>(&exception).unwrap_err(),
+        Err(error) => error,
+    }
+}
+
+// A failed argument read or narrowing conversion is a domain violation on
+// the declared datatype, not a marshalling exception.
+fn arg_domain<T: TermGetable, C: QueryableContextType>(
+    context: &Context<C>,
+    ty_term: &Term,
+    inner_term: &Term,
+    arg: usize,
+) -> PrologResult<T> {
+    inner_term
+        .get_arg_ex(arg)
+        .map_err(|_| domain_error(context, ty_term, inner_term))
+}
+
+fn exact_domain<T, U, C: QueryableContextType>(
+    context: &Context<C>,
+    ty_term: &Term,
+    inner_term: &Term,
+    value: T,
+) -> PrologResult<U>
 where
     U: TryFrom<T>,
 {
-    U::try_from(v).map_err(|_| PrologError::Exception)
+    U::try_from(value).map_err(|_| domain_error(context, ty_term, inner_term))
 }
 
-/// Marshal/decode failures are domain errors in the caller's term, never
-/// silent failures: a value that cannot be represented must raise, so
-/// document writes and queries stop instead of dropping data.
-fn raise_domain<C: QueryableContextType>(
+// A number that does not fit the requested width and a non-numeric term are
+// both domain violations on the declared datatype.
+fn numeric_domain_read<C: QueryableContextType, T: TermGetable>(
     context: &Context<C>,
-    culprit: &Term,
-) -> PrologResult<TypedDictEntry> {
-    context.raise_exception(&term! {context: error(domain_error(value(), #culprit), _)}?)
+    ty_term: &Term,
+    inner_term: &Term,
+) -> PrologResult<T> {
+    inner_term
+        .get_ex()
+        .map_err(|_| domain_error(context, ty_term, inner_term))
+}
+
+fn integer_domain_read<C: QueryableContextType>(
+    context: &Context<C>,
+    ty_term: &Term,
+    inner_term: &Term,
+) -> PrologResult<Integer> {
+    let s = context
+        .string_from_term(inner_term)
+        .map_err(|_| domain_error(context, ty_term, inner_term))?;
+    Integer::parse(s)
+        .map(Integer::from)
+        .map_err(|_| domain_error(context, ty_term, inner_term))
 }
 
 /// A `duration/8` term as the bounded legacy `Duration`. Seconds arrive as
@@ -129,35 +253,42 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let inner_string: String = context.string_from_term(inner_term)?;
         Ok(AnySimpleType::make_entry(&inner_string))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedByte") == ty {
-        let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u8::make_entry(&exact::<_, u8>(inner_number)?))
+        let inner_number: u64 = numeric_domain_read(context, ty_term, inner_term)?;
+        unsigned_int_entry::<u8>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#byte") == ty {
-        let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i8::make_entry(&exact::<_, i8>(inner_number)?))
+        let inner_number: i64 = numeric_domain_read(context, ty_term, inner_term)?;
+        signed_int_entry::<i8>(inner_number).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedShort") == ty {
-        let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u16::make_entry(&exact::<_, u16>(inner_number)?))
+        let inner_number: u64 = numeric_domain_read(context, ty_term, inner_term)?;
+        unsigned_int_entry::<u16>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#short") == ty {
-        let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i16::make_entry(&exact::<_, i16>(inner_number)?))
+        let inner_number: i64 = numeric_domain_read(context, ty_term, inner_term)?;
+        signed_int_entry::<i16>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedInt") == ty {
-        let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u32::make_entry(&exact::<_, u32>(inner_number)?))
+        let inner_number: u64 = numeric_domain_read(context, ty_term, inner_term)?;
+        unsigned_int_entry::<u32>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#int") == ty {
-        let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i32::make_entry(&exact::<_, i32>(inner_number)?))
+        let inner_number: i64 = numeric_domain_read(context, ty_term, inner_term)?;
+        signed_int_entry::<i32>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedLong") == ty {
-        let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u64::make_entry(&inner_number))
+        let inner_number: u64 = numeric_domain_read(context, ty_term, inner_term)?;
+        unsigned_int_entry::<u64>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#long") == ty {
-        let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i64::make_entry(&inner_number))
+        let inner_number: i64 = numeric_domain_read(context, ty_term, inner_term)?;
+        signed_int_entry::<i64>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#float") == ty {
-        let inner_number: f64 = inner_term.get_ex()?;
-        Ok(f32::make_entry(&(inner_number as f32)))
+        let inner_number: f64 = numeric_domain_read(context, ty_term, inner_term)?;
+        float32_entry(inner_number).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#double") == ty {
-        let inner_number: f64 = inner_term.get_ex()?;
-        Ok(f64::make_entry(&inner_number))
+        let inner_number: f64 = numeric_domain_read(context, ty_term, inner_term)?;
+        float64_entry(inner_number).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#decimal") == ty {
         // Try to get as PrologText first (for string input with full 20-digit precision)
         // This allows passing arbitrary-precision decimal strings from Prolog
@@ -168,142 +299,147 @@ pub fn make_entry_from_term<C: QueryableContextType>(
             // Fall back to number for backwards compatibility (converts float/int to string)
             context.string_from_term(inner_term)?
         };
-        Ok(Decimal::make_entry(
-            &Decimal::new(decimal_str).map_err(|_| PrologError::Exception)?,
-        ))
+        decimal_entry(decimal_str).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#integer") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number)
-            .map_err(|_| PrologError::Exception)?
-            .into();
+        let integer = integer_domain_read(context, ty_term, inner_term)?;
         Ok(Integer::make_entry(&integer))
     } else if atom!("http://www.w3.org/2001/XMLSchema#positiveInteger") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number)
-            .map_err(|_| PrologError::Exception)?
-            .into();
-        Ok(PositiveInteger::make_entry(&PositiveInteger(integer)))
+        let integer = integer_domain_read(context, ty_term, inner_term)?;
+        positive_integer_entry(integer).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#negativeInteger") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number)
-            .map_err(|_| PrologError::Exception)?
-            .into();
-        Ok(NegativeInteger::make_entry(&NegativeInteger(integer)))
+        let integer = integer_domain_read(context, ty_term, inner_term)?;
+        negative_integer_entry(integer).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#nonPositiveInteger") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number)
-            .map_err(|_| PrologError::Exception)?
-            .into();
-        Ok(NonPositiveInteger::make_entry(&NonPositiveInteger(integer)))
+        let integer = integer_domain_read(context, ty_term, inner_term)?;
+        non_positive_integer_entry(integer).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#nonNegativeInteger") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number)
-            .map_err(|_| PrologError::Exception)?
-            .into();
-        Ok(NonNegativeInteger::make_entry(&NonNegativeInteger(integer)))
+        let integer = integer_domain_read(context, ty_term, inner_term)?;
+        non_negative_integer_entry(integer).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gYear") == ty {
         // TODO check that the functor is what we expect
-        let year: i64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
-        let offset: u64 = inner_term.get_arg_ex(2)?;
+        let year: i64 = arg_domain(context, ty_term, inner_term, 1)?; // TODO should this throw if the arg is not there?
+        let offset: u64 = arg_domain(context, ty_term, inner_term, 2)?;
         Ok(GYear::make_entry(&GYear {
             year,
-            offset: exact(offset)?,
+            offset: exact_domain(context, ty_term, inner_term, offset)?,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gMonth") == ty {
         // TODO check that the functor is what we expect
-        let month: u64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
-        let offset: u64 = inner_term.get_arg_ex(2)?;
+        let month: u64 = arg_domain(context, ty_term, inner_term, 1)?; // TODO should this throw if the arg is not there?
+        let offset: u64 = arg_domain(context, ty_term, inner_term, 2)?;
         Ok(GMonth::make_entry(&GMonth {
-            month: exact(month)?,
-            offset: exact(offset)?,
+            month: exact_domain(context, ty_term, inner_term, month)?,
+            offset: exact_domain(context, ty_term, inner_term, offset)?,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gDay") == ty {
         // TODO check that the functor is what we expect
-        let day: u64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
-        let offset: u64 = inner_term.get_arg_ex(2)?;
+        let day: u64 = arg_domain(context, ty_term, inner_term, 1)?; // TODO should this throw if the arg is not there?
+        let offset: u64 = arg_domain(context, ty_term, inner_term, 2)?;
         Ok(GDay::make_entry(&GDay {
-            day: exact(day)?,
-            offset: exact(offset)?,
+            day: exact_domain(context, ty_term, inner_term, day)?,
+            offset: exact_domain(context, ty_term, inner_term, offset)?,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gYearMonth") == ty {
         // TODO check that the functor is what we expect
-        let year: i64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
-        let month: u64 = inner_term.get_arg_ex(2)?;
-        let offset: u64 = inner_term.get_arg_ex(3)?;
+        let year: i64 = arg_domain(context, ty_term, inner_term, 1)?; // TODO should this throw if the arg is not there?
+        let month: u64 = arg_domain(context, ty_term, inner_term, 2)?;
+        let offset: u64 = arg_domain(context, ty_term, inner_term, 3)?;
         Ok(GYearMonth::make_entry(&GYearMonth {
             year,
-            month: exact(month)?,
-            offset: exact(offset)?,
+            month: exact_domain(context, ty_term, inner_term, month)?,
+            offset: exact_domain(context, ty_term, inner_term, offset)?,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gMonthDay") == ty {
         // TODO check that the functor is what we expect
-        let month: u64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
-        let day: u64 = inner_term.get_arg_ex(2)?;
-        let offset: u64 = inner_term.get_arg_ex(3)?;
+        let month: u64 = arg_domain(context, ty_term, inner_term, 1)?; // TODO should this throw if the arg is not there?
+        let day: u64 = arg_domain(context, ty_term, inner_term, 2)?;
+        let offset: u64 = arg_domain(context, ty_term, inner_term, 3)?;
         Ok(GMonthDay::make_entry(&GMonthDay {
-            month: exact(month)?,
-            day: exact(day)?,
-            offset: exact(offset)?,
+            month: exact_domain(context, ty_term, inner_term, month)?,
+            day: exact_domain(context, ty_term, inner_term, day)?,
+            offset: exact_domain(context, ty_term, inner_term, offset)?,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#duration") == ty {
         match duration_from_term(context, inner_term) {
             Ok(d) => Ok(Duration::make_entry(&d)),
-            Err(_) => raise_domain(context, inner_term),
+            Err(_) => Err(domain_error(context, ty_term, inner_term)),
         }
     } else if atom!("http://www.w3.org/2001/XMLSchema#yearMonthDuration") == ty {
         match duration_from_term(context, inner_term) {
             Ok(d) => Ok(YearMonthDuration::make_entry(&YearMonthDuration(d))),
-            Err(_) => raise_domain(context, inner_term),
+            Err(_) => Err(domain_error(context, ty_term, inner_term)),
         }
     } else if atom!("http://www.w3.org/2001/XMLSchema#dayTimeDuration") == ty {
         match duration_from_term(context, inner_term) {
             Ok(d) => Ok(DayTimeDuration::make_entry(&DayTimeDuration(d))),
-            Err(_) => raise_domain(context, inner_term),
+            Err(_) => Err(domain_error(context, ty_term, inner_term)),
         }
     } else if atom!("http://www.w3.org/2001/XMLSchema#dateTime") == ty {
-        let year: i64 = inner_term.get_arg_ex(1)?;
-        let month: i64 = inner_term.get_arg_ex(2)?;
-        let day: i64 = inner_term.get_arg_ex(3)?;
-        let hour: i64 = inner_term.get_arg_ex(4)?;
-        let minute: i64 = inner_term.get_arg_ex(5)?;
-        let second: i64 = inner_term.get_arg_ex(6)?;
-        let nano: i64 = inner_term.get_arg_ex(7)?;
-        let dt = NaiveDate::from_ymd_opt(exact(year)?, exact(month)?, exact(day)?)
-            .ok_or(PrologError::Exception)?
-            .and_hms_nano_opt(exact(hour)?, exact(minute)?, exact(second)?, exact(nano)?)
-            .ok_or(PrologError::Exception)?;
+        let year: i64 = arg_domain(context, ty_term, inner_term, 1)?;
+        let month: i64 = arg_domain(context, ty_term, inner_term, 2)?;
+        let day: i64 = arg_domain(context, ty_term, inner_term, 3)?;
+        let hour: i64 = arg_domain(context, ty_term, inner_term, 4)?;
+        let minute: i64 = arg_domain(context, ty_term, inner_term, 5)?;
+        let second: i64 = arg_domain(context, ty_term, inner_term, 6)?;
+        let nano: i64 = arg_domain(context, ty_term, inner_term, 7)?;
+        let dt = NaiveDate::from_ymd_opt(
+            exact_domain(context, ty_term, inner_term, year)?,
+            exact_domain(context, ty_term, inner_term, month)?,
+            exact_domain(context, ty_term, inner_term, day)?,
+        )
+        .ok_or_else(|| domain_error(context, ty_term, inner_term))?
+        .and_hms_nano_opt(
+            exact_domain(context, ty_term, inner_term, hour)?,
+            exact_domain(context, ty_term, inner_term, minute)?,
+            exact_domain(context, ty_term, inner_term, second)?,
+            exact_domain(context, ty_term, inner_term, nano)?,
+        )
+        .ok_or_else(|| domain_error(context, ty_term, inner_term))?;
         Ok(NaiveDateTime::make_entry(&dt))
     } else if atom!("http://www.w3.org/2001/XMLSchema#dateTimeStamp") == ty {
-        let year: i64 = inner_term.get_arg_ex(1)?;
-        let month: i64 = inner_term.get_arg_ex(2)?;
-        let day: i64 = inner_term.get_arg_ex(3)?;
-        let hour: i64 = inner_term.get_arg_ex(4)?;
-        let minute: i64 = inner_term.get_arg_ex(5)?;
-        let second: i64 = inner_term.get_arg_ex(6)?;
-        let nano: i64 = inner_term.get_arg_ex(7)?;
-        let dt = NaiveDate::from_ymd_opt(exact(year)?, exact(month)?, exact(day)?)
-            .ok_or(PrologError::Exception)?
-            .and_hms_nano_opt(exact(hour)?, exact(minute)?, exact(second)?, exact(nano)?)
-            .ok_or(PrologError::Exception)?;
+        let year: i64 = arg_domain(context, ty_term, inner_term, 1)?;
+        let month: i64 = arg_domain(context, ty_term, inner_term, 2)?;
+        let day: i64 = arg_domain(context, ty_term, inner_term, 3)?;
+        let hour: i64 = arg_domain(context, ty_term, inner_term, 4)?;
+        let minute: i64 = arg_domain(context, ty_term, inner_term, 5)?;
+        let second: i64 = arg_domain(context, ty_term, inner_term, 6)?;
+        let nano: i64 = arg_domain(context, ty_term, inner_term, 7)?;
+        let dt = NaiveDate::from_ymd_opt(
+            exact_domain(context, ty_term, inner_term, year)?,
+            exact_domain(context, ty_term, inner_term, month)?,
+            exact_domain(context, ty_term, inner_term, day)?,
+        )
+        .ok_or_else(|| domain_error(context, ty_term, inner_term))?
+        .and_hms_nano_opt(
+            exact_domain(context, ty_term, inner_term, hour)?,
+            exact_domain(context, ty_term, inner_term, minute)?,
+            exact_domain(context, ty_term, inner_term, second)?,
+            exact_domain(context, ty_term, inner_term, nano)?,
+        )
+        .ok_or_else(|| domain_error(context, ty_term, inner_term))?;
         Ok(DateTimeStamp::make_entry(&DateTimeStamp(dt)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#date") == ty {
-        let year: i64 = inner_term.get_arg_ex(1)?;
-        let month: i64 = inner_term.get_arg_ex(2)?;
-        let day: i64 = inner_term.get_arg_ex(3)?;
-        let offset: i64 = inner_term.get_arg_ex(4)?;
+        let year: i64 = arg_domain(context, ty_term, inner_term, 1)?;
+        let month: i64 = arg_domain(context, ty_term, inner_term, 2)?;
+        let day: i64 = arg_domain(context, ty_term, inner_term, 3)?;
+        let offset: i64 = arg_domain(context, ty_term, inner_term, 4)?;
         let dt = Date {
             year,
-            month: exact(month)?,
-            day: exact(day)?,
-            offset: exact(offset)?,
+            month: exact_domain(context, ty_term, inner_term, month)?,
+            day: exact_domain(context, ty_term, inner_term, day)?,
+            offset: exact_domain(context, ty_term, inner_term, offset)?,
         };
         Ok(Date::make_entry(&dt))
     } else if atom!("http://www.w3.org/2001/XMLSchema#time") == ty {
-        let hour: u64 = inner_term.get_arg_ex(1)?;
-        let minute: u64 = inner_term.get_arg_ex(2)?;
-        let second: u64 = inner_term.get_arg_ex(3)?;
-        let t = NaiveTime::from_hms_opt(exact(hour)?, exact(minute)?, exact(second)?)
-            .ok_or(PrologError::Exception)?;
+        let hour: u64 = arg_domain(context, ty_term, inner_term, 1)?;
+        let minute: u64 = arg_domain(context, ty_term, inner_term, 2)?;
+        let second: u64 = arg_domain(context, ty_term, inner_term, 3)?;
+        let t = NaiveTime::from_hms_opt(
+            exact_domain(context, ty_term, inner_term, hour)?,
+            exact_domain(context, ty_term, inner_term, minute)?,
+            exact_domain(context, ty_term, inner_term, second)?,
+        )
+        .ok_or_else(|| domain_error(context, ty_term, inner_term))?;
         Ok(NaiveTime::make_entry(&t))
     } else if atom!("http://www.w3.org/2001/XMLSchema#base64Binary") == ty {
         let base64: String = inner_term.get_ex()?;
@@ -312,12 +448,12 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let mut result = Vec::new();
         decoder
             .read_to_end(&mut result)
-            .map_err(|_| PrologError::Exception)?;
+            .map_err(|_| domain_error(context, ty_term, inner_term))?;
         Ok(Base64Binary::make_entry(&Base64Binary(result)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#hexBinary") == ty {
         let hexstring: String = inner_term.get_ex()?;
         Ok(HexBinary::make_entry(&HexBinary(
-            hex::decode(hexstring).map_err(|_| PrologError::Exception)?,
+            hex::decode(hexstring).map_err(|_| domain_error(context, ty_term, inner_term))?,
         )))
     } else if atom!("http://terminusdb.com/schema/xdd#dateTimeInterval") == ty {
         // The inner value is the canonical lexical string — the Rust
@@ -328,18 +464,18 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         match inner_term.get::<PrologText>() {
             Ok(text) => match parse_lexical_interval(&text.into_inner()) {
                 Ok(iv) => Ok(lexical_interval_entry(&iv)),
-                Err(_) => raise_domain(context, inner_term),
+                Err(_) => Err(domain_error(context, ty_term, inner_term)),
             },
             Err(_) => {
                 let term_string: String = context.string_from_term(inner_term)?;
                 match parse_interval_term(&term_string) {
                     Ok(entry) => Ok(entry),
-                    Err(_) => raise_domain(context, inner_term),
+                    Err(_) => Err(domain_error(context, ty_term, inner_term)),
                 }
             }
         }
     } else {
-        Err(PrologError::Exception)
+        Err(domain_error(context, ty_term, inner_term))
     }
 }
 
@@ -1346,5 +1482,152 @@ mod tests {
         ] {
             assert!(parse_interval_term(bad).is_err(), "accepted: {}", bad);
         }
+    }
+}
+
+#[cfg(test)]
+mod numeric_entry_tests {
+    use super::*;
+
+    #[test]
+    fn unsigned_int_entry_enforces_storage_bounds() {
+        assert_eq!(
+            Datatype::UInt8,
+            unsigned_int_entry::<u8>(255).unwrap().datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            unsigned_int_entry::<u8>(256)
+        );
+        assert!(unsigned_int_entry::<u16>(65535).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            unsigned_int_entry::<u16>(65536)
+        );
+        assert!(unsigned_int_entry::<u32>(4294967295).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            unsigned_int_entry::<u32>(4294967296)
+        );
+        assert!(unsigned_int_entry::<u64>(u64::MAX).is_ok());
+    }
+
+    #[test]
+    fn signed_int_entry_enforces_storage_bounds() {
+        assert!(signed_int_entry::<i8>(127).is_ok());
+        assert!(signed_int_entry::<i8>(-128).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            signed_int_entry::<i8>(128)
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            signed_int_entry::<i8>(-129)
+        );
+        assert!(signed_int_entry::<i16>(32767).is_ok());
+        assert!(signed_int_entry::<i16>(-32768).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            signed_int_entry::<i16>(32768)
+        );
+        assert!(signed_int_entry::<i32>(2147483647).is_ok());
+        assert!(signed_int_entry::<i32>(-2147483648).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            signed_int_entry::<i32>(2147483648)
+        );
+        assert!(signed_int_entry::<i64>(i64::MIN).is_ok());
+        assert!(signed_int_entry::<i64>(i64::MAX).is_ok());
+    }
+
+    #[test]
+    fn float32_entry_rejects_values_outside_the_finite_f32_range() {
+        assert_eq!(Datatype::Float32, float32_entry(5.5).unwrap().datatype());
+        assert!(float32_entry(f32::MAX as f64).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::NonFinite),
+            float32_entry(f32::MAX as f64 * 2.0)
+        );
+        assert_eq!(
+            Err(NumericEntryError::NonFinite),
+            float32_entry(f64::INFINITY)
+        );
+        assert_eq!(Err(NumericEntryError::NonFinite), float32_entry(f64::NAN));
+    }
+
+    #[test]
+    fn float64_entry_rejects_non_finite_values() {
+        assert_eq!(
+            Datatype::Float64,
+            float64_entry(f64::MAX).unwrap().datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::NonFinite),
+            float64_entry(f64::NEG_INFINITY)
+        );
+        assert_eq!(Err(NumericEntryError::NonFinite), float64_entry(f64::NAN));
+    }
+
+    #[test]
+    fn decimal_entry_rejects_malformed_strings() {
+        assert_eq!(
+            Datatype::Decimal,
+            decimal_entry("5.05".to_string()).unwrap().datatype()
+        );
+        assert!(decimal_entry("-123456789012345678901234567890.1234".to_string()).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::Malformed),
+            decimal_entry("abc".to_string())
+        );
+        assert_eq!(
+            Err(NumericEntryError::Malformed),
+            decimal_entry("".to_string())
+        );
+    }
+
+    #[test]
+    fn sign_constrained_integer_entries_enforce_their_domains() {
+        assert_eq!(
+            Datatype::PositiveInteger,
+            positive_integer_entry(Integer::from(5)).unwrap().datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            positive_integer_entry(Integer::from(0))
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            positive_integer_entry(Integer::from(-5))
+        );
+        assert_eq!(
+            Datatype::NegativeInteger,
+            negative_integer_entry(Integer::from(-5))
+                .unwrap()
+                .datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            negative_integer_entry(Integer::from(0))
+        );
+        assert_eq!(
+            Datatype::NonPositiveInteger,
+            non_positive_integer_entry(Integer::from(0))
+                .unwrap()
+                .datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            non_positive_integer_entry(Integer::from(5))
+        );
+        assert_eq!(
+            Datatype::NonNegativeInteger,
+            non_negative_integer_entry(Integer::from(0))
+                .unwrap()
+                .datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            non_negative_integer_entry(Integer::from(-5))
+        );
     }
 }

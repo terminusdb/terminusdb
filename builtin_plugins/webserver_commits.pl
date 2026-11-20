@@ -10,6 +10,7 @@
 :- use_module(library(yall)).
 
 :- multifile appserver_hooks:appserver_stream/3.
+:- multifile appserver_hooks:appserver_stream_closed/1.
 :- multifile plugins:post_commit_hook/2.
 
 %% Dynamic predicate storing active stream subscriptions.
@@ -64,6 +65,15 @@
 
 appserver_hooks:appserver_stream(get, '/api/v1/ext/commits/*branch_path',
                                   webserver_commits:commits_handler).
+
+%% Stream teardown hook — runs when the response stream ends for any
+%% reason. retract_stream/1 removes the commit_stream/3 entry and the
+%% channel subscription; the per-stream Prolog timeout thread still
+%% fires it for the auto-close timeout case.
+appserver_hooks:appserver_stream_closed(StreamId) :-
+    catch(webserver_commits:retract_stream(StreamId), Error,
+          json_log_error_formatted(
+              "stream_closed retract error: ~q", [Error])).
 
 %%%%%%%%%%%%%%%%%%%% Stream Handler %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -410,15 +420,10 @@ plugins:post_commit_hook(_, _).
 %
 %  For each validation object that is a branch_descriptor, extract the
 %  commit info and changed documents, then send to each matching stream.
-%  Also sweeps stale commit_stream/3 entries whose Rust stream no longer
-%  exists (client disconnected with timeout=false).
+%  Stale commit_stream/3 entries are handled by the
+%  appserver_stream_closed hook on stream teardown, not here.
 broadcast_commit_events(Validation_Objects, Meta_Data) :-
     get_dict(data_versions, Meta_Data, DataVersions),
-    %% Sweep stale streams before broadcasting. This retracts
-    %% commit_stream/3 entries for streams that the Rust side has already
-    %% cleaned up (client disconnect). Without this, entries leak when
-    %% timeout=false.
-    sweep_stale_streams,
     %% Collect unique branch paths with their validation objects and
     %% commit IDs to avoid duplicate sends when both schema and instance
     %% validation objects exist for the same branch.
@@ -436,22 +441,6 @@ broadcast_commit_events(Validation_Objects, Meta_Data) :-
     forall(
         member(BranchPath-Validation_Object-CommitIdAtom, UniqueTriples),
         send_to_branch_streams(Validation_Object, BranchPath, CommitIdAtom)
-    ).
-
-%% sweep_stale_streams is det.
-%
-%  Retract commit_stream/3 entries whose Rust stream no longer exists.
-%  This handles the timeout=false case where no timeout thread cleans up
-%  after a client disconnect. The Rust side detects the disconnect and
-%  removes the stream from its registry; this sweep retracts the
-%  corresponding Prolog entry.
-sweep_stale_streams :-
-    findall(StreamId, commit_stream(StreamId, _, _), StreamIds),
-    forall(
-        (   member(StreamId, StreamIds),
-            \+ catch('$appserver':appserver_stream_exists(StreamId), _, fail)
-        ),
-        retract_stream(StreamId)
     ).
 
 %% dedup_triples(+Triples, -Unique) is det.
@@ -812,8 +801,7 @@ parse_timeout(TimeoutStr, Timeout) :-
 %
 %  Spawn a detached thread that closes the stream after Timeout seconds.
 %  If Timeout is false, no thread is created and cleanup relies on the
-%  stale-stream sweep in broadcast_commit_events (which retracts
-%  commit_stream/3 entries whose Rust stream no longer exists).
+%  appserver_stream_closed hook firing when the stream ends.
 setup_timeout(_StreamId, false, none) :- !.
 setup_timeout(StreamId, Timeout, Thread) :-
     integer(Timeout),
