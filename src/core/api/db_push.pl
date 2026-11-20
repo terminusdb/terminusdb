@@ -127,7 +127,12 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
             ;   Remote_Commit_Uri_Option = none
             ),
             branch_name_uri(Remote_Repository_Context, Remote_Branch, Remote_Branch_Uri)
-        ;   insert_branch_object(Remote_Repository_Context_With_Prefixes, Remote_Branch, Remote_Branch_Uri),
+        ;   descriptor_spec_string(Branch_Descriptor, Local_Branch_Spec),
+            insert_branch_object(Remote_Repository_Context_With_Prefixes,
+                                 Remote_Branch,
+                                 _{commit: Local_Commit_Uri,
+                                   source: Local_Branch_Spec},
+                                 Remote_Branch_Uri),
             Remote_Commit_Uri_Option = none
         ),
 
@@ -335,6 +340,7 @@ parent_child_ids(Parent_Id, Child_Id) :-
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
+:- use_module(core(document)).
 
 %:- use_module(db_create).
 :- use_module(db_branch).
@@ -445,6 +451,48 @@ test(push_twice,
     findall(X-Y-Z, ask(Remote_Branch, t(X,Y,Z)), Triples),
 
     sort(Triples, [a-b-c,c-d-e,h-i-j,k-l-m]).
+
+test(push_created_remote_branch_records_created_from,
+     [setup((setup_temp_store(State),
+             create_db_without_schema(admin,foo))),
+      cleanup(teardown_temp_store(State))
+     ])
+:-
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
+
+    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Repository_Descriptor),
+
+    create_context(Database_Descriptor, Database_Context),
+    with_transaction(Database_Context,
+                     insert_remote_repository(Database_Context, "remote", "http://somewhere", _),
+                     _),
+    create_ref_layer(Repository_Descriptor),
+
+    create_context(Descriptor, commit_info{author: "me",
+                                           message: "something"},
+                   Branch_Context),
+
+    with_transaction(
+        Branch_Context,
+        ask(Branch_Context,
+            insert(a,b,c)),
+        _Meta_Data_B),
+
+    super_user_authority(Auth),
+
+    % Pushing under a name the remote does not have creates the branch
+    % remotely — that new branch records the local head it forked from.
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "dev", [], test_pusher(_), _Result),
+
+    branch_head_commit(Descriptor.repository_descriptor, "main", Local_Head_Uri),
+    branch_name_uri(Repository_Descriptor, "dev", Remote_Branch_Uri),
+    create_context(Repository_Descriptor, Remote_Repo_Ctx),
+    get_document(Remote_Repo_Ctx, Remote_Branch_Uri, Remote_Branch_Doc),
+    get_dict(created_from, Remote_Branch_Doc, Origin),
+    get_dict(commit, Origin, Local_Head_Uri),
+    get_dict(source, Origin, "admin/foo/local/branch/main").
 
 test(push_twice_with_second_push_changing_nothing,
      [setup((setup_temp_store(State),

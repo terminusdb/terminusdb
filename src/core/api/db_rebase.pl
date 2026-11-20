@@ -760,6 +760,50 @@ test(rebase_divergent_history,
 
     true.
 
+test(rebase_replayed_commit_records_merge_source,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ])
+:-
+    Master_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
+    with_transaction(Master_Context1,
+                     ask(Master_Context1,
+                         insert(a,b,c)),
+                    _),
+    Second_Path = "admin/foo/local/branch/second",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Second_Path, branch(Master_Path), _),
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
+    with_transaction(Second_Context1,
+                     ask(Second_Context1,
+                         insert(d,e,f)),
+                     _),
+
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit d"}, Master_Context2),
+    with_transaction(Master_Context2,
+                     ask(Master_Context2,
+                         insert(j,k,l)),
+                     _),
+
+    Repo_Descriptor = Master_Descriptor.repository_descriptor,
+    branch_head_commit(Repo_Descriptor, "main", Old_Commit_D_Uri),
+
+    rebase_on_branch(system_descriptor{}, Auth, Master_Path, Second_Path, "rebaser", [], none, _, _),
+
+    % The replayed copy of commit d records the commit it replays.
+    branch_head_commit(Repo_Descriptor, "main", New_Commit_D_Uri),
+    create_context(Repo_Descriptor, Repo_Ctx),
+    get_document(Repo_Ctx, New_Commit_D_Uri, New_Commit_D),
+    get_dict(merge_source, New_Commit_D, Merge_Source),
+    get_dict(operation, Merge_Source, rebase),
+    atom_string(Old_Commit_D_Uri, Old_Commit_D_Uri_String),
+    get_dict(commits, Merge_Source, [Old_Commit_D_Uri_String]).
+
 test(rebase_divergent_history_no_common_commit_option,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "foo"))),

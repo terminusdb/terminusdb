@@ -371,7 +371,12 @@ squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
     ;   After_Schema_Uri = none),
     do_or_die(Before_Schema_Uri = After_Schema_Uri,
               error(apply_schema_delta(Before_Commit_Id, After_Commit_Id), _)),
-    create_context(Branch_Descriptor, Commit_Info, Context),
+    % The squash apply is a merge — record the merged-in source on the
+    % produced commit.
+    put_dict(merge_source, Commit_Info,
+             _{operation: apply, commits: [After_Commit_Uri]},
+             Commit_Info_With_Provenance),
+    create_context(Branch_Descriptor, Commit_Info_With_Provenance, Context),
     option(conflict_resolution(Raw_Resolution), Options, error),
     normalize_conflict_resolution(Raw_Resolution, Context, Resolution),
     merge_options(Options, options{keep:json{'@id':true, '@type':true},
@@ -1449,6 +1454,44 @@ test(apply_squash_refuses_a_schema_delta,
                                         Commit1, Head, [], _),
           E2, true),
     E2 = error(apply_schema_delta(Commit1, Head), _).
+
+test(apply_records_merge_source,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [author("gavin"), message("test."), raw_json(true)],
+
+    open_string('[{"@id":"item/a","name":"alpha","n":1}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+    open_string('{"@id":"item/b","name":"beta","n":2}', S2),
+    api_insert_documents(SystemDB, Auth, Path, S2, no_data_version,
+                         data_version(branch,Commit4), _, _, Options),
+
+    atomic_list_concat([Path, '/local/branch/dev'], Dev_Path),
+    atomic_list_concat([Path, '/local/commit/', Commit1], Commit_Path),
+    branch_create(SystemDB, Auth, Dev_Path, branch(Commit_Path), _),
+
+    Commit_Info = commit_info{author:"gavin", message:"apply"},
+    api_apply_squash_commit(SystemDB, Auth, Dev_Path, Commit_Info,
+                            Commit1, Commit4, []),
+
+    resolve_absolute_string_descriptor(Dev_Path, Dev_Descriptor),
+    Repo_Descriptor = (Dev_Descriptor.repository_descriptor),
+    branch_head_commit(Repo_Descriptor, "dev", Head_Uri),
+    create_context(Repo_Descriptor, Repo_Ctx),
+    get_document(Repo_Ctx, Head_Uri, Head_Doc),
+    get_dict(merge_source, Head_Doc, Merge_Source),
+    get_dict(operation, Merge_Source, apply),
+    ref_entity:commit_id_uri(Repo_Ctx, Commit4, Source_Uri),
+    atom_string(Source_Uri, Source_Uri_String),
+    get_dict(commits, Merge_Source, [Source_Uri_String]).
 
 test(commits_changed_id_enumerates_over_a_layerless_base,
      [setup((setup_temp_store(State),
