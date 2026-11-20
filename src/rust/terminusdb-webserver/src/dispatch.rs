@@ -221,14 +221,20 @@ impl SubscriptionLimiter {
 
     /// Release a subscription slot for the given user.
     /// Decrements the count, removing the entry if it reaches zero.
+    /// A release with nothing held means the counter drifted from the
+    /// actual streams — log it rather than silently clamping at zero.
     pub fn release(&mut self, user_id: &str) {
-        if let Some(count) = self.counts.get_mut(user_id) {
-            if *count > 0 {
+        match self.counts.get_mut(user_id) {
+            Some(count) if *count > 0 => {
                 *count -= 1;
+                if *count == 0 {
+                    self.counts.remove(user_id);
+                }
             }
-            if *count == 0 {
-                self.counts.remove(user_id);
-            }
+            _ => crate::log::log_error(format!(
+                "subscription limiter: release below zero for user '{}'",
+                user_id
+            )),
         }
     }
 
@@ -262,6 +268,9 @@ enum BroadcastCommand {
         stream_id: StreamId,
         sender: mpsc::Sender<axum::body::Bytes>,
         idle_timeout: Option<std::time::Duration>,
+        /// Delivered by the forwarder after registration, so receipt
+        /// proves the subscription is live for every later Send.
+        first_message: Option<axum::body::Bytes>,
     },
     Unsubscribe {
         channel: String,
@@ -335,6 +344,7 @@ impl BroadcastRegistry {
         stream_id: StreamId,
         sender: mpsc::Sender<axum::body::Bytes>,
         idle_timeout: Option<std::time::Duration>,
+        first_message: Option<axum::body::Bytes>,
     ) {
         self.ensure_forwarder();
         let _ = self.tx.send(BroadcastCommand::Subscribe {
@@ -342,6 +352,7 @@ impl BroadcastRegistry {
             stream_id,
             sender,
             idle_timeout,
+            first_message,
         });
     }
 
@@ -447,9 +458,14 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                 stream_id,
                 sender,
                 idle_timeout,
+                first_message,
             } => {
                 let (sub_tx, sub_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
-                let task = tokio::spawn(subscriber_task(sub_rx, sender, idle_timeout));
+                if let Some(first_message) = first_message {
+                    // Fresh buffer — try_send cannot fail.
+                    let _ = sub_tx.try_send(first_message);
+                }
+                let task = tokio::spawn(subscriber_task(stream_id, sub_rx, sender, idle_timeout));
                 channels
                     .entry(channel)
                     .or_default()
@@ -499,10 +515,15 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                             failed.len(), full_count, closed_count, channel, subs.len() - failed.len()
                         ));
                     }
+                    // Evicted subscribers lose their stream outright — the
+                    // registry removal ends the HTTP response body. Leaving
+                    // the entry behind would keep a dead connection open
+                    // forever.
                     for id in failed {
                         if let Some(sub) = subs.remove(&id) {
                             sub.task.abort();
                         }
+                        stream_registry().lock().unwrap().remove(id);
                     }
                 } else {
                     // Silently skip — no subscribers on this channel.
@@ -547,6 +568,7 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                         if let Some(sub) = subs.remove(&id) {
                             sub.task.abort();
                         }
+                        stream_registry().lock().unwrap().remove(id);
                     }
                 }
                 if total_full > 0 || total_closed > 0 {
@@ -572,16 +594,22 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
 ///
 /// The task exits (and cleans up) when either side closes:
 /// - The per-subscriber buffer sender is dropped (forwarder removed the
-///   subscriber, or the forwarder task ended) → `recv().await` returns None
+///   subscriber, or the forwarder task ended) → `recv().await` returns None.
+///   The stream itself is left alone — an unsubscribe is not a disconnect.
 /// - The stream's mpsc receiver is dropped (client disconnected) →
-///   `send().await` returns Err
-/// - The idle timeout fires with no messages → exit, which drops
-///   stream_tx, causing the ReceiverStream to see EOF
+///   `send().await` returns Err → the registry entry goes, ending the HTTP
+///   response body for good measure
+/// - The idle timeout fires with no messages → same removal: the stream
+///   must actually end, not go silent. `stream_registry` holds a second
+///   sender clone, so dropping only `stream_tx` would leave the client on
+///   an open connection that never delivers another byte.
 async fn subscriber_task(
+    stream_id: StreamId,
     mut rx: mpsc::Receiver<axum::body::Bytes>,
     stream_tx: mpsc::Sender<axum::body::Bytes>,
     idle_timeout: Option<std::time::Duration>,
 ) {
+    let mut stream_dead = false;
     match idle_timeout {
         Some(timeout) => {
             loop {
@@ -594,6 +622,7 @@ async fn subscriber_task(
                             None => break,
                             Some(bytes) => {
                                 if stream_tx.send(bytes).await.is_err() {
+                                    stream_dead = true;
                                     break;
                                 }
                                 // Loop restarts the sleep timer.
@@ -603,9 +632,10 @@ async fn subscriber_task(
                     _ = &mut sleep => {
                         // Idle timeout — no messages for the timeout
                         // duration. Exit to close the stream.
-                        crate::log::log_info(format!(
-                            "subscriber_task: idle timeout fired, closing stream"
-                        ));
+                        crate::log::log_info(
+                            "subscriber_task: idle timeout fired, closing stream".to_string(),
+                        );
+                        stream_dead = true;
                         break;
                     }
                 }
@@ -614,10 +644,14 @@ async fn subscriber_task(
         None => {
             while let Some(bytes) = rx.recv().await {
                 if stream_tx.send(bytes).await.is_err() {
+                    stream_dead = true;
                     break;
                 }
             }
         }
+    }
+    if stream_dead {
+        stream_registry().lock().unwrap().remove(stream_id);
     }
 }
 
@@ -802,6 +836,11 @@ pub enum DispatchMessage {
     /// without it the loop sleeps in `blocking_recv` and buffered entries
     /// only flush when a request happens to arrive.
     FlushLogs,
+    /// A streaming response ended — client disconnect, server-initiated
+    /// close, or an evicted/timed-out subscriber task. The dispatcher
+    /// notifies Prolog so plugins can release per-stream state (SSE
+    /// subscription rows, per-user limiter slots).
+    StreamClosed { stream_id: StreamId },
 }
 
 /// Sender for the single-engine dispatcher queue.
@@ -997,6 +1036,14 @@ pub fn init_dispatcher() {
                             .lock()
                             .unwrap()
                             .remove(req.response_stream_id);
+                    }
+                }
+                DispatchMessage::StreamClosed { stream_id } => {
+                    if let Err(e) = dispatch_stream_closed_to_prolog(&context, stream_id) {
+                        crate::log::log_error(format!(
+                            "[terminusdb-webserver] stream_closed dispatch failed for stream {}: {}",
+                            stream_id, e
+                        ));
                     }
                 }
             }
@@ -1238,6 +1285,32 @@ fn dispatch_stream_to_prolog(
             &response_stream_id_term,
         ],
     );
+    frame.discard();
+    result
+}
+
+/// Notify Prolog that a streaming response ended. Calls
+/// `appserver_hooks:stream_closed/1`, which fans out to every
+/// `appserver_stream_closed/1` hook clause so each plugin can release
+/// the state it registered for the stream.
+fn dispatch_stream_closed_to_prolog(
+    context: &Context<impl QueryableContextType>,
+    stream_id: StreamId,
+) -> PrologResult<()> {
+    // Per-call foreign frame — see dispatch_pipe_to_prolog.
+    let frame = context.open_frame();
+
+    let stream_id_term = frame.new_term_ref();
+    stream_id_term
+        .put(&stream_id)
+        .map_err(|_| PrologError::Failure)?;
+
+    let callable = CallablePredicate::new(Predicate::new(
+        Functor::new(Atom::new("stream_closed"), 1),
+        Module::new(Atom::new("appserver_hooks")),
+    ))
+    .map_err(|_| PrologError::Failure)?;
+    let result = frame.call_once(callable, [&stream_id_term]);
     frame.discard();
     result
 }
@@ -2210,8 +2283,8 @@ mod tests {
         let (tx1, mut rx1) = mpsc::channel::<axum::body::Bytes>(10);
         let (tx2, mut rx2) = mpsc::channel::<axum::body::Bytes>(10);
 
-        broadcast_registry.subscribe("actions".to_string(), 1, tx1, None);
-        broadcast_registry.subscribe("actions".to_string(), 2, tx2, None);
+        broadcast_registry.subscribe("actions".to_string(), 1, tx1, None, None);
+        broadcast_registry.subscribe("actions".to_string(), 2, tx2, None, None);
 
         let event = axum::body::Bytes::from(r#"{"action":"test"}"#);
         assert!(broadcast_registry.send("actions", event.clone()).is_ok());
@@ -2236,8 +2309,8 @@ mod tests {
         // Subscriber 2: normal channel that we will drain
         let (tx2, mut rx2) = mpsc::channel::<axum::body::Bytes>(10);
 
-        broadcast_registry.subscribe("actions".to_string(), 1, tx1, None);
-        broadcast_registry.subscribe("actions".to_string(), 2, tx2, None);
+        broadcast_registry.subscribe("actions".to_string(), 1, tx1, None, None);
+        broadcast_registry.subscribe("actions".to_string(), 2, tx2, None, None);
 
         // Send event 1 — both subscribers should get it (subscriber 1's
         // per-subscriber buffer has room for 64 events)
@@ -2254,6 +2327,110 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn subscriber_task_dead_client_removes_stream_from_registry() {
+        let (tx, rx) = mpsc::channel::<axum::body::Bytes>(1);
+        let stream_id = stream_registry().lock().unwrap().add(tx.clone());
+        let (sub_tx, sub_rx) = mpsc::channel::<axum::body::Bytes>(4);
+        let task = tokio::spawn(subscriber_task(stream_id, sub_rx, tx, None));
+
+        // Client disappears: the next send fails, the task must take the
+        // response-registry entry down with it — otherwise the HTTP
+        // response never sees EOF and the stream keeps its limiter slot
+        // forever.
+        drop(rx);
+        sub_tx.send(axum::body::Bytes::from("x")).await.unwrap();
+        task.await.unwrap();
+        assert!(!stream_registry().lock().unwrap().contains(stream_id));
+    }
+
+    #[tokio::test]
+    async fn subscriber_task_idle_timeout_removes_stream_from_registry() {
+        let (tx, _rx) = mpsc::channel::<axum::body::Bytes>(1);
+        let stream_id = stream_registry().lock().unwrap().add(tx.clone());
+        let (_sub_tx, sub_rx) = mpsc::channel::<axum::body::Bytes>(4);
+        let task = tokio::spawn(subscriber_task(
+            stream_id,
+            sub_rx,
+            tx,
+            Some(std::time::Duration::from_millis(20)),
+        ));
+        task.await.unwrap();
+        assert!(!stream_registry().lock().unwrap().contains(stream_id));
+    }
+
+    #[tokio::test]
+    async fn forwarder_evicts_full_subscriber_and_removes_its_stream() {
+        // Drive run_forwarder directly — the BroadcastRegistry handle
+        // needs the global tokio handle, which races between tests.
+        let (cmd_tx, cmd_rx) = mpsc::unbounded_channel::<BroadcastCommand>();
+        let forwarder = tokio::spawn(run_forwarder(cmd_rx));
+
+        // Slow subscriber: tiny response channel, never drained — its
+        // per-subscriber buffer fills and the forwarder evicts it.
+        let (tx_slow, _rx_slow) = mpsc::channel::<axum::body::Bytes>(1);
+        let slow_id = stream_registry().lock().unwrap().add(tx_slow.clone());
+        cmd_tx
+            .send(BroadcastCommand::Subscribe {
+                channel: "actions".to_string(),
+                stream_id: slow_id,
+                sender: tx_slow,
+                idle_timeout: None,
+                first_message: None,
+            })
+            .unwrap();
+
+        let (tx_fast, mut rx_fast) = mpsc::channel::<axum::body::Bytes>(16);
+        let fast_id = stream_registry().lock().unwrap().add(tx_fast.clone());
+        cmd_tx
+            .send(BroadcastCommand::Subscribe {
+                channel: "actions".to_string(),
+                stream_id: fast_id,
+                sender: tx_fast,
+                idle_timeout: None,
+                first_message: Some(axum::body::Bytes::from("connected")),
+            })
+            .unwrap();
+        // The first_message is the first thing the new subscriber sees,
+        // before any channel traffic — the ordering proof that
+        // registration happened.
+        let first = rx_fast.recv().await.unwrap();
+        assert_eq!(first, axum::body::Bytes::from("connected"));
+        // A live client drains its response stream — without this the
+        // fast subscriber's response buffer fills too and it evicts like
+        // the stalled one.
+        let drainer = tokio::spawn(async move { while rx_fast.recv().await.is_some() {} });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Overflow the slow subscriber's per-subscriber buffer. Paced
+        // sends give the healthy subscriber's task time to drain, so the
+        // evict picks off only the stalled one — a burst faster than
+        // task scheduling would evict both.
+        for i in 0..(SUBSCRIBER_BUFFER * 4) {
+            cmd_tx
+                .send(BroadcastCommand::Send {
+                    channel: "actions".to_string(),
+                    bytes: axum::body::Bytes::from(format!("e{}", i)),
+                })
+                .unwrap();
+            if !stream_registry().lock().unwrap().contains(slow_id) {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(2)).await;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // The evicted stream's registry entry is gone; the healthy
+        // subscriber's stream stays registered.
+        assert!(!stream_registry().lock().unwrap().contains(slow_id));
+        assert!(stream_registry().lock().unwrap().contains(fast_id));
+
+        stream_registry().lock().unwrap().remove(fast_id);
+        forwarder.abort();
+        drainer.abort();
+    }
+
+    #[tokio::test]
     async fn broadcast_registry_send_to_all_delivers_to_every_graphql_channel() {
         set_tokio_handle(tokio::runtime::Handle::current());
 
@@ -2263,9 +2440,9 @@ mod tests {
         let (tx2, mut rx2) = mpsc::channel::<axum::body::Bytes>(10);
         let (tx3, mut rx3) = mpsc::channel::<axum::body::Bytes>(10);
 
-        broadcast_registry.subscribe("graphql_raw_cohort_a".to_string(), 1, tx1, None);
-        broadcast_registry.subscribe("graphql_raw_cohort_b".to_string(), 2, tx2, None);
-        broadcast_registry.subscribe("graphql_raw_cohort_c".to_string(), 3, tx3, None);
+        broadcast_registry.subscribe("graphql_raw_cohort_a".to_string(), 1, tx1, None, None);
+        broadcast_registry.subscribe("graphql_raw_cohort_b".to_string(), 2, tx2, None, None);
+        broadcast_registry.subscribe("graphql_raw_cohort_c".to_string(), 3, tx3, None, None);
 
         // Send a keepalive to ALL GraphQL channels
         let keepalive = axum::body::Bytes::from(": keepalive\n\n");
@@ -2292,8 +2469,8 @@ mod tests {
         let (tx_gql, mut rx_gql) = mpsc::channel::<axum::body::Bytes>(10);
         let (tx_commit, mut rx_commit) = mpsc::channel::<axum::body::Bytes>(10);
 
-        broadcast_registry.subscribe("graphql_raw_cohort1".to_string(), 1, tx_gql, None);
-        broadcast_registry.subscribe("admin/db/local/branch/main".to_string(), 2, tx_commit, None);
+        broadcast_registry.subscribe("graphql_raw_cohort1".to_string(), 1, tx_gql, None, None);
+        broadcast_registry.subscribe("admin/db/local/branch/main".to_string(), 2, tx_commit, None, None);
 
         // Give the forwarder time to process the subscribe commands
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -2833,6 +3010,23 @@ impl Drop for StreamGuard {
         }
         let stream_arc = stream_registry();
         stream_arc.lock().unwrap().remove(self.id);
+        // Every stream death funnels through this drop, so it is the one
+        // place that can notify Prolog. `Drop` cannot await, so the send
+        // goes on a spawned task that waits for queue capacity — a full
+        // queue must not lose the notification, or per-stream state
+        // (subscription rows, limiter slots) leaks.
+        if dispatcher_initialized() {
+            // Panics if the runtime is already gone — shutdown-only edge.
+            if let Some(handle) = tokio_handle() {
+                let queue = dispatch_queue();
+                let id = self.id;
+                handle.spawn(async move {
+                    let _ = queue
+                        .send(DispatchMessage::StreamClosed { stream_id: id })
+                        .await;
+                });
+            }
+        }
     }
 }
 

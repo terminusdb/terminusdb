@@ -6,12 +6,21 @@
 :- dynamic event_stream/1.
 
 :- multifile appserver_hooks:appserver_stream/3.
+:- multifile appserver_hooks:appserver_stream_closed/1.
 :- multifile plugins:post_commit_hook/2.
 
 %% appserver_hooks:appserver_stream(+Method, +Path, +Handler) is det.
 %
 %  Register the `/api/v1/ext/events` NDJSON event stream endpoint.
 appserver_hooks:appserver_stream(get, '/api/v1/ext/events', webserver_events:events_handler).
+
+%% Stream teardown hook — drop the listener entry when its stream ends,
+%% so the post_commit_hook broadcast stops attempting sends to it
+%% immediately rather than on the next failed send.
+appserver_hooks:appserver_stream_closed(StreamId) :-
+    catch(retractall(webserver_events:event_stream(StreamId)), Error,
+          json_log_error_formatted(
+              "stream_closed retract error: ~q", [Error])).
 
 %% events_handler(+Request, +StreamId, -Response) is det.
 %
