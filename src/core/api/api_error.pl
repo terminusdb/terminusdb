@@ -358,6 +358,27 @@ api_global_error_jsonld(error(search_requires_branch_descriptor(Path), _), Type,
             }.
 % Search-family handler received 404 from engine (not indexed yet).
 % Returns a structured 404 response instead of an unhandled 500.
+api_global_error_jsonld(error(domain_error(Expected_Domain, Value), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Value ~w is outside the domain ~w", [Value, Expected_Domain]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:ValueOutsideDomain',
+                              'api:domain' : Expected_Domain,
+                              'api:value' : Value },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(casting_error(Val, Type), _), API, JSON) :-
+    error_type(API, Type_Displayed),
+    format(string(ValS), "~w", [Val]),
+    format(string(Msg), "The value ~s could not be cast as ~q", [ValS, Type]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:value' : ValS,
+                              'api:type' : Type},
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(search_not_indexed(Path, _Engine_Body), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg),
@@ -817,16 +838,6 @@ api_error_jsonld_(frame,error(woql_syntax_error(badly_formed_ast(Term)),_), JSON
                               'api:error_term' : String},
              'api:message' : Msg
             }.
-api_error_jsonld_(frame,error(casting_error(Val,Type),_), JSON) :-
-    format(string(ValS), "~w", [Val]),
-    format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
-    JSON = _{'@type' : 'api:FrameErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadCast',
-                              'api:value' : ValS,
-                              'api:type' : Type},
-             'api:message' : Msg
-            }.
 api_error_jsonld_(woql,error(find_resource_pre_flight_failure_for(AST), _), JSON) :-
     format(string(Msg), "Unable to find and process a resource from the AST ~q", [AST]),
     JSON = _{'@type' : "api:WoqlErrorResponse",
@@ -914,16 +925,6 @@ api_error_jsonld_(woql,error(branch_does_not_exist(Descriptor), _), JSON) :-
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:BranchDoesNotExistError",
                               'api:absolute_descriptor' : Path}
-            }.
-api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
-    format(string(ValS), "~w", [Val]),
-    format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
-    JSON = _{'@type' : 'api:WoqlErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadCast',
-                              'api:value' : ValS,
-                              'api:type' : Type},
-             'api:message' : Msg
             }.
 api_error_jsonld_(woql,error(incompatible_numeric_comparison(Val1,Val2),_), JSON) :-
     format(string(Val1S), "~w", [Val1]),

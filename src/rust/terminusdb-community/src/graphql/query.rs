@@ -654,12 +654,12 @@ fn object_type_filter<'a>(
         },
         FilterValue::SmallInt(op, i, _) => {
             let op = *op;
-            let i = *i;
+            let val = Integer::from(*i);
             let h = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = h.id_object_value(*object).expect("Object value must exist");
-                let object_int = object_value.as_i32().expect("not a numerical value");
-                let cmp = object_int.cmp(&i);
+                let object_int = value_to_bigint(&object_value);
+                let cmp = object_int.cmp(&val);
                 ordering_matches_op(cmp, op)
             }))
         }
@@ -669,7 +669,7 @@ fn object_type_filter<'a>(
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_float = object_value.as_val::<f64, f64>();
+                let object_float = object_value.as_f64().expect("not a numerical value");
                 let cmp = OrderedFloat(object_float).cmp(&OrderedFloat(f));
                 ordering_matches_op(cmp, op)
             }))
@@ -687,7 +687,9 @@ fn object_type_filter<'a>(
         }
         FilterValue::BigInt(op, BigInt(bigint), _) => {
             let op = *op;
-            let val = bigint.parse::<Integer>().unwrap();
+            let val = bigint
+                .parse::<Integer>()
+                .expect("BigInt scalar validates its input");
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
@@ -698,7 +700,9 @@ fn object_type_filter<'a>(
         }
         FilterValue::BigFloat(op, BigFloat(decimal), _) => {
             let op = *op;
-            let val = Decimal::make_entry(&Decimal::new(decimal.to_string()).unwrap());
+            let val = Decimal::make_entry(
+                &Decimal::new(decimal.to_string()).expect("BigFloat scalar validates its input"),
+            );
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");

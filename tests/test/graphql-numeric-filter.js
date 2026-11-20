@@ -8,10 +8,9 @@ const {
 
 // Filtering numeric fields in GraphQL.
 //
-// `xsd:int` filters correctly. `xsd:long` and `xsd:float` return 500, because
-// base_type_kind puts "long" (and "unsignedInt") in SMALL_INTEGER_TYPES and
-// groups "float" with "double" in FLOAT_TYPES, so the filter is built for the
-// narrower type and then panics on the stored value.
+// GraphQL's Int is 32-bit, so fields wider than i32 (xsd:long, xsd:unsignedInt,
+// xsd:unsignedLong) filter through the BigInt scalar and xsd:decimal through
+// BigFloat. Bounds beyond the GraphQL Int range go in as strings.
 describe('GraphQL numeric filters', function () {
   let agent
   let client
@@ -28,13 +27,31 @@ describe('GraphQL numeric filters', function () {
     smallValue: 'xsd:int',
     bigValue: 'xsd:long',
     floatValue: 'xsd:float',
+    unsignedInt: 'xsd:unsignedInt',
+    unsignedLong: 'xsd:unsignedLong',
+    decimalValue: 'xsd:decimal',
   }]
 
   const instances = [
-    { '@type': 'Measure', name: 'a', smallValue: 0, bigValue: 0, floatValue: 0.5 },
-    { '@type': 'Measure', name: 'b', smallValue: 5, bigValue: 5, floatValue: 5.5 },
-    { '@type': 'Measure', name: 'c', smallValue: 9, bigValue: 9, floatValue: 9.5 },
-    { '@type': 'Measure', name: 'd', smallValue: 15, bigValue: 15, floatValue: 15.5 },
+    {
+      '@type': 'Measure', name: 'a', smallValue: 0, bigValue: 0, floatValue: 0.5, unsignedInt: 0, unsignedLong: 0, decimalValue: 0.5,
+    },
+    {
+      '@type': 'Measure', name: 'b', smallValue: 5, bigValue: 5, floatValue: 5.5, unsignedInt: 5, unsignedLong: 5, decimalValue: 5.5,
+    },
+    {
+      '@type': 'Measure', name: 'c', smallValue: 9, bigValue: 9, floatValue: 9.5, unsignedInt: 9, unsignedLong: 9, decimalValue: 9.5,
+    },
+    {
+      '@type': 'Measure',
+      name: 'd',
+      smallValue: 15,
+      bigValue: { '@type': 'xsd:long', '@value': '9223372036854775807' },
+      floatValue: 15.5,
+      unsignedInt: 4294967295,
+      unsignedLong: { '@type': 'xsd:unsignedLong', '@value': '18446744073709551615' },
+      decimalValue: 15.5,
+    },
   ]
 
   before(async function () {
@@ -81,10 +98,83 @@ describe('GraphQL numeric filters', function () {
     expect(names(result)).to.deep.equal(['b', 'c', 'd'])
   })
 
+  it('filters an xsd:long field above the 32-bit range', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { bigValue: { ge: "4294967296" } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['d'])
+  })
+
   it('filters an xsd:float field', async function () {
     const result = await client.query({
       query: gql`{ Measure(filter: { floatValue: { ge: 5.0 } }) { name } }`,
     })
     expect(names(result)).to.deep.equal(['b', 'c', 'd'])
+  })
+
+  it('filters an xsd:unsignedInt field', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { unsignedInt: { ge: 5 } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['b', 'c', 'd'])
+  })
+
+  it('filters an xsd:unsignedInt field above the 32-bit signed range', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { unsignedInt: { ge: "4294967295" } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['d'])
+  })
+
+  it('filters an xsd:unsignedLong field', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { unsignedLong: { ge: 5 } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['b', 'c', 'd'])
+  })
+
+  it('filters an xsd:unsignedLong field above the 64-bit signed range', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { unsignedLong: { ge: "9223372036854775808" } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['d'])
+  })
+
+  it('filters an xsd:decimal field', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { decimalValue: { ge: 5.05 } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['b', 'c', 'd'])
+  })
+
+  it('filters an xsd:decimal field with a string bound', async function () {
+    const result = await client.query({
+      query: gql`{ Measure(filter: { decimalValue: { ge: "5.05" } }) { name } }`,
+    })
+    expect(names(result)).to.deep.equal(['b', 'c', 'd'])
+  })
+
+  it('rejects a malformed BigFloat bound with a validation error, not a 500', async function () {
+    try {
+      await client.query({
+        query: gql`{ Measure(filter: { decimalValue: { ge: "abc" } }) { name } }`,
+      })
+      expect.fail('Should have thrown an error')
+    } catch (error) {
+      const status = error.networkError?.statusCode
+      expect(status).to.not.equal(500)
+    }
+  })
+
+  it('rejects a malformed BigInt bound with a validation error, not a 500', async function () {
+    try {
+      await client.query({
+        query: gql`{ Measure(filter: { bigValue: { ge: "abc" } }) { name } }`,
+      })
+      expect.fail('Should have thrown an error')
+    } catch (error) {
+      const status = error.networkError?.statusCode
+      expect(status).to.not.equal(500)
+    }
   })
 })

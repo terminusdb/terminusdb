@@ -1359,7 +1359,7 @@ refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#integer',S^^_,Reason) :-
                  }
     ).
 refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#double',S^^_,Reason) :-
-    (   \+ float(S),
+    (   \+ is_double(S),
         term_to_atom(S,A)
     ->  Reason = json{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1369,7 +1369,7 @@ refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#double',S^^_,Reason) :-
                  }
     ).
 refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#float',S^^_,Reason) :-
-    (   \+ float(S),
+    (   \+ is_float(S),
         term_to_atom(S,A)
     ->  Reason = json{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1688,3 +1688,72 @@ refute_basetype_elt_('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral',T
                      'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'rdf:PlainLiteral'}
                  }
     ).
+
+:- begin_tests(basetype_literal_validation).
+
+test('xsd:float accepts integral input', [fail]) :-
+    refute_basetype_elt(5^^'http://www.w3.org/2001/XMLSchema#float',
+                        'http://www.w3.org/2001/XMLSchema#float',
+                        _Reason).
+
+test('xsd:float accepts a float in range', [fail]) :-
+    refute_basetype_elt(5.5^^'http://www.w3.org/2001/XMLSchema#float',
+                        'http://www.w3.org/2001/XMLSchema#float',
+                        _Reason).
+
+test('xsd:float rejects values beyond the finite f32 range', []) :-
+    refute_basetype_elt(1e40^^'http://www.w3.org/2001/XMLSchema#float',
+                        'http://www.w3.org/2001/XMLSchema#float',
+                        _Reason).
+
+test('xsd:double accepts integral input', [fail]) :-
+    refute_basetype_elt(5^^'http://www.w3.org/2001/XMLSchema#double',
+                        'http://www.w3.org/2001/XMLSchema#double',
+                        _Reason).
+
+test('xsd:double rejects a non-numeric input', []) :-
+    refute_basetype_elt("not a number"^^'http://www.w3.org/2001/XMLSchema#double',
+                        'http://www.w3.org/2001/XMLSchema#double',
+                        _Reason).
+
+test('xsd:int accepts the i32 bounds', [fail]) :-
+    refute_basetype_elt(2147483647^^'http://www.w3.org/2001/XMLSchema#int',
+                        'http://www.w3.org/2001/XMLSchema#int',
+                        _Reason).
+
+test('xsd:int rejects values above the i32 bound', []) :-
+    refute_basetype_elt(2147483648^^'http://www.w3.org/2001/XMLSchema#int',
+                        'http://www.w3.org/2001/XMLSchema#int',
+                        _Reason).
+
+test('xsd:long accepts the i64 bounds', [fail]) :-
+    refute_basetype_elt(9223372036854775807^^'http://www.w3.org/2001/XMLSchema#long',
+                        'http://www.w3.org/2001/XMLSchema#long',
+                        _Reason).
+
+test('xsd:long rejects values above the i64 bound', []) :-
+    refute_basetype_elt(9223372036854775808^^'http://www.w3.org/2001/XMLSchema#long',
+                        'http://www.w3.org/2001/XMLSchema#long',
+                        _Reason).
+
+test('xsd:unsignedInt accepts the u32 bound', [fail]) :-
+    refute_basetype_elt(4294967295^^'http://www.w3.org/2001/XMLSchema#unsignedInt',
+                        'http://www.w3.org/2001/XMLSchema#unsignedInt',
+                        _Reason).
+
+test('xsd:unsignedInt rejects values above the u32 bound', []) :-
+    refute_basetype_elt(4294967296^^'http://www.w3.org/2001/XMLSchema#unsignedInt',
+                        'http://www.w3.org/2001/XMLSchema#unsignedInt',
+                        _Reason).
+
+test('xsd:unsignedLong accepts the u64 bound', [fail]) :-
+    refute_basetype_elt(18446744073709551615^^'http://www.w3.org/2001/XMLSchema#unsignedLong',
+                        'http://www.w3.org/2001/XMLSchema#unsignedLong',
+                        _Reason).
+
+test('xsd:unsignedLong rejects values above the u64 bound', []) :-
+    refute_basetype_elt(18446744073709551616^^'http://www.w3.org/2001/XMLSchema#unsignedLong',
+                        'http://www.w3.org/2001/XMLSchema#unsignedLong',
+                        _Reason).
+
+:- end_tests(basetype_literal_validation).

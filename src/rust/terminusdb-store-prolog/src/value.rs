@@ -1,11 +1,130 @@
 use base64;
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use rug::Integer;
+use std::convert::TryFrom;
 use std::io::Cursor;
 use std::io::Read;
 use swipl::prelude::*;
 use swipl::term::Term;
 use tdb_succinct::*;
+
+#[derive(Debug, PartialEq)]
+enum NumericEntryError {
+    OutOfRange,
+    NonFinite,
+    Malformed,
+}
+
+fn unsigned_int_entry<T>(inner_number: u64) -> Result<TypedDictEntry, NumericEntryError>
+where
+    T: TryFrom<u64> + TdbDataType,
+{
+    match T::try_from(inner_number) {
+        Ok(v) => Ok(T::make_entry(&v)),
+        Err(_) => Err(NumericEntryError::OutOfRange),
+    }
+}
+
+fn signed_int_entry<T>(inner_number: i64) -> Result<TypedDictEntry, NumericEntryError>
+where
+    T: TryFrom<i64> + TdbDataType,
+{
+    match T::try_from(inner_number) {
+        Ok(v) => Ok(T::make_entry(&v)),
+        Err(_) => Err(NumericEntryError::OutOfRange),
+    }
+}
+
+fn float32_entry(inner_number: f64) -> Result<TypedDictEntry, NumericEntryError> {
+    let narrowed = inner_number as f32;
+    if narrowed.is_finite() {
+        Ok(f32::make_entry(&narrowed))
+    } else {
+        Err(NumericEntryError::NonFinite)
+    }
+}
+
+fn float64_entry(inner_number: f64) -> Result<TypedDictEntry, NumericEntryError> {
+    if inner_number.is_finite() {
+        Ok(f64::make_entry(&inner_number))
+    } else {
+        Err(NumericEntryError::NonFinite)
+    }
+}
+
+fn decimal_entry(decimal_str: String) -> Result<TypedDictEntry, NumericEntryError> {
+    Decimal::new(decimal_str)
+        .map_err(|_| NumericEntryError::Malformed)
+        .map(|d| Decimal::make_entry(&d))
+}
+
+fn positive_integer_entry(integer: Integer) -> Result<TypedDictEntry, NumericEntryError> {
+    if integer <= 0 {
+        Err(NumericEntryError::OutOfRange)
+    } else {
+        Ok(PositiveInteger::make_entry(&PositiveInteger(integer)))
+    }
+}
+
+fn negative_integer_entry(integer: Integer) -> Result<TypedDictEntry, NumericEntryError> {
+    if integer >= 0 {
+        Err(NumericEntryError::OutOfRange)
+    } else {
+        Ok(NegativeInteger::make_entry(&NegativeInteger(integer)))
+    }
+}
+
+fn non_positive_integer_entry(integer: Integer) -> Result<TypedDictEntry, NumericEntryError> {
+    if integer > 0 {
+        Err(NumericEntryError::OutOfRange)
+    } else {
+        Ok(NonPositiveInteger::make_entry(&NonPositiveInteger(integer)))
+    }
+}
+
+fn non_negative_integer_entry(integer: Integer) -> Result<TypedDictEntry, NumericEntryError> {
+    if integer < 0 {
+        Err(NumericEntryError::OutOfRange)
+    } else {
+        Ok(NonNegativeInteger::make_entry(&NonNegativeInteger(integer)))
+    }
+}
+
+fn domain_error<C: QueryableContextType>(
+    context: &Context<C>,
+    ty_term: &Term,
+    inner_term: &Term,
+) -> PrologError {
+    match term! {context: error(domain_error(#ty_term, #inner_term), _)} {
+        Ok(exception) => context.raise_exception::<()>(&exception).unwrap_err(),
+        Err(error) => error,
+    }
+}
+
+// A number that does not fit the requested width and a non-numeric term are
+// both domain violations on the declared datatype.
+fn numeric_domain_read<C: QueryableContextType, T: TermGetable>(
+    context: &Context<C>,
+    ty_term: &Term,
+    inner_term: &Term,
+) -> PrologResult<T> {
+    inner_term
+        .get_ex()
+        .map_err(|_| domain_error(context, ty_term, inner_term))
+}
+
+fn integer_domain_read<C: QueryableContextType>(
+    context: &Context<C>,
+    ty_term: &Term,
+    inner_term: &Term,
+) -> PrologResult<Integer> {
+    let s = context
+        .string_from_term(inner_term)
+        .map_err(|_| domain_error(context, ty_term, inner_term))?;
+    Integer::parse(s)
+        .map(Integer::from)
+        .map_err(|_| domain_error(context, ty_term, inner_term))
+}
 
 pub fn make_entry_from_term<C: QueryableContextType>(
     context: &Context<C>,
@@ -60,35 +179,42 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let inner_string: String = context.string_from_term(inner_term)?;
         Ok(AnySimpleType::make_entry(&inner_string))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedByte") == ty {
-        let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u8::make_entry(&(inner_number as u8)))
+        let inner_number: u64 = numeric_domain_read(context, ty_term, inner_term)?;
+        unsigned_int_entry::<u8>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#byte") == ty {
-        let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i8::make_entry(&(inner_number as i8)))
+        let inner_number: i64 = numeric_domain_read(context, ty_term, inner_term)?;
+        signed_int_entry::<i8>(inner_number).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedShort") == ty {
-        let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u16::make_entry(&(inner_number as u16)))
+        let inner_number: u64 = numeric_domain_read(context, ty_term, inner_term)?;
+        unsigned_int_entry::<u16>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#short") == ty {
-        let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i16::make_entry(&(inner_number as i16)))
+        let inner_number: i64 = numeric_domain_read(context, ty_term, inner_term)?;
+        signed_int_entry::<i16>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedInt") == ty {
-        let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u32::make_entry(&(inner_number as u32)))
+        let inner_number: u64 = numeric_domain_read(context, ty_term, inner_term)?;
+        unsigned_int_entry::<u32>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#int") == ty {
-        let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i32::make_entry(&(inner_number as i32)))
+        let inner_number: i64 = numeric_domain_read(context, ty_term, inner_term)?;
+        signed_int_entry::<i32>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedLong") == ty {
-        let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u64::make_entry(&inner_number))
+        let inner_number: u64 = numeric_domain_read(context, ty_term, inner_term)?;
+        unsigned_int_entry::<u64>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#long") == ty {
-        let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i64::make_entry(&inner_number))
+        let inner_number: i64 = numeric_domain_read(context, ty_term, inner_term)?;
+        signed_int_entry::<i64>(inner_number)
+            .map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#float") == ty {
-        let inner_number: f64 = inner_term.get_ex()?;
-        Ok(f32::make_entry(&(inner_number as f32)))
+        let inner_number: f64 = numeric_domain_read(context, ty_term, inner_term)?;
+        float32_entry(inner_number).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#double") == ty {
-        let inner_number: f64 = inner_term.get_ex()?;
-        Ok(f64::make_entry(&inner_number))
+        let inner_number: f64 = numeric_domain_read(context, ty_term, inner_term)?;
+        float64_entry(inner_number).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#decimal") == ty {
         // Try to get as PrologText first (for string input with full 20-digit precision)
         // This allows passing arbitrary-precision decimal strings from Prolog
@@ -99,27 +225,22 @@ pub fn make_entry_from_term<C: QueryableContextType>(
             // Fall back to number for backwards compatibility (converts float/int to string)
             context.string_from_term(inner_term)?
         };
-        Ok(Decimal::make_entry(&Decimal::new(decimal_str).unwrap()))
+        decimal_entry(decimal_str).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#integer") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number).unwrap().into();
+        let integer = integer_domain_read(context, ty_term, inner_term)?;
         Ok(Integer::make_entry(&integer))
     } else if atom!("http://www.w3.org/2001/XMLSchema#positiveInteger") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number).unwrap().into();
-        Ok(PositiveInteger::make_entry(&PositiveInteger(integer)))
+        let integer = integer_domain_read(context, ty_term, inner_term)?;
+        positive_integer_entry(integer).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#negativeInteger") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number).unwrap().into();
-        Ok(NegativeInteger::make_entry(&NegativeInteger(integer)))
+        let integer = integer_domain_read(context, ty_term, inner_term)?;
+        negative_integer_entry(integer).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#nonPositiveInteger") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number).unwrap().into();
-        Ok(NonPositiveInteger::make_entry(&NonPositiveInteger(integer)))
+        let integer = integer_domain_read(context, ty_term, inner_term)?;
+        non_positive_integer_entry(integer).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#nonNegativeInteger") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number).unwrap().into();
-        Ok(NonNegativeInteger::make_entry(&NonNegativeInteger(integer)))
+        let integer = integer_domain_read(context, ty_term, inner_term)?;
+        non_negative_integer_entry(integer).map_err(|_| domain_error(context, ty_term, inner_term))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gYear") == ty {
         // TODO check that the functor is what we expect
         let year: i64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
@@ -928,4 +1049,151 @@ fn format_interval_term(iv: &DateTimeInterval) -> String {
         _ => "explicit",
     };
     format!("date_time_interval({},{},{},{})", start, end, dur, flag)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unsigned_int_entry_enforces_storage_bounds() {
+        assert_eq!(
+            Datatype::UInt8,
+            unsigned_int_entry::<u8>(255).unwrap().datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            unsigned_int_entry::<u8>(256)
+        );
+        assert!(unsigned_int_entry::<u16>(65535).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            unsigned_int_entry::<u16>(65536)
+        );
+        assert!(unsigned_int_entry::<u32>(4294967295).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            unsigned_int_entry::<u32>(4294967296)
+        );
+        assert!(unsigned_int_entry::<u64>(u64::MAX).is_ok());
+    }
+
+    #[test]
+    fn signed_int_entry_enforces_storage_bounds() {
+        assert!(signed_int_entry::<i8>(127).is_ok());
+        assert!(signed_int_entry::<i8>(-128).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            signed_int_entry::<i8>(128)
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            signed_int_entry::<i8>(-129)
+        );
+        assert!(signed_int_entry::<i16>(32767).is_ok());
+        assert!(signed_int_entry::<i16>(-32768).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            signed_int_entry::<i16>(32768)
+        );
+        assert!(signed_int_entry::<i32>(2147483647).is_ok());
+        assert!(signed_int_entry::<i32>(-2147483648).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            signed_int_entry::<i32>(2147483648)
+        );
+        assert!(signed_int_entry::<i64>(i64::MIN).is_ok());
+        assert!(signed_int_entry::<i64>(i64::MAX).is_ok());
+    }
+
+    #[test]
+    fn float32_entry_rejects_values_outside_the_finite_f32_range() {
+        assert_eq!(Datatype::Float32, float32_entry(5.5).unwrap().datatype());
+        assert!(float32_entry(f32::MAX as f64).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::NonFinite),
+            float32_entry(f32::MAX as f64 * 2.0)
+        );
+        assert_eq!(
+            Err(NumericEntryError::NonFinite),
+            float32_entry(f64::INFINITY)
+        );
+        assert_eq!(Err(NumericEntryError::NonFinite), float32_entry(f64::NAN));
+    }
+
+    #[test]
+    fn float64_entry_rejects_non_finite_values() {
+        assert_eq!(
+            Datatype::Float64,
+            float64_entry(f64::MAX).unwrap().datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::NonFinite),
+            float64_entry(f64::NEG_INFINITY)
+        );
+        assert_eq!(Err(NumericEntryError::NonFinite), float64_entry(f64::NAN));
+    }
+
+    #[test]
+    fn decimal_entry_rejects_malformed_strings() {
+        assert_eq!(
+            Datatype::Decimal,
+            decimal_entry("5.05".to_string()).unwrap().datatype()
+        );
+        assert!(decimal_entry("-123456789012345678901234567890.1234".to_string()).is_ok());
+        assert_eq!(
+            Err(NumericEntryError::Malformed),
+            decimal_entry("abc".to_string())
+        );
+        assert_eq!(
+            Err(NumericEntryError::Malformed),
+            decimal_entry("".to_string())
+        );
+    }
+
+    #[test]
+    fn sign_constrained_integer_entries_enforce_their_domains() {
+        assert_eq!(
+            Datatype::PositiveInteger,
+            positive_integer_entry(Integer::from(5)).unwrap().datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            positive_integer_entry(Integer::from(0))
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            positive_integer_entry(Integer::from(-5))
+        );
+        assert_eq!(
+            Datatype::NegativeInteger,
+            negative_integer_entry(Integer::from(-5))
+                .unwrap()
+                .datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            negative_integer_entry(Integer::from(0))
+        );
+        assert_eq!(
+            Datatype::NonPositiveInteger,
+            non_positive_integer_entry(Integer::from(0))
+                .unwrap()
+                .datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            non_positive_integer_entry(Integer::from(5))
+        );
+        assert_eq!(
+            Datatype::NonNegativeInteger,
+            non_negative_integer_entry(Integer::from(0))
+                .unwrap()
+                .datatype()
+        );
+        assert_eq!(
+            Err(NumericEntryError::OutOfRange),
+            non_negative_integer_entry(Integer::from(-5))
+        );
+    }
 }

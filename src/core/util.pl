@@ -56,6 +56,8 @@
               is_unsigned_short/1,
               is_unsigned_int/1,
               is_unsigned_long/1,
+              is_float/1,
+              is_double/1,
               is_positive_integer/1,
               is_negative_integer/1,
               is_nonpositive_integer/1,

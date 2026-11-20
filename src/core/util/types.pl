@@ -40,6 +40,8 @@
               is_unsigned_short/1,
               is_unsigned_int/1,
               is_unsigned_long/1,
+              is_float/1,
+              is_double/1,
               is_positive_integer/1,
               is_negative_integer/1,
               is_nonpositive_integer/1,
@@ -436,6 +438,18 @@ is_unsigned_long(S) :-
     integer(S),
     S >= 0,
     S =< 18446744073709551615.
+
+% IEEE-754 binary32 range; integral input is accepted because storage
+% canonicalizes it to a float.
+is_float(S) :-
+    number(S),
+    abs(S) =< 3.4028234663852886e38.
+
+% IEEE-754 binary64 range; rejects integers too large for a float as well
+% as infinities.
+is_double(S) :-
+    number(S),
+    abs(S) =< 1.7976931348623157e308.
 
 is_positive_integer(S) :-
     integer(S),

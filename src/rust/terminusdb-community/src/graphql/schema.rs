@@ -3,13 +3,15 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use juniper::meta::{DeprecationStatus, EnumValue, Field};
+use juniper::parser::ScalarToken;
 use juniper::{
     graphql_value, DefaultScalarValue, FromInputValue, GraphQLEnum, GraphQLType, GraphQLValue,
     InputValue, Registry, Value, ID,
 };
 use lazy_init::Lazy;
+use rug::Integer;
 use swipl::prelude::*;
-use tdb_succinct::TypedDictEntry;
+use tdb_succinct::{Decimal, TypedDictEntry};
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer, ObjectType};
 
@@ -1777,11 +1779,21 @@ where
     }
 
     fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
-        value.as_string_value().map(|s| Self(s.to_owned()))
+        value
+            .as_string_value()
+            .filter(|s| s.parse::<Integer>().is_ok())
+            .map(|s| Self(s.to_owned()))
     }
 
-    fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
-        <String as juniper::ParseScalarValue<S>>::from_str(value)
+    fn from_str<'a>(value: ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
+        match value {
+            // An integer literal arrives as a string scalar so the full
+            // precision survives validation as a BigInt.
+            ScalarToken::Int(v) => {
+                <String as juniper::ParseScalarValue<S>>::from_str(ScalarToken::String(v))
+            }
+            _ => <String as juniper::ParseScalarValue<S>>::from_str(value),
+        }
     }
 }
 
@@ -1861,11 +1873,21 @@ where
     }
 
     fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
-        value.as_string_value().map(|s| Self(s.to_owned()))
+        value
+            .as_string_value()
+            .filter(|s| Decimal::new(s.to_string()).is_ok())
+            .map(|s| Self(s.to_owned()))
     }
 
-    fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
-        <String as juniper::ParseScalarValue<S>>::from_str(value)
+    fn from_str<'a>(value: ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
+        match value {
+            // Numeric literals arrive as string scalars so the written
+            // precision survives validation as a BigFloat.
+            ScalarToken::Int(v) | ScalarToken::Float(v) => {
+                <String as juniper::ParseScalarValue<S>>::from_str(ScalarToken::String(v))
+            }
+            _ => <String as juniper::ParseScalarValue<S>>::from_str(value),
+        }
     }
 }
 

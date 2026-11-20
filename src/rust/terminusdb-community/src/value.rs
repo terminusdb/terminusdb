@@ -48,6 +48,14 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
 
 pub fn value_to_bigint(tde: &TypedDictEntry) -> Integer {
     match tde.datatype() {
+        Datatype::Int8 => tde.as_val::<i8, i8>().into(),
+        Datatype::Int16 => tde.as_val::<i16, i16>().into(),
+        Datatype::Int32 => tde.as_val::<i32, i32>().into(),
+        Datatype::Int64 => tde.as_val::<i64, i64>().into(),
+        Datatype::UInt8 => tde.as_val::<u8, u8>().into(),
+        Datatype::UInt16 => tde.as_val::<u16, u16>().into(),
+        Datatype::UInt32 => tde.as_val::<u32, u32>().into(),
+        Datatype::UInt64 => tde.as_val::<u64, u64>().into(),
         Datatype::BigInt => tde.as_val::<Integer, Integer>(),
         Datatype::PositiveInteger => tde.as_val::<PositiveInteger, Integer>(),
         Datatype::NonNegativeInteger => tde.as_val::<NonNegativeInteger, Integer>(),
@@ -80,18 +88,13 @@ lazy_static! {
     .collect();
     static ref DECIMAL_TYPES: HashSet<&'static str> = ["decimal",].into_iter().collect();
     static ref FLOAT_TYPES: HashSet<&'static str> = ["double", "float",].into_iter().collect();
-    static ref SMALL_INTEGER_TYPES: HashSet<&'static str> = [
-        "byte",
-        "short",
-        "int",
-        "long",
-        "unsignedByte",
-        "unsignedShort",
-        "unsignedInt",
-    ]
-    .into_iter()
-    .collect();
+    static ref SMALL_INTEGER_TYPES: HashSet<&'static str> =
+        ["byte", "short", "int", "unsignedByte", "unsignedShort",]
+            .into_iter()
+            .collect();
     static ref BIG_INTEGER_TYPES: HashSet<&'static str> = [
+        "long",
+        "unsignedInt",
         "unsignedLong",
         "integer",
         "positiveInteger",
@@ -468,4 +471,93 @@ pub fn value_to_array_index(tde: &TypedDictEntry) -> usize {
     tde.as_val::<NonNegativeInteger, Integer>()
         .try_into()
         .expect("couldn't cast array element index to a usize")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn base_type_kind_sorts_integer_types_by_storage_width() {
+        // These storage types fit inside GraphQL's 32-bit Int.
+        for name in ["byte", "short", "int", "unsignedByte", "unsignedShort"] {
+            assert_eq!(BaseTypeKind::SmallInteger, base_type_kind(name), "{name}");
+        }
+        // GraphQL's Int cannot express bounds for wider storage types, so
+        // they filter and serialize through the BigInt scalar.
+        for name in [
+            "long",
+            "unsignedInt",
+            "unsignedLong",
+            "integer",
+            "positiveInteger",
+            "nonNegativeInteger",
+            "negativeInteger",
+            "nonPositiveInteger",
+        ] {
+            assert_eq!(BaseTypeKind::BigIntger, base_type_kind(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn base_type_kind_recognizes_float_and_decimal() {
+        assert_eq!(BaseTypeKind::Float, base_type_kind("float"));
+        assert_eq!(BaseTypeKind::Float, base_type_kind("double"));
+        assert_eq!(BaseTypeKind::Decimal, base_type_kind("decimal"));
+    }
+
+    #[test]
+    fn value_to_bigint_reads_every_integer_storage_type() {
+        assert_eq!(Integer::from(-5), value_to_bigint(&i8::make_entry(&-5i8)));
+        assert_eq!(Integer::from(-5), value_to_bigint(&i16::make_entry(&-5i16)));
+        assert_eq!(Integer::from(-5), value_to_bigint(&i32::make_entry(&-5)));
+        assert_eq!(
+            Integer::from(i64::MIN),
+            value_to_bigint(&i64::make_entry(&i64::MIN))
+        );
+        assert_eq!(
+            Integer::from(u8::MAX),
+            value_to_bigint(&u8::make_entry(&u8::MAX))
+        );
+        assert_eq!(
+            Integer::from(u16::MAX),
+            value_to_bigint(&u16::make_entry(&u16::MAX))
+        );
+        assert_eq!(
+            Integer::from(u32::MAX),
+            value_to_bigint(&u32::make_entry(&u32::MAX))
+        );
+        assert_eq!(
+            Integer::from(u64::MAX),
+            value_to_bigint(&u64::make_entry(&u64::MAX))
+        );
+        assert_eq!(
+            Integer::from(7),
+            value_to_bigint(&Integer::make_entry(&Integer::from(7)))
+        );
+        assert_eq!(
+            Integer::from(7),
+            value_to_bigint(&PositiveInteger::make_entry(&PositiveInteger(
+                Integer::from(7)
+            )))
+        );
+        assert_eq!(
+            Integer::from(-7),
+            value_to_bigint(&NegativeInteger::make_entry(&NegativeInteger(
+                Integer::from(-7)
+            )))
+        );
+        assert_eq!(
+            Integer::from(0),
+            value_to_bigint(&NonNegativeInteger::make_entry(&NonNegativeInteger(
+                Integer::from(0)
+            )))
+        );
+        assert_eq!(
+            Integer::from(-7),
+            value_to_bigint(&NonPositiveInteger::make_entry(&NonPositiveInteger(
+                Integer::from(-7)
+            )))
+        );
+    }
 }
