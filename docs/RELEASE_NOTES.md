@@ -1,3 +1,25 @@
+# TerminusDB Server 12.1.0 Release Candidate 4
+
+Release Candidate 4 records where merges and branches came from in the commit graph (provenance), and hardens squash apply, the indexer, and GraphQL numeric filters against failure modes found in release-candidate testing.
+ 
+* Branch merge commits now record their provenance, and each branch remembers where it was created from, in the commit graph
+* Branch merge (squash apply) bugfix for where a delete on one side versus an edit on the other now reports a conflict instead of applies it blindly
+* Exhaustion of available threads due to missed state in state machine
+* Two panics removes: The indexer dead-man switch, and the GraphQL numeric filters for some types.
+ 
+## New functionality
+ 
+* Record merge provenance and branch origin in the commit graph [#2668](https://github.com/terminusdb/terminusdb/pull/2668)
+ 
+## Bugfixes
+ 
+* Release SSE subscription slots on stream death [#2674](https://github.com/terminusdb/terminusdb/pull/2674)
+* Detect delete-versus-edit conflicts in squash apply [#2665](https://github.com/terminusdb/terminusdb/pull/2665)
+* Fix dead man switch indexer [#2662](https://github.com/terminusdb/terminusdb/pull/2662)
+* GraphQL numeric filters no longer panic, and supports more than one condition (such as both lt and gt!) [#2669](https://github.com/terminusdb/terminusdb/pull/2669)
+ 
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.1.0-rc3...v12.1.0-rc4
+
 # TerminusDB Server 12.1.0 Release Candidate 3
 
 The third release candidate of TerminusDB 12.1 hardens the indexing and commit pipeline, finalises the storage layout and embedded vectorlink startup, and makes raw JSON documents read back exactly as they were written. The small delta of insights from formal ACID testing with ALICE and Jepsen tools were incorporated.
