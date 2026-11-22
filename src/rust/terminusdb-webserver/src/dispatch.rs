@@ -840,7 +840,9 @@ pub enum DispatchMessage {
     /// close, or an evicted/timed-out subscriber task. The dispatcher
     /// notifies Prolog so plugins can release per-stream state (SSE
     /// subscription rows, per-user limiter slots).
-    StreamClosed { stream_id: StreamId },
+    StreamClosed {
+        stream_id: StreamId,
+    },
 }
 
 /// Sender for the single-engine dispatcher queue.
@@ -2470,7 +2472,13 @@ mod tests {
         let (tx_commit, mut rx_commit) = mpsc::channel::<axum::body::Bytes>(10);
 
         broadcast_registry.subscribe("graphql_raw_cohort1".to_string(), 1, tx_gql, None, None);
-        broadcast_registry.subscribe("admin/db/local/branch/main".to_string(), 2, tx_commit, None, None);
+        broadcast_registry.subscribe(
+            "admin/db/local/branch/main".to_string(),
+            2,
+            tx_commit,
+            None,
+            None,
+        );
 
         // Give the forwarder time to process the subscribe commands
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;

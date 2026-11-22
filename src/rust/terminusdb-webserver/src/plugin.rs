@@ -19,7 +19,12 @@ fn term_to_string(term: &Term) -> PrologResult<String> {
 /// Shared body of `appserver_broadcast_subscribe/{3,4}` — subscribe the
 /// stream to the broadcast channel, optionally carrying bytes the
 /// forwarder writes to the stream after registering the subscriber.
-fn broadcast_subscribe(channel_term: &Term, stream_id_term: &Term, timeout_term: &Term, first_message: Option<axum::body::Bytes>) -> PrologResult<()> {
+fn broadcast_subscribe(
+    channel_term: &Term,
+    stream_id_term: &Term,
+    timeout_term: &Term,
+    first_message: Option<axum::body::Bytes>,
+) -> PrologResult<()> {
     let channel = term_to_string(channel_term)?;
     let stream_id: u64 = stream_id_term.get_ex()?;
     let timeout_secs: i64 = timeout_term.get_ex()?;
@@ -43,7 +48,13 @@ fn broadcast_subscribe(channel_term: &Term, stream_id_term: &Term, timeout_term:
     crate::dispatch::broadcast_registry()
         .lock()
         .unwrap()
-        .subscribe(channel, stream_id, stream_sender, idle_timeout, first_message);
+        .subscribe(
+            channel,
+            stream_id,
+            stream_sender,
+            idle_timeout,
+            first_message,
+        );
     Ok(())
 }
 

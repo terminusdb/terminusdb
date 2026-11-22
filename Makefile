@@ -286,6 +286,35 @@ docker-test-server: docker
 	@sleep 3
 	@curl -sf http://127.0.0.1:6363/api/ok > /dev/null && echo "Docker test server ready at http://127.0.0.1:6363"
 
+# Build the development toolchain image (the `dev` stage of the Dockerfile).
+# It shares the layer cache of `make docker` up to the cooked Rust dependencies.
+.PHONY: docker-dev
+docker-dev: export DOCKER_BUILDKIT=1
+docker-dev:
+	docker build . \
+	  --file Dockerfile \
+	  --target dev \
+	  --tag terminusdb/terminusdb-server:dev-tools \
+	  --build-arg SWIPL_VERSION="$(SWIPL_VERSION)"
+
+# Run `make pr-light` inside the development container. The checkout is
+# mounted read-only and synced into the terminusdb-dev-work volume, so the
+# host build is never touched and build caches survive between runs.
+DOCKER_DEV_RUN = docker run --rm --shm-size=2g \
+	  -v "$(CURDIR):/src:ro" \
+	  -v terminusdb-dev-work:/app/rust \
+	  -v terminusdb-dev-cargo:/root/.cargo/registry
+
+.PHONY: docker-pr-light
+docker-pr-light: docker-dev
+	$(DOCKER_DEV_RUN) terminusdb/terminusdb-server:dev-tools make pr-light
+
+# Open a shell in the development container, e.g. to run a single suite:
+# make test-int SUITE=diff-id
+.PHONY: docker-dev-shell
+docker-dev-shell: docker-dev
+	$(DOCKER_DEV_RUN) -it terminusdb/terminusdb-server:dev-tools bash
+
 # Stop the Docker test server.
 .PHONY: docker-test-server-stop
 docker-test-server-stop:
