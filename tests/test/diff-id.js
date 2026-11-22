@@ -1040,4 +1040,210 @@ describe('diff-id', function () {
       expect(result.body['api:error']['@type']).to.equal('api:NotValidRefError')
     })
   })
+
+  describe('apply onto a changed subdocument collection', function () {
+    let agent
+
+    before(async function () {
+      agent = new Agent().auth()
+      await db.create(agent)
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    const variant = (sku, price) => ({ '@type': 'Variant', sku, price })
+    const ourCollections = {
+      add: [variant('A', 18), variant('B', 20), variant('R', 20)],
+      remove: [variant('B', 20)],
+      replace: [variant('A', 18), variant('B', 20)],
+    }
+    const merged = {
+      add: { A: 18, B: 21, R: 20 },
+      remove: { B: 21 },
+      replace: { A: 18, B: 21 },
+    }
+
+    // Theirs edits the title and variant B; ours changes the collection.
+    async function forkProduct (collection, change) {
+      const suffix = util.randomString()
+      const productType = 'Product' + suffix
+      const variantType = 'Variant' + suffix
+      await document.insert(agent, {
+        schema: [
+          { '@id': variantType, '@type': 'Class', '@subdocument': [], '@key': { '@type': 'Lexical', '@fields': ['sku'] }, sku: 'xsd:string', price: 'xsd:decimal' },
+          { '@id': productType, '@type': 'Class', '@key': { '@type': 'Lexical', '@fields': ['handle'] }, handle: 'xsd:string', title: 'xsd:string', variants: { '@type': collection, '@class': variantType } },
+        ],
+      })
+      const product = (title, variants) => ({
+        '@type': productType,
+        handle: 'tee',
+        title,
+        variants: variants.map((v) => ({ ...v, '@type': variantType })),
+      })
+      const r1 = await document.insert(agent, { instance: product('Tee', [variant('B', 20), variant('R', 20)]) })
+      const base = r1.header['terminusdb-data-version']
+      const theirs = util.randomString()
+      await branch.create(agent, theirs, { origin: api.path.branchOrigin(agent) })
+      await document.replace(agent, {
+        path: api.path.document(agent) + '/local/branch/' + theirs,
+        instance: product('Tee v2', [variant('B', 21), variant('R', 20)]),
+      })
+      await document.replace(agent, { instance: product('Tee', ourCollections[change]) })
+      return { base, theirs, docId: productType + '/tee' }
+    }
+
+    async function prices (docId) {
+      const r = await document.get(agent, { query: { id: docId } })
+      const byKey = Object.fromEntries(r.body.variants.map((v) => [v.sku, Number(v.price)]))
+      return { title: r.body.title, variants: byKey }
+    }
+
+    function apply (fork, extra = {}) {
+      return agent.post(api.path.apply(agent)).send({
+        before_commit: fork.base,
+        after_commit: fork.theirs,
+        commit_info: { author: 'test', message: 'apply' },
+        type: 'squash',
+        ...extra,
+      })
+    }
+
+    for (const change of ['add', 'remove', 'replace']) {
+      it(`merges Set subdocuments by @id when ours ${change}s a variant`, async function () {
+        const fork = await forkProduct('Set', change)
+        const r = await apply(fork)
+        expect(r.status).to.equal(200)
+        expect(await prices(fork.docId)).to.deep.equal({ title: 'Tee v2', variants: merged[change] })
+      })
+    }
+
+    for (const collection of ['List', 'Array']) {
+      it(`merges ${collection} subdocuments when ours removed an untouched trailing variant`, async function () {
+        const fork = await forkProduct(collection, 'remove')
+        const r = await apply(fork)
+        expect(r.status).to.equal(200)
+        expect(await prices(fork.docId)).to.deep.equal({ title: 'Tee v2', variants: merged.remove })
+      })
+
+      for (const change of ['add', 'replace']) {
+        it(`reports a conflict for ${collection} subdocuments that moved when ours ${change}s a variant`, async function () {
+          const fork = await forkProduct(collection, change)
+          const before = await prices(fork.docId)
+
+          const dryRun = await apply(fork, { dry_run: true })
+          expect(dryRun.status).to.equal(200)
+          expect(dryRun.body['api:valid']).to.equal(false)
+          expect(dryRun.body['api:witnesses']).to.have.length(1)
+
+          const r = await apply(fork)
+          expect(r.status).to.equal(409)
+          expect(r.body['api:witnesses']).to.have.length(1)
+          expect(await prices(fork.docId)).to.deep.equal(before)
+        })
+      }
+
+      it(`reports a conflict when a positional ${collection} patch does not fit`, async function () {
+        const fork = await forkProduct(collection, 'add')
+        const before = await prices(fork.docId)
+        const diff = await agent.post(api.path.versionDiff(agent)).send({
+          before_data_version: fork.base,
+          after_data_version: fork.theirs,
+        })
+        expect(diff.status).to.equal(200)
+        const r = await agent.post(api.path.patchDb(agent)).send({
+          patch: diff.body,
+          author: 'test',
+          message: 'patch',
+        })
+        expect(r.status).to.equal(409)
+        expect(r.body['api:error']['@type']).to.equal('api:PatchConflict')
+        expect(await prices(fork.docId)).to.deep.equal(before)
+      })
+    }
+
+    describe('theirs changes the collection', function () {
+      const oursEdit = [variant('B', 21), variant('R', 20)]
+      const cases = [
+        {
+          name: 'theirs adds a variant',
+          theirs: [variant('A', 18), variant('B', 20), variant('R', 20)],
+          set: { A: 18, B: 21, R: 20 },
+          list: null,
+        },
+        {
+          name: 'theirs removes a variant',
+          theirs: [variant('B', 20)],
+          set: { B: 21 },
+          list: { B: 21 },
+        },
+        {
+          name: 'theirs adds and edits a variant',
+          theirs: [variant('A', 18), variant('B', 22), variant('R', 20)],
+          set: null,
+          list: null,
+        },
+        {
+          name: 'both sides add a variant',
+          theirs: [variant('A', 18), variant('B', 20), variant('R', 20)],
+          ours: [variant('C', 30), variant('B', 21), variant('R', 20)],
+          set: { A: 18, B: 21, C: 30, R: 20 },
+          list: null,
+        },
+      ]
+
+      async function forkWith (collection, theirsVs, oursVs = oursEdit) {
+        const suffix = util.randomString()
+        const productType = 'Product' + suffix
+        const variantType = 'Variant' + suffix
+        await document.insert(agent, {
+          schema: [
+            { '@id': variantType, '@type': 'Class', '@subdocument': [], '@key': { '@type': 'Lexical', '@fields': ['sku'] }, sku: 'xsd:string', price: 'xsd:decimal' },
+            { '@id': productType, '@type': 'Class', '@key': { '@type': 'Lexical', '@fields': ['handle'] }, handle: 'xsd:string', title: 'xsd:string', variants: { '@type': collection, '@class': variantType } },
+          ],
+        })
+        const product = (variants) => ({
+          '@type': productType,
+          handle: 'tee',
+          title: 'Tee',
+          variants: variants.map((v) => ({ ...v, '@type': variantType })),
+        })
+        const r1 = await document.insert(agent, { instance: product([variant('B', 20), variant('R', 20)]) })
+        const base = r1.header['terminusdb-data-version']
+        const theirs = util.randomString()
+        await branch.create(agent, theirs, { origin: api.path.branchOrigin(agent) })
+        await document.replace(agent, {
+          path: api.path.document(agent) + '/local/branch/' + theirs,
+          instance: product(theirsVs),
+        })
+        await document.replace(agent, { instance: product(oursVs) })
+        return { base, theirs, docId: productType + '/tee' }
+      }
+
+      for (const collection of ['Set', 'List', 'Array']) {
+        for (const c of cases) {
+          it(`apply ${collection}: ${c.name}`, async function () {
+            const fork = await forkWith(collection, c.theirs, c.ours || oursEdit)
+            const expected = collection === 'Set' ? c.set : c.list
+            const before = await prices(fork.docId)
+
+            const dryRun = await apply(fork, { dry_run: true })
+            expect(dryRun.status).to.equal(200)
+            expect(dryRun.body['api:valid']).to.equal(expected !== null)
+
+            const r = await apply(fork)
+            if (expected === null) {
+              expect(r.status).to.equal(409)
+              expect(r.body['api:witnesses']).to.have.length(1)
+              expect(await prices(fork.docId)).to.deep.equal(before)
+            } else {
+              expect(r.status).to.equal(200)
+              expect(await prices(fork.docId)).to.deep.equal({ title: 'Tee', variants: expected })
+            }
+          })
+        }
+      }
+    })
+  })
 })

@@ -89,6 +89,7 @@
 
               % patch.pl
               simple_patch/4,
+              diff_with_subdocument_ids/3,
               patch_cost/2,
               strip_wire_hints/2,
 
