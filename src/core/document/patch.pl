@@ -1,5 +1,6 @@
 :- module('document/patch',
           [   simple_patch/4,
+              diff_with_subdocument_ids/3,
               diff_op/2,
               get_dict_or_null/3,
               strip_wire_hints/2
@@ -45,17 +46,115 @@ simple_patch(Diff,Before,After,Options) :-
 simple_patch(Diff,Before,After,Options) :-
     diff_op(Diff,Op),
     !,
-    simple_op_diff_value(Op, Diff, Before, After, Options).
+    (   simple_op_diff_value(Op, Diff, Before, After, Options)
+    ->  true
+    ;   unaligned_patch_conflict(Diff, Before, After)
+    ).
 simple_patch(Before,Original,Final,Options) :-
     check_before_after(Original,Before,Original,Final,Options).
 
 simple_patch_list(Diff,List_In,Result,Options) :-
     is_list(List_In),
+    subdocument_ids(Diff),
+    subdocument_ids(List_In),
+    !,
+    simple_patch_list_by_id(Diff,List_In,Result,Options).
+simple_patch_list(Diff,List_In,Result,Options) :-
+    is_list(List_In),
+    same_length(Diff,List_In),
     !,
     maplist({Options}/[Patch,Elt,Patched]>>
             simple_patch(Patch,Elt,Patched,Options),
             Diff,List_In,List_Out),
     promote_list_conflict(List_Out,Result).
+simple_patch_list(Diff,List_In,Result,_Options) :-
+    unaligned_patch_conflict(Diff,List_In,Result).
+
+% A positional patch that does not fit the value it meets would apply
+% changes to the wrong elements, so it is a conflict, never a failure.
+unaligned_patch_conflict(Diff, Found, conflict(json{'@op' : 'Conflict',
+                                                    '@expected' : Diff,
+                                                    '@found' : Found})).
+
+subdocument_ids(List) :-
+    List \= [],
+    forall(member(Element, List),
+           (   is_dict(Element),
+               \+ diff_op(Element, _),
+               get_dict('@id', Element, _))).
+
+% Elements are matched by @id, so changes on either side that add, remove
+% or reorder other subdocuments do not move a patch onto the wrong element.
+simple_patch_list_by_id(Diff,List_In,Result,Options) :-
+    maplist({Diff,Options}/[Element,Patched]>>
+            (   get_dict('@id', Element, Id),
+                member(Patch, Diff),
+                get_dict('@id', Patch, Id)
+            ->  simple_patch(Patch,Element,Patched,Options)
+            ;   Patched = success(Element)
+            ),
+            List_In,List_Out),
+    promote_list_conflict(List_Out,Patched_Result),
+    findall(json{'@op' : 'DeleteEditConflict',
+                 '@id' : Id,
+                 '@deleted_by' : "ours"},
+            (   member(Patch, Diff),
+                get_dict('@id', Patch, Id),
+                \+ (   member(Element, List_In),
+                       get_dict('@id', Element, Id)),
+                \+ no_op_patch(Patch)
+            ),
+            Deleted_Edits),
+    (   Deleted_Edits = []
+    ->  Result = Patched_Result
+    ;   append_results(Patched_Result, conflict(Deleted_Edits), Result)
+    ).
+
+no_op_patch(Patch) :-
+    is_list(Patch),
+    !,
+    maplist(no_op_patch, Patch).
+no_op_patch(Patch) :-
+    is_dict(Patch),
+    \+ diff_op(Patch, _),
+    forall(get_dict(Key, Patch, Value),
+           (   Key = '@id'
+           ;   no_op_patch(Value))).
+
+%% diff_with_subdocument_ids(+Diff, +Before, -Diff_With_Ids) is det.
+%
+%  Copies the @id of each subdocument in Before into the element patch at
+%  the same position, so simple_patch_list aligns subdocuments by @id.
+diff_with_subdocument_ids(Diff, Before, Diff_With_Ids) :-
+    is_list(Diff),
+    is_list(Before),
+    same_length(Diff, Before),
+    !,
+    maplist(element_diff_with_subdocument_id, Diff, Before, Diff_With_Ids).
+diff_with_subdocument_ids(Diff, Before, Diff_With_Ids) :-
+    is_dict(Diff),
+    \+ diff_op(Diff, _),
+    is_dict(Before),
+    !,
+    dict_pairs(Diff, Tag, Pairs),
+    maplist({Before}/[Key-Value, Key-Value_With_Ids]>>
+            (   get_dict(Key, Before, Before_Value)
+            ->  diff_with_subdocument_ids(Value, Before_Value, Value_With_Ids)
+            ;   Value_With_Ids = Value
+            ),
+            Pairs, Pairs_With_Ids),
+    dict_pairs(Diff_With_Ids, Tag, Pairs_With_Ids).
+diff_with_subdocument_ids(Diff, _Before, Diff).
+
+element_diff_with_subdocument_id(Diff, Before, Diff_With_Id) :-
+    diff_with_subdocument_ids(Diff, Before, Diff_With_Ids),
+    (   is_dict(Diff_With_Ids),
+        \+ diff_op(Diff_With_Ids, _),
+        is_dict(Before),
+        get_dict('@id', Before, Id)
+    ->  put_dict('@id', Diff_With_Ids, Id, Diff_With_Id)
+    ;   Diff_With_Id = Diff_With_Ids
+    ).
 
 promote_list_conflict(List_In,Result) :-
     (   maplist([Pre,Patch]>>
@@ -1296,6 +1395,55 @@ test(force_value_sets_missing_key, []) :-
                 notes : "set"
               },
     simple_patch(Patch, Before, success(After), []).
+
+test(patch_list_length_mismatch_is_conflict, []) :-
+    Patch = _{ variants : [ _{ price : _{ '@op' : "SwapValue",
+                                          '@before' : 20,
+                                          '@after' : 21 } },
+                            _{} ] },
+    Before = _{ variants : [ _{ price : 20 } ] },
+    simple_patch(Patch, Before, conflict(Conflict), []),
+    Conflict = json{ variants : json{ '@op' : 'Conflict',
+                                      '@expected' : _,
+                                      '@found' : [ _{ price : 20 } ] } }.
+
+test(diff_with_subdocument_ids_copies_before_ids, []) :-
+    Diff = _{ '@id' : "Product/tee",
+              variants : [ _{ price : _{ '@op' : "SwapValue",
+                                         '@before' : 20,
+                                         '@after' : 21 } },
+                           _{} ] },
+    Before = _{ '@id' : "Product/tee",
+                variants : [ _{ '@id' : "Product/tee/variants/Variant/B", price : 20 },
+                             _{ '@id' : "Product/tee/variants/Variant/R", price : 20 } ] },
+    diff_with_subdocument_ids(Diff, Before, Diff_With_Ids),
+    Diff_With_Ids.variants = [ B, R ],
+    B.'@id' == "Product/tee/variants/Variant/B",
+    dict_pairs(R, _, ['@id'-"Product/tee/variants/Variant/R"]).
+
+test(patch_subdocuments_by_id_keeps_added_and_removed_elements, []) :-
+    Patch = _{ variants : [ _{ '@id' : "V/B",
+                               price : _{ '@op' : "SwapValue",
+                                          '@before' : 20,
+                                          '@after' : 21 } },
+                            _{ '@id' : "V/R" } ] },
+    Before = _{ variants : [ _{ '@id' : "V/A", price : 18 },
+                             _{ '@id' : "V/B", price : 20 } ] },
+    simple_patch(Patch, Before, success(After), []),
+    After = json{ variants : [ _{ '@id' : "V/A", price : 18 },
+                               json{ '@id' : "V/B", price : 21 } ] }.
+
+test(patch_subdocuments_by_id_edit_of_removed_element_is_conflict, []) :-
+    Patch = _{ variants : [ _{ '@id' : "V/B",
+                               price : _{ '@op' : "SwapValue",
+                                          '@before' : 20,
+                                          '@after' : 21 } } ] },
+    Before = _{ variants : [ _{ '@id' : "V/A", price : 18 } ] },
+    simple_patch(Patch, Before, conflict(Conflict), []),
+    Conflict = json{ variants : [ null,
+                                  json{ '@op' : 'DeleteEditConflict',
+                                        '@id' : "V/B",
+                                        '@deleted_by' : "ours" } ] }.
 
 :- end_tests(simple_patch).
 

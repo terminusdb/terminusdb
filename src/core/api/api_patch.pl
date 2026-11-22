@@ -397,15 +397,26 @@ squash_merge_witnesses(Context, Branch_Descriptor, Before_Commit_Id,
                                                  After_Commit_Id,
                                                  Before_Transaction,
                                                  After_Transaction,
-                                                 Doc_Options, Diff,
+                                                 Doc_Options, Diff0,
                                                  Merged_Options),
-                apply_diff(Context,Diff,Witness0,Merged_Options),
+                diff_with_before_subdocument_ids(Before_Transaction,
+                                                 Doc_Options, Diff0, Diff),
+                do_or_die(apply_diff(Context,Diff,Witness0,Merged_Options),
+                          error(unable_to_apply_document_diff(Diff), _)),
                 resolve_squash_conflict(Context, After_Transaction,
                                         Doc_Options, Diff,
                                         Witness0, Resolution, Witness),
                 \+ Witness = null
             ),
             Witnesses).
+
+diff_with_before_subdocument_ids(Before_Transaction, Doc_Options, Diff, Diff_With_Ids) :-
+    (   \+ get_dict('@op', Diff, _),
+        get_dict('@id', Diff, Doc_Id),
+        get_document(Before_Transaction, Doc_Id, Before, Doc_Options)
+    ->  diff_with_subdocument_ids(Diff, Before, Diff_With_Ids)
+    ;   Diff_With_Ids = Diff
+    ).
 
 %% normalize_conflict_resolution(+Raw, +Context, -Resolution) is det.
 %
