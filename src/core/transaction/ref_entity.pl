@@ -45,7 +45,8 @@
               commit_uri_to_history_commit_ids/3,
               commit_uri_to_history_commit_uris/3,
               commit_uri_to_history_commit_uris/4,
-              schema_change_for_commit/3
+              schema_change_for_commit/3,
+              apply_layer_change/6
           ]).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
