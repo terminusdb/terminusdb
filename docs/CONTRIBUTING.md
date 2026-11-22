@@ -339,6 +339,10 @@ docker run -p 6363:6363 --name terminusdb-test terminusdb-dev
 
 This significantly reduces build time but should **only be used for development**. Always run the full test suite (without `SKIP_TESTS`) before creating pull requests or deploying to production.
 
+### Development Container (pr-light without local toolchains)
+
+`make docker-pr-light` runs `make pr-light` inside the `dev` stage of the `Dockerfile`, so a host needs only Docker: no SWI-Prolog, Rust or Node.js install. The stage builds on the cooked Rust dependencies of `make docker`, so both share the layer cache. The checkout is mounted read-only and synced into the `terminusdb-dev-work` volume on every run; the Linux binary, the cargo target directory and `node_modules` stay in that volume and never overwrite a host build. `make docker-dev-shell` opens a shell in the same container, for example to run one suite with `make dev restart && make test-int SUITE=diff-id`. `docker volume rm terminusdb-dev-work terminusdb-dev-cargo` resets all cached state. The container does not run the dashboard build, the ACID suite or the Docker-based sandbox tests.
+
 ## Building on macOS
 
 ### Development Build (Recommended)
