@@ -170,7 +170,7 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
 
     apply_commit_chain(Our_Repo_Context3, Their_Repo_Context, New_Commit_Uri2, Author, Auth_Object, Their_Commit_Ids, Strategies, Final_Commit_Uri, Return_Context, Reports).
 
-% rebase_apply_commit(+Our_Repo_Context, +Their_Repo_Context, +Us_Commit_Uri, +Their_Commit_Id, +Their_Commit_Uri, +Author, -New_Commit_Id, -New_Commit_Uri)
+% rebase_apply_commit(+Our_Repo_Context, +Their_Repo_Context, +Us_Commit_Uri, +Their_Commit_Id, +Their_Commit_Uri, +Author, -New_Commit_Id, -New_Commit_Uri) is det.
 %
 % A commit that rewrites List or Array cells cannot replay as a raw triple
 % delta: cells get fresh random ids per rewrite and subdocument ids embed
@@ -194,7 +194,7 @@ delta_edges(Layer, Added, Deleted) :-
     findall(S-P-O, xrdf_added([RWO], S, P, O), Added),
     findall(S-P-O, xrdf_deleted([RWO], S, P, O), Deleted).
 
-% merged_roots(+Us_Repo_Context, +Us_Commit_Uri, +Their_Layer, -Roots, -Cell_Set)
+% merged_roots(+Us_Repo_Context, +Us_Commit_Uri, +Their_Layer, -Roots, -Cell_Set) is semidet.
 %
 % Fails when cell ownership cannot be resolved, in which case the caller
 % falls back to raw replay.
@@ -215,7 +215,7 @@ commit_query_context(Repo_Context, Commit_Id, Transaction, Context) :-
         open_descriptor(Descriptor, _, Transaction, [TO.descriptor=TO, Commit_RWO.descriptor=Commit_RWO], _)),
     create_context(Transaction, Context).
 
-% affected_roots(+Edges, +Schema, +Layer, -Roots, -Cell_Set)
+% affected_roots(+Edges, +Schema, +Layer, -Roots, -Cell_Set) is semidet.
 %
 % Roots are the typed non-subdocument nodes whose delta edges reach the
 % collection cells; Cell_Set holds the cells as a dict for membership tests.
@@ -315,7 +315,7 @@ apply_commit_merged(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Co
     build_merged_instance_layer(Us_Repo_Context, Us_Commit_Uri, Their_Layer, Roots, Cell_Set, Head_Context, Actions, Instance_Layer_Uri),
     insert_child_commit_object(Us_Repo_Context, Us_Commit_Uri, Schema_Layer_Uri, Instance_Layer_Uri, Commit_Info, New_Commit_Id, New_Commit_Uri).
 
-% merged_document_action(+Base_Context, +Their_Context, +Head_Context, +Schema, +Prefixes, +Roots, -Action)
+% merged_document_action(+Base_Context, +Their_Context, +Head_Context, +Schema, +Prefixes, +Roots, -Action) is nondet.
 %
 % Action is doc(Id, Merged, Kind) with Kind in delete/insert/replace, or
 % fails (no action) when the merged document equals head.
@@ -351,7 +351,7 @@ get_document_maybe(Context, Id, Document) :-
     ->  true
     ;   Document = missing).
 
-% build_merged_instance_layer(+Us_Repo_Context, +Us_Commit_Uri, +Their_Layer, +Roots, +Cell_Set, +Head_Context, +Actions, -Instance_Layer_Uri)
+% build_merged_instance_layer(+Us_Repo_Context, +Us_Commit_Uri, +Their_Layer, +Roots, +Cell_Set, +Head_Context, +Actions, -Instance_Layer_Uri) is det.
 %
 % One instance layer for the replayed commit: the commit's raw delta minus
 % the affected document closures, plus document-level writes of the merged

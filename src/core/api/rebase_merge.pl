@@ -13,6 +13,9 @@
 :- use_module(library(yall)).
 :- use_module(library(terminus_store)).
 
+% collection_predicate(+Predicate) is semidet.
+%
+% Predicates that link a document to its List cons cells or Array cells.
 collection_predicate('http://www.w3.org/1999/02/22-rdf-syntax-ns#first').
 collection_predicate('http://www.w3.org/1999/02/22-rdf-syntax-ns#rest').
 collection_predicate('http://terminusdb.com/schema/sys#value').
@@ -35,7 +38,7 @@ layer_touches_collections(Layer) :-
     collection_predicate(Collection_Predicate),
     !.
 
-% merge_document(+Schema, +Prefixes, +Base, +Ours, +Theirs, -Merged)
+% merge_document(+Schema, +Prefixes, +Base, +Ours, +Theirs, -Merged) is det.
 %
 % Three-way merge of one document as returned by get_document/3. Base, Ours
 % and Theirs are document dicts or the atom 'missing'. Merged is a document
@@ -70,7 +73,7 @@ merge_document(Schema, Prefixes, Base0, Ours0, Theirs0, Merged) :-
 top_id(Doc, Id) :- is_dict(Doc), get_dict('@id', Doc, Id), !.
 top_id(_, _).
 
-% merge_value(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Path, -Result)
+% merge_value(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Path, -Result) is det.
 merge_value(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result) :-
     (   Ours == Theirs
     ->  Result = Ours
@@ -130,7 +133,11 @@ merge_keys_(Schema, Prefixes, Base, Ours, Theirs, [Key|Keys], Path, Pairs) :-
         ;   conflict(['@type'|Path], Base, Ours, Theirs)),
         Pairs = ['@type'-T1|Pairs0]
     ;   sub_atom(Key, 0, 1, _, '@')
-    ->  (   get_dict(Key, Ours, OV), get_dict(Key, Theirs, TV), OV == TV
+    ->  value_of(Key, Ours, OV),
+        value_of(Key, Theirs, TV),
+        (   OV == missing, TV == missing
+        ->  Pairs = Pairs0
+        ;   OV == TV
         ->  Pairs = [Key-OV|Pairs0]
         ;   Pairs = Pairs0)
     ;   property_type(Schema, Prefixes, Ours, Key, Type),
@@ -159,7 +166,7 @@ property_type(Schema, Prefixes, Doc, Key, Type) :-
     !.
 property_type(_, _, _, _, unknown).
 
-% normalize_document(+Schema, +Prefixes, +Doc, -Result)
+% normalize_document(+Schema, +Prefixes, +Doc, -Result) is det.
 %
 % Canonical form for equality, conflict checks and the write-back: embedded
 % non-subdocument frames (@unfoldable, @unfold) collapse to their @id
@@ -170,8 +177,9 @@ normalize_document(Schema, Prefixes, Doc0, Doc) :-
     collapse_linked_frames(Schema, Prefixes, Doc0, Doc1),
     strip_nested_ids(Doc1, Doc).
 
-% collapse_linked_frames(+Schema, +Prefixes, +Doc, -Result): the document
-% itself is never collapsed, only frames below it.
+% collapse_linked_frames(+Schema, +Prefixes, +Doc, -Result) is det.
+%
+% The document itself is never collapsed, only frames below it.
 collapse_linked_frames(Schema, Prefixes, Doc, Result) :-
     is_dict(Doc),
     !,
@@ -194,6 +202,8 @@ collapse_linked_value(Schema, Prefixes, Value, Result) :-
     maplist(collapse_linked_value(Schema, Prefixes), Value, Result).
 collapse_linked_value(_, _, Value, Value).
 
+% linked_frame_id(+Schema, +Prefixes, +Dict, -Id) is semidet.
+%
 % An embedded frame is a reference when its class is a plain document class:
 % subdocuments embed their content and must survive to the content merge.
 linked_frame_id(Schema, Prefixes, Dict, Id) :-
@@ -204,7 +214,9 @@ linked_frame_id(Schema, Prefixes, Dict, Id) :-
            \+ schema_is_subdocument(Schema, ClassEx)), _, fail),
     !.
 
-% strip_nested_ids(+Doc, -Result): keep the top-level @id, strip all nested @ids.
+% strip_nested_ids(+Doc, -Result) is det.
+%
+% Keep the top-level @id, strip all nested @ids.
 strip_nested_ids(Doc, Result) :-
     is_dict(Doc), !,
     dict_pairs(Doc, Tag, Pairs),
@@ -232,7 +244,7 @@ id_pair('@id'-_).
 
 strip_ids_deep_pair(Key-Value, Key-New) :- strip_ids_deep(Value, New).
 
-% element_key(+Schema, +Prefixes, +Element, -Key)
+% element_key(+Schema, +Prefixes, +Element, -Key) is det.
 %
 % Stable identity of a container element across branch rewrites: the schema
 % key fields for subdocuments, the value itself for literals.
@@ -274,7 +286,7 @@ schema_local_key(Prefixes, Field, Local) :-
     atom_concat(SchemaPrefixA, Local, Field),
     !.
 
-% merge_list(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Path, -Result)
+% merge_list(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Path, -Result) is det.
 %
 % Ordered three-way merge of List/Array elements by stable identity.
 merge_list(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result) :-
@@ -349,7 +361,7 @@ merge_list_both_elem(Schema, Prefixes, _Type, AssocB, Path, OursElt, TheirsElt, 
 assoc_to_list(Assoc, Pairs) :-
     (   is_dict(Assoc) -> dict_pairs(Assoc, _, Pairs) ; Pairs = Assoc ).
 
-% merge_set(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Path, -Result)
+% merge_set(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Path, -Result) is det.
 %
 % Unordered three-way merge of Set elements by stable identity.
 merge_set(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result) :-

@@ -457,6 +457,10 @@ swipl -g "halt" -t halt src/interactive.pl
 7. Run the integration tests with the mocha commands below
 8. Run the full test suite and fix lint errors
 
+### Prolog conventions
+
+Predicate comments follow PlDoc style and state determinism: `% predicate(+In, -Out) is det.`, `is semidet` when the predicate can fail, `is nondet` when it can succeed more than once.
+
 ## Running Tests
 
 ### JavaScript/Mocha Tests
