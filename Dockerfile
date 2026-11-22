@@ -104,6 +104,38 @@ COPY dashboard/build.js .
 COPY docs/openapi.yaml ../docs/openapi.yaml
 RUN node build.js
 
+# Development toolchain for `make docker-pr-light`. Reuses the Rust stage
+# with its cooked dependencies; the checkout is synced into /app/rust at run
+# time, the same path the dependencies were cooked at, so cargo reuses them.
+FROM rust_deps AS dev
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends rsync lsof procps python3 make xz-utils; \
+    rm -rf /var/lib/apt/lists/*
+# `make clippy` passes --all-features, which links the system GMP through
+# use-system-gmp; gmp-mpfr-sys requires GMP 6.3 and Debian bookworm ships 6.2.1.
+ARG GMP_VERSION=6.3.0
+RUN set -eux; \
+    curl -fsSL https://ftp.gnu.org/gnu/gmp/gmp-${GMP_VERSION}.tar.xz | tar xJ -C /tmp; \
+    cd /tmp/gmp-${GMP_VERSION}; \
+    ./configure --prefix=/usr/local; \
+    make -j"$(nproc)"; \
+    make install; \
+    ldconfig; \
+    rm -rf /tmp/gmp-${GMP_VERSION}
+RUN rustup component add clippy rustfmt
+# The synced checkout belongs to the host user; the build embeds its git hash.
+RUN git config --system --add safe.directory /app/rust
+COPY --from=node:22-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:22-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+COPY --from=pack_installer /app/pack/.deps/tus /usr/share/swi-prolog/pack/tus
+COPY docker/dev/entrypoint.sh /usr/local/bin/terminusdb-dev-entrypoint
+WORKDIR /app/rust
+ENTRYPOINT ["terminusdb-dev-entrypoint"]
+CMD ["make", "pr-light"]
+
 # Copy the packs and dylib. Prepare to build the Prolog code.
 FROM pack_installer AS base
 RUN set -eux; \
