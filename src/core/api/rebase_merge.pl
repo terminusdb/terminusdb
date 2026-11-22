@@ -2,7 +2,7 @@
     layer_touches_collections/1,
     collection_predicate/1,
     merge_document/6,
-    strip_nested_ids/2
+    normalize_document/4
 ]).
 
 :- use_module(core(document/schema)).
@@ -43,11 +43,9 @@ layer_touches_collections(Layer) :-
 % @id kept) or 'missing'. Throws
 % error(rebase_merge_conflict(Document, Path, Base, Ours, Theirs), _).
 merge_document(Schema, Prefixes, Base0, Ours0, Theirs0, Merged) :-
-    % Cell and subdocument ids regenerate on every write, so equality and
-    % conflict checks compare content, not ids.
-    strip_nested_ids(Base0, Base),
-    strip_nested_ids(Ours0, Ours),
-    strip_nested_ids(Theirs0, Theirs),
+    normalize_document(Schema, Prefixes, Base0, Base),
+    normalize_document(Schema, Prefixes, Ours0, Ours),
+    normalize_document(Schema, Prefixes, Theirs0, Theirs),
     top_id(Ours, OursId),
     top_id(Theirs, TheirsId),
     top_id(Base, BaseId),
@@ -160,6 +158,51 @@ property_type(Schema, Prefixes, Doc, Key, Type) :-
     catch(schema_class_predicate_type(Schema, ClassEx, KeyEx, Type), _, Type = unknown),
     !.
 property_type(_, _, _, _, unknown).
+
+% normalize_document(+Schema, +Prefixes, +Doc, -Result)
+%
+% Canonical form for equality, conflict checks and the write-back: embedded
+% non-subdocument frames (@unfoldable, @unfold) collapse to their @id
+% reference, and subdocument @ids — which regenerate on every write — are
+% stripped. Linked frame content is not merged here; its edits ride the
+% commit's raw delta like any non-collection document.
+normalize_document(Schema, Prefixes, Doc0, Doc) :-
+    collapse_linked_frames(Schema, Prefixes, Doc0, Doc1),
+    strip_nested_ids(Doc1, Doc).
+
+% collapse_linked_frames(+Schema, +Prefixes, +Doc, -Result): the document
+% itself is never collapsed, only frames below it.
+collapse_linked_frames(Schema, Prefixes, Doc, Result) :-
+    is_dict(Doc),
+    !,
+    dict_pairs(Doc, Tag, Pairs),
+    maplist(collapse_linked_pair(Schema, Prefixes), Pairs, NewPairs),
+    dict_pairs(Result, Tag, NewPairs).
+collapse_linked_frames(_, _, Value, Value).
+
+collapse_linked_pair(Schema, Prefixes, Key-Value, Key-Result) :-
+    collapse_linked_value(Schema, Prefixes, Value, Result).
+
+collapse_linked_value(Schema, Prefixes, Value, Result) :-
+    is_dict(Value),
+    !,
+    (   linked_frame_id(Schema, Prefixes, Value, Id)
+    ->  Result = Id
+    ;   collapse_linked_frames(Schema, Prefixes, Value, Result)).
+collapse_linked_value(Schema, Prefixes, Value, Result) :-
+    is_list(Value), !,
+    maplist(collapse_linked_value(Schema, Prefixes), Value, Result).
+collapse_linked_value(_, _, Value, Value).
+
+% An embedded frame is a reference when its class is a plain document class:
+% subdocuments embed their content and must survive to the content merge.
+linked_frame_id(Schema, Prefixes, Dict, Id) :-
+    get_dict('@type', Dict, Class),
+    get_dict('@id', Dict, Id),
+    catch(prefix_expand_schema(Class, Prefixes, ClassEx), _, fail),
+    catch((is_schema_simple_class(Schema, ClassEx),
+           \+ schema_is_subdocument(Schema, ClassEx)), _, fail),
+    !.
 
 % strip_nested_ids(+Doc, -Result): keep the top-level @id, strip all nested @ids.
 strip_nested_ids(Doc, Result) :-

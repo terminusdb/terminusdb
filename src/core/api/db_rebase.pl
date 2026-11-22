@@ -329,7 +329,7 @@ merged_document_action(Base_Context, Their_Context, Head_Context, Schema, Prefix
     merge_document(Schema, Prefixes, BaseDoc, OursDoc, TheirsDoc, Merged),
     \+ (   Merged == missing, OursDoc == missing
        ;   is_dict(Merged), is_dict(OursDoc),
-           strip_nested_ids(OursDoc, OursStripped),
+           normalize_document(Schema, Prefixes, OursDoc, OursStripped),
            OursStripped == Merged),
     doc_action(Merged, OursDoc, Root, Action).
 

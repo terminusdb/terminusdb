@@ -324,4 +324,110 @@ describe('rebase-list-array-collections', function () {
     expect(doc.body.makers).to.deep.equal(['Maker/Acme', 'Maker/Globex'])
     expect(doc.body.title).to.equal('Tee v2')
   })
+
+  // @unfoldable documents embed on read but are separate documents with
+  // stable ids. The merge must treat them as references — order and
+  // membership by id — while their content edits replay with the commit.
+  // Random-key unfoldable documents have no key fields to fall back on, so
+  // a lost @id used to make the rebase fail outright.
+  it('List of @unfoldable elements with Lexical and Random keys', async function () {
+    this.timeout(60000)
+    const suffix = `unfoldable-${Math.random().toString(36).slice(2, 8)}`
+    const local = dbName + '-' + suffix
+    const unfoldableSchema = [
+      {
+        '@type': 'Class',
+        '@id': 'Gadget',
+        '@unfoldable': [],
+        '@key': { '@type': 'Lexical', '@fields': ['sku'] },
+        '@base': 'Gadget/',
+        sku: 'xsd:string',
+        price: 'xsd:integer',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Doohickey',
+        '@unfoldable': [],
+        '@key': { '@type': 'Random' },
+        '@base': 'Doohickey/',
+        note: 'xsd:string',
+      },
+      schemaFor('List')[1],
+      {
+        '@type': 'Class',
+        '@id': 'Product',
+        '@key': { '@type': 'Lexical', '@fields': ['name'] },
+        '@base': 'Product/',
+        name: 'xsd:string',
+        title: 'xsd:string',
+        variants: { '@type': 'List', '@class': 'Variant' },
+        gadgets: { '@type': 'List', '@class': 'Gadget' },
+        doohickeys: { '@type': 'List', '@class': 'Doohickey' },
+      },
+    ]
+    const gadget = (sku, price) => ({ '@type': 'Gadget', sku, price })
+    const doohickey = (id, note) => ({ '@type': 'Doohickey', '@id': id, note })
+    const baseUnfoldable = {
+      '@type': 'Product',
+      name: 'tee',
+      title: 'Tee',
+      variants: [variant('B', 20), variant('R', 20)],
+      gadgets: ['Gadget/G1', 'Gadget/G2'],
+      doohickeys: ['Doohickey/D1', 'Doohickey/D2'],
+    }
+    await request(agent.post('/api/db/admin/' + local).send({ label: suffix }))
+    await request(agent.post(`/api/document/admin/${local}/local/branch/main?author=a&message=schema&graph_type=schema`).send(unfoldableSchema))
+    await request(agent.post(`/api/document/admin/${local}/local/branch/main?author=a&message=base`).send([
+      gadget('G1', 5),
+      gadget('G2', 7),
+      doohickey('Doohickey/D1', 'alpha'),
+      doohickey('Doohickey/D2', 'beta'),
+      baseUnfoldable,
+    ]))
+    await request(agent.post(`/api/branch/admin/${local}/local/branch/other`).send({
+      origin: `admin/${local}/local/branch/main`,
+    }))
+    // theirs adds referenced documents, edits their content, drops G2 from
+    // the gadgets list and prepends a variant
+    await request(agent.post(`/api/document/admin/${local}/local/branch/other?author=a&message=refs`).send([
+      gadget('G3', 9),
+      doohickey('Doohickey/D3', 'gamma'),
+    ]))
+    await request(agent.put(`/api/document/admin/${local}/local/branch/other?author=a&message=other`).send([
+      gadget('G1', 6),
+      doohickey('Doohickey/D1', 'alpha2'),
+      {
+        ...baseUnfoldable,
+        variants: [variant('A', 30), variant('B', 20), variant('R', 20)],
+        gadgets: ['Gadget/G1', 'Gadget/G3'],
+        doohickeys: ['Doohickey/D1', 'Doohickey/D2', 'Doohickey/D3'],
+      },
+    ]))
+    // ours edits title and the price of R
+    await request(agent.put(`/api/document/admin/${local}/local/branch/main?author=a&message=main`).send({
+      ...baseUnfoldable,
+      title: 'Tee v2',
+      variants: [variant('B', 20), variant('R', 22)],
+    }))
+    const rebase = await request(agent.post(`/api/rebase/admin/${local}/local/branch/other`).send({
+      rebase_from: `admin/${local}/local/branch/main`,
+      author: 'a',
+    }))
+    expect(rebase.status, `rebase status: ${JSON.stringify(rebase.body)}`).to.equal(200)
+    const doc = await request(agent.get(`/api/document/admin/${local}/local/branch/other?id=Product/tee`))
+    expect(doc.status).to.equal(200)
+    expect(skus(doc)).to.deep.equal(['A', 'B', 'R'])
+    expect(doc.body.variants.find(v => v.sku === 'R').price).to.equal(22)
+    // unfoldable elements read back embedded; identity and order hold
+    expect(doc.body.gadgets.map(g => g['@id'])).to.deep.equal(['Gadget/G1', 'Gadget/G3'])
+    expect(doc.body.doohickeys.map(d => d['@id'])).to.deep.equal(['Doohickey/D1', 'Doohickey/D2', 'Doohickey/D3'])
+    // content edits to the referenced documents survive the rebase
+    expect(doc.body.gadgets.find(g => g.sku === 'G1').price).to.equal(6)
+    expect(doc.body.doohickeys.find(d => d['@id'] === 'Doohickey/D1').note).to.equal('alpha2')
+    expect(doc.body.title).to.equal('Tee v2')
+    // dropping an element from the list does not delete the document
+    const dropped = await request(agent.get(`/api/document/admin/${local}/local/branch/other?id=Gadget/G2`))
+    expect(dropped.status).to.equal(200)
+    expect(dropped.body.price).to.equal(7)
+  })
 })
