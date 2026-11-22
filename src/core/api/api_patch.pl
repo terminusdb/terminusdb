@@ -255,9 +255,13 @@ document_diffs_from_transactions(Branch_Descriptor, Before_Commit_Id,
             (   commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
                 (   get_document(Before_Transaction, Doc_Id, Before, Doc_Options)
                 ->  (   get_document(After_Transaction, Doc_Id, After, Doc_Options)
-                    ->  do_or_die(simple_diff(Before,After,Diff,Options),
+                    ->  do_or_die(simple_diff(Before,After,Diff0,Options),
                                   error(unable_to_diff_document(Doc_Id),
-                                        _))
+                                        _)),
+                        (   option(inject_subdocument_ids(true), Options)
+                        ->  diff_with_subdocument_ids(Diff0, Before, Diff)
+                        ;   Diff = Diff0
+                        )
                     ;   Diff = json{ '@op' : "Delete",
                                      '@delete' : Before }
                     )
@@ -381,7 +385,8 @@ squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
     normalize_conflict_resolution(Raw_Resolution, Context, Resolution),
     merge_options(Options, options{keep:json{'@id':true, '@type':true},
                                    count:inf,
-                                   start:0}, Merged_Options).
+                                   start:0,
+                                   inject_subdocument_ids:true}, Merged_Options).
 
 squash_merge_witnesses(Context, Branch_Descriptor, Before_Commit_Id,
                        After_Commit_Id, Resolution, Merged_Options,
@@ -397,10 +402,8 @@ squash_merge_witnesses(Context, Branch_Descriptor, Before_Commit_Id,
                                                  After_Commit_Id,
                                                  Before_Transaction,
                                                  After_Transaction,
-                                                 Doc_Options, Diff0,
+                                                 Doc_Options, Diff,
                                                  Merged_Options),
-                diff_with_before_subdocument_ids(Before_Transaction,
-                                                 Doc_Options, Diff0, Diff),
                 do_or_die(apply_diff(Context,Diff,Witness0,Merged_Options),
                           error(unable_to_apply_document_diff(Diff), _)),
                 resolve_squash_conflict(Context, After_Transaction,
@@ -409,14 +412,6 @@ squash_merge_witnesses(Context, Branch_Descriptor, Before_Commit_Id,
                 \+ Witness = null
             ),
             Witnesses).
-
-diff_with_before_subdocument_ids(Before_Transaction, Doc_Options, Diff, Diff_With_Ids) :-
-    (   \+ get_dict('@op', Diff, _),
-        get_dict('@id', Diff, Doc_Id),
-        get_document(Before_Transaction, Doc_Id, Before, Doc_Options)
-    ->  diff_with_subdocument_ids(Diff, Before, Diff_With_Ids)
-    ;   Diff_With_Ids = Diff
-    ).
 
 %% normalize_conflict_resolution(+Raw, +Context, -Resolution) is det.
 %

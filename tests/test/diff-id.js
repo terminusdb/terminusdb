@@ -1162,5 +1162,88 @@ describe('diff-id', function () {
         expect(await prices(fork.docId)).to.deep.equal(before)
       })
     }
+
+    describe('theirs changes the collection', function () {
+      const oursEdit = [variant('B', 21), variant('R', 20)]
+      const cases = [
+        {
+          name: 'theirs adds a variant',
+          theirs: [variant('A', 18), variant('B', 20), variant('R', 20)],
+          set: { A: 18, B: 21, R: 20 },
+          list: null,
+        },
+        {
+          name: 'theirs removes a variant',
+          theirs: [variant('B', 20)],
+          set: { B: 21 },
+          list: { B: 21 },
+        },
+        {
+          name: 'theirs adds and edits a variant',
+          theirs: [variant('A', 18), variant('B', 22), variant('R', 20)],
+          set: null,
+          list: null,
+        },
+        {
+          name: 'both sides add a variant',
+          theirs: [variant('A', 18), variant('B', 20), variant('R', 20)],
+          ours: [variant('C', 30), variant('B', 21), variant('R', 20)],
+          set: { A: 18, B: 21, C: 30, R: 20 },
+          list: null,
+        },
+      ]
+
+      async function forkWith (collection, theirsVs, oursVs = oursEdit) {
+        const suffix = util.randomString()
+        const productType = 'Product' + suffix
+        const variantType = 'Variant' + suffix
+        await document.insert(agent, {
+          schema: [
+            { '@id': variantType, '@type': 'Class', '@subdocument': [], '@key': { '@type': 'Lexical', '@fields': ['sku'] }, sku: 'xsd:string', price: 'xsd:decimal' },
+            { '@id': productType, '@type': 'Class', '@key': { '@type': 'Lexical', '@fields': ['handle'] }, handle: 'xsd:string', title: 'xsd:string', variants: { '@type': collection, '@class': variantType } },
+          ],
+        })
+        const product = (variants) => ({
+          '@type': productType,
+          handle: 'tee',
+          title: 'Tee',
+          variants: variants.map((v) => ({ ...v, '@type': variantType })),
+        })
+        const r1 = await document.insert(agent, { instance: product([variant('B', 20), variant('R', 20)]) })
+        const base = r1.header['terminusdb-data-version']
+        const theirs = util.randomString()
+        await branch.create(agent, theirs, { origin: api.path.branchOrigin(agent) })
+        await document.replace(agent, {
+          path: api.path.document(agent) + '/local/branch/' + theirs,
+          instance: product(theirsVs),
+        })
+        await document.replace(agent, { instance: product(oursVs) })
+        return { base, theirs, docId: productType + '/tee' }
+      }
+
+      for (const collection of ['Set', 'List', 'Array']) {
+        for (const c of cases) {
+          it(`apply ${collection}: ${c.name}`, async function () {
+            const fork = await forkWith(collection, c.theirs, c.ours || oursEdit)
+            const expected = collection === 'Set' ? c.set : c.list
+            const before = await prices(fork.docId)
+
+            const dryRun = await apply(fork, { dry_run: true })
+            expect(dryRun.status).to.equal(200)
+            expect(dryRun.body['api:valid']).to.equal(expected !== null)
+
+            const r = await apply(fork)
+            if (expected === null) {
+              expect(r.status).to.equal(409)
+              expect(r.body['api:witnesses']).to.have.length(1)
+              expect(await prices(fork.docId)).to.deep.equal(before)
+            } else {
+              expect(r.status).to.equal(200)
+              expect(await prices(fork.docId)).to.deep.equal({ title: 'Tee', variants: expected })
+            }
+          })
+        }
+      }
+    })
   })
 })
