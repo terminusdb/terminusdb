@@ -707,6 +707,10 @@ test(create_branch_from_nothing_omits_created_from,
     get_document(Repo_Ctx, Branch_Uri, Branch_Doc),
     \+ get_dict(created_from, Branch_Doc, _).
 
+has_branch_origin(Repository_Descriptor) :-
+    once(ask(Repository_Descriptor,
+             t(_, rdf:type, '@schema':'BranchOrigin'))).
+
 test(delete_two_branches_from_same_head,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin","foo"))),
@@ -731,9 +735,11 @@ test(delete_two_branches_from_same_head,
     branch_delete(system_descriptor{}, Auth, "admin/foo/local/branch/moo"),
     \+ has_branch(Repository_Descriptor, "moo"),
     has_branch(Repository_Descriptor, "reed"),
+    has_branch_origin(Repository_Descriptor),
 
     branch_delete(system_descriptor{}, Auth, "admin/foo/local/branch/reed"),
-    \+ has_branch(Repository_Descriptor, "reed").
+    \+ has_branch(Repository_Descriptor, "reed"),
+    \+ has_branch_origin(Repository_Descriptor).
 
 test(delete_two_branches_from_same_head_reverse_order,
      [setup((setup_temp_store(State),
@@ -759,8 +765,10 @@ test(delete_two_branches_from_same_head_reverse_order,
     branch_delete(system_descriptor{}, Auth, "admin/foo/local/branch/reed"),
     \+ has_branch(Repository_Descriptor, "reed"),
     has_branch(Repository_Descriptor, "moo"),
+    has_branch_origin(Repository_Descriptor),
 
     branch_delete(system_descriptor{}, Auth, "admin/foo/local/branch/moo"),
-    \+ has_branch(Repository_Descriptor, "moo").
+    \+ has_branch(Repository_Descriptor, "moo"),
+    \+ has_branch_origin(Repository_Descriptor).
 
 :- end_tests(branch_api).
