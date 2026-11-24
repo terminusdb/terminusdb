@@ -232,9 +232,18 @@ open_commit_transaction(Branch_Descriptor, Commit_Id, Transaction) :-
     resolve_relative_descriptor(Branch_Descriptor,
                                 ["commit", Commit_Id],
                                 Commit_Descriptor),
+    open_diff_commit(Commit_Descriptor, Transaction).
+
+open_diff_commit(Commit_Descriptor, Transaction) :-
     do_or_die(
         open_descriptor(Commit_Descriptor, Transaction),
         error(unresolvable_collection(Commit_Descriptor),_)).
+
+open_apply_commit(System_DB, Auth, Branch_Descriptor, Commit_Id, Transaction) :-
+    resolve_relative_descriptor(Branch_Descriptor, ["commit", Commit_Id], Descriptor),
+    % Ordinary graph access is checked on the destination; protected commits also gate reads.
+    assert_read_access(System_DB, Auth, Descriptor, type_filter{types:[]}),
+    open_diff_commit(Descriptor, Transaction).
 
 document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Diff, Options) :-
     commit_doc_options(Options, Doc_Options),
@@ -374,8 +383,8 @@ squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
              _{operation: apply, commits: [After_Commit_Uri]},
              Commit_Info_With_Provenance),
     create_context(Branch_Descriptor, Commit_Info_With_Provenance, Context),
-    once(open_commit_transaction(Branch_Descriptor, Before_Commit_Id, Before)),
-    once(open_commit_transaction(Branch_Descriptor, After_Commit_Id, After)),
+    once(open_apply_commit(System_DB, Auth, Branch_Descriptor, Before_Commit_Id, Before)),
+    once(open_apply_commit(System_DB, Auth, Branch_Descriptor, After_Commit_Id, After)),
     Source = source{before_id:Before_Commit_Id, after_id:After_Commit_Id,
                     before:Before, after:After},
     merge_options(Options, options{keep:json{'@id':true, '@type':true},
