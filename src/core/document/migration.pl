@@ -1252,14 +1252,9 @@ migration_terms_json(Terms, Schema, Operations) :-
 
 stage_schema_migration(Before, Operations, Expected, After) :-
     perform_instance_migration_on_transaction(
-        Before, Operations, Staged, Result, [dry_run(true)]),
+        Before, Operations, Staged, _Result,
+        [dry_run(true), forbid_instance_rewrites(true)]),
     Before.instance_objects = [Before_Instance],
-    Staged.instance_objects = [After_Instance],
-    do_or_die(
-        (   Result.instance_operations =:= 0,
-            After_Instance.force_write == false
-        ),
-        error(apply_migration_rewrites_instances, _)),
     do_or_die(
         (   create_class_dictionary(Staged, Actual),
             Actual =@= Expected
@@ -1678,7 +1673,8 @@ extract_simple_type(Type, Simple) :-
     is_dict(Type),
     !,
     get_dict('@type', Type, Family),
-    memberchk(Family, ["Set", "Optional", "Cardinality"]),
+    atom_string(Family_Name, Family),
+    memberchk(Family_Name, ['Set', 'Optional', 'Cardinality']),
     get_dict('@class', Type, Simple_Unexpanded),
     default_prefixes(Prefixes),
     prefix_expand_schema(Simple_Unexpanded, Prefixes, Simple).
@@ -2372,24 +2368,36 @@ interpret_instance_operations(JSONOps, Before, After, Instance_Count) :-
     interpret_instance_operations(Ops, Before, After, 0, Instance_Count).
 
 
-interpret_operations([], After_Transaction, After_Transaction, Instance_Count, Instance_Count).
-interpret_operations([Operation|Operations], Before, After, Instance_Count_In, Instance_Count_Out) :-
+interpret_operations([], After_Transaction, After_Transaction, _, Instance_Count, Instance_Count).
+interpret_operations([Operation|Operations], Before, After, Options, Instance_Count_In, Instance_Count_Out) :-
     interpret_schema_operation(Operation, Before, Intermediate0),
     cycle_layer(schema,Intermediate0,Intermediate1),
 
     interpret_instance_operation(Operation, Before, Intermediate1, Instance_Count),
     Instance_Count1 is Instance_Count + Instance_Count_In,
     cycle_layer(instance,Intermediate1, Intermediate2),
+    check_instance_migration_delta(Intermediate2, Options),
 
-    interpret_operations(Operations, Intermediate2, After, Instance_Count1, Instance_Count_Out).
+    interpret_operations(Operations, Intermediate2, After, Options, Instance_Count1, Instance_Count_Out).
 
-interpret_operations(JSONOps, Before, After, Instance_Count) :-
+check_instance_migration_delta(Transaction, Options) :-
+    (   option(forbid_instance_rewrites(true), Options)
+    ->  Transaction.instance_objects = [Instance],
+        do_or_die(
+            (   layer_addition_count(Instance.read, 0),
+                layer_removal_count(Instance.read, 0)
+            ),
+            error(apply_migration_rewrites_instances, _))
+    ;   true
+    ).
+
+interpret_operations(JSONOps, Before, After, Options, Instance_Count) :-
     migration_list_to_ast_list(JSONOps, Ops),
     % Foreign-class guards before the dictionary preflight.
     maplist(refute_foreign_schema_operation(Before), Ops),
     % Preflight to test that everything is ok...
     calculate_schema_migration(Before, Ops, _),
-    interpret_operations(Ops, Before, Intermediate, 0, Instance_Count),
+    interpret_operations(Ops, Before, Intermediate, Options, 0, Instance_Count),
     squash_layer(Before, Intermediate, After).
 
 squash_layer(Before,Intermediate,After) :-
@@ -2519,7 +2527,7 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, After_
     ensure_transaction_has_builder(instance, Before_Transaction),
     ensure_transaction_has_builder(schema, Before_Transaction),
     refute_ungated_rebase(Operations, Options),
-    interpret_operations(Operations,Before_Transaction,After_Transaction,Count),
+    interpret_operations(Operations, Before_Transaction, After_Transaction, Options, Count),
     length(Operations, Op_Count),
     % run logic here.
     (   option(dry_run(true), Options)
