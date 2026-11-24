@@ -301,85 +301,23 @@ test(expired_failed_mark_retries_open,
     open_descriptor(Descriptor, _Transaction),
     assertion(\+ descriptor:db_failed("admin", "realdb", _)).
 
-% A database whose graphs do not open on first touch is marked
-% db_unservable_loading/3 and retried once by a thread spawned with
-% detached(true). That thread inherits the output stream of the request
-% that spawned it, and that request has already answered 503 and gone,
-% so the stream is erased. json_log takes a request id from it all the
-% same: generate_operation_id/1 calls current_output/1 and hands the
-% stream to is_cgi_stream/1, which on an erased stream throws
-% existence_error(stream, _) instead of failing. The throw precedes the
-% log-level check, so INFO logging being off does not prevent it.
-%
-% The loader dies on its own log line, and in reload_database_graphs/2
-% the retractall of the loading mark stands after the body instead of in
-% a cleanup, so the mark survives. await_database_load/2 then answers
-% database_loading on that database for the life of the process.
-%
-% run_with_erased_output/3 reproduces that condition: the goal runs in a
-% thread which inherited an output stream its creator has since closed.
-% The message queue fixes the order, so the thread starts after the
-% stream is gone. The store is handed over explicitly because
-% local_triple_store_var/1 is thread-local — a spawned thread otherwise
-% sees no store and every open fails for a reason that is not under
-% test.
+% A detached loader inherits an erased request stream; json_log must not treat it as CGI.
 run_with_erased_output(Store, Goal, Status) :-
     message_queue_create(Queue),
     new_memory_file(Memory_File),
     open_memory_file(Memory_File, write, Stream),
-    setup_call_cleanup(
-        set_output(Stream),
-        thread_create((thread_get_message(Queue, go),
-                       set_local_triple_store(Store),
-                       Goal),
-                      Thread, []),
-        set_output(user_error)),
+    with_output_to(Stream,
+                   thread_create((thread_get_message(Queue, go),
+                                  set_local_triple_store(Store),
+                                  Goal),
+                                 Thread, [])),
     close(Stream),
     thread_send_message(Queue, go),
     thread_join(Thread, Status),
     message_queue_destroy(Queue),
     free_memory_file(Memory_File).
 
-report_unless(Goal, Fault) :-
-    (   call(Goal)
-    ->  true
-    ;   throw(error(Fault, _))).
-
-:- multifile prolog:error_message//1.
-
-prolog:error_message(background_loader_died(Status)) -->
-    [ 'the background database loader did not run to completion: ~p'-[Status], nl,
-      'json_log throws existence_error(stream, _) out of is_cgi_stream/1 because the'-[], nl,
-      'loader inherited the output stream of the request that spawned it and that'-[], nl,
-      'stream is erased. Everything after the log line is skipped, including the'-[], nl,
-      'retractall of db_unservable_loading/3 in reload_database_graphs/2.'-[] ].
-prolog:error_message(database_unservable_for_ever(Organization, Database, Status)) -->
-    [ 'database ~s/~s loaded successfully and is still marked unservable'-[Organization, Database], nl,
-      'the background loader did not run to completion: ~p'-[Status], nl,
-      'db_unservable_loading/3 outlives the loader that was to retract it, so'-[], nl,
-      'await_database_load/2 waits out the grace window and throws database_loading'-[], nl,
-      'on every later request. Nothing retracts the mark again: a healthy database'-[], nl,
-      'answers 503 for the life of the process.'-[] ].
-prolog:error_message(healthy_database_recorded_as_failed(Organization, Database)) -->
-    [ 'database ~s/~s opened successfully and is recorded as db_failed/3'-[Organization, Database], nl,
-      'a database recorded as failed answers a 500-class error until the mark'-[], nl,
-      'expires, so a successful load must not leave one behind.'-[] ].
-prolog:error_message(healthy_database_refuses_to_open(Organization, Database, Error)) -->
-    [ 'open_descriptor/2 refuses database ~s/~s after a successful load: ~p'-[Organization, Database, Error], nl,
-      'the store holds the database and its graphs open, so this is the leftover'-[], nl,
-      'loading mark answering, not the data.'-[] ].
-prolog:error_message(failed_load_answers_an_unending_503(Organization, Database, Status)) -->
-    [ 'database ~s/~s cannot be loaded and is still marked unservable'-[Organization, Database], nl,
-      'the background loader did not run to completion: ~p'-[Status], nl,
-      'db_unservable_loading/3 is checked before db_failed/3, so the leftover mark'-[], nl,
-      'masks the recorded failure: requests answer database_loading, which never'-[], nl,
-      'expires, instead of database_unservable, which is retried after 30 minutes.'-[] ].
-prolog:error_message(load_failure_not_recorded(Organization, Database)) -->
-    [ 'database ~s/~s cannot be loaded and no db_failed/3 records it'-[Organization, Database], nl,
-      'the loader died before recording the failure, so nothing distinguishes a'-[], nl,
-      'database that gave up from one that is still loading.'-[] ].
-
-test(background_load_leaves_a_healthy_database_unservable_for_ever,
+test(background_load_survives_erased_output,
      [setup((setup_temp_store(State),
              State = Store-_Dir,
              create_db_without_schema("admin","realdb"),
@@ -388,33 +326,26 @@ test(background_load_leaves_a_healthy_database_unservable_for_ever,
                ignore(retract(descriptor:db_failed(_,_,_))),
                ignore(retract(descriptor:db_unservable_loading(_,_,_))),
                teardown_temp_store(State)))]) :-
-    % The load succeeds, so the mark must go and the database must serve
-    % again — even though the loader cannot write its success log.
+    % A successful reload clears the loading mark and leaves no failure mark.
     get_time(Now),
     assertz(descriptor:db_unservable_loading("admin", "realdb", Now)),
     run_with_erased_output(Store,
                            descriptor:reload_database_graphs("admin", "realdb"),
                            Status),
-    report_unless(\+ descriptor:db_unservable_loading("admin", "realdb", _),
-                  database_unservable_for_ever("admin", "realdb", Status)),
-    report_unless(Status == true, background_loader_died(Status)),
-    report_unless(\+ descriptor:db_failed("admin", "realdb", _),
-                  healthy_database_recorded_as_failed("admin", "realdb")),
+    assertion(Status == true),
+    assertion(\+ descriptor:db_unservable_loading("admin", "realdb", _)),
+    assertion(\+ descriptor:db_failed("admin", "realdb", _)),
     resolve_absolute_string_descriptor("admin/realdb", Descriptor),
-    catch(open_descriptor(Descriptor, _Transaction),
-          Open_Error,
-          throw(error(healthy_database_refuses_to_open("admin", "realdb", Open_Error), _))).
+    open_descriptor(Descriptor, _Transaction).
 
-test(failed_background_load_answers_an_unending_503_instead_of_an_expiring_error,
+test(failed_background_load_survives_erased_output,
      [setup((setup_temp_store(State),
              State = Store-_Dir)),
       cleanup((ignore(retract(descriptor:db_failed(_,_,_))),
                ignore(retract(descriptor:db_unservable_loading(_,_,_))),
                teardown_temp_store(State)))]) :-
-    % The load fails, so db_failed/3 must be recorded and the mark
-    % cleared: requests then answer a 500-class error that expires,
-    % never a 503 that does not. The loader must run to completion
-    % rather than die on its own log line.
+    % A failed reload records db_failed/3 and clears the loading mark, so
+    % requests get the expiring 500-class error rather than an endless 503.
     create_context(system_descriptor{}, System_Context),
     with_transaction(System_Context,
         system_entity:insert_db_object(System_Context, "admin", "ghostdb",
@@ -426,10 +357,12 @@ test(failed_background_load_answers_an_unending_503_instead_of_an_expiring_error
     run_with_erased_output(Store,
                            descriptor:reload_database_graphs("admin", "ghostdb"),
                            Status),
-    report_unless(\+ descriptor:db_unservable_loading("admin", "ghostdb", _),
-                  failed_load_answers_an_unending_503("admin", "ghostdb", Status)),
-    report_unless(Status == true, background_loader_died(Status)),
-    report_unless(descriptor:db_failed("admin", "ghostdb", _),
-                  load_failure_not_recorded("admin", "ghostdb")).
+    assertion(Status == true),
+    assertion(\+ descriptor:db_unservable_loading("admin", "ghostdb", _)),
+    assertion(descriptor:db_failed("admin", "ghostdb", _)),
+    resolve_absolute_string_descriptor("admin/ghostdb", Descriptor),
+    assertion(catch(open_descriptor(Descriptor, _Transaction),
+                    error(database_unservable("admin", "ghostdb"), _),
+                    true)).
 
 :- end_tests(db).
