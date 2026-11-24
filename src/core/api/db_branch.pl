@@ -91,6 +91,15 @@ info_from_main(Repository_Context, Prefixes, Schema) :-
     ->  Schema = false
     ;   Schema = true).
 
+assert_branch_absent(Askable, Branch_Name) :-
+    do_or_die(\+ has_branch(Askable, Branch_Name),
+              error(branch_already_exists(Branch_Name),_)).
+
+insert_new_branch(Context, Branch_Name, Origin, Branch_Uri) :-
+    % A transaction retry can see a branch absent at the API's initial check.
+    assert_branch_absent(Context, Branch_Name),
+    insert_branch_object(Context, Branch_Name, Origin, Branch_Uri).
+
 branch_create_(Repository_Descriptor, empty(Input_Prefixes, Schema), New_Branch_Name, Branch_Uri) :-
     branch_create_(Repository_Descriptor, _Auth, empty(Input_Prefixes, Schema), New_Branch_Name, Branch_Uri).
 branch_create_(Repository_Descriptor, Auth, empty(Input_Prefixes, Schema), New_Branch_Name, Branch_Uri) :-
@@ -110,9 +119,7 @@ branch_create_(Repository_Descriptor, Auth, empty(Input_Prefixes, Schema), New_B
     ;   true),
 
     with_transaction(Context,
-                     (   insert_branch_object(Context,
-                                              New_Branch_Name,
-                                              Branch_Uri),
+                     (   insert_new_branch(Context, New_Branch_Name, none, Branch_Uri),
                          create_schema(Context, Auth, New_Branch_Name, Branch_Uri, Schema, Prefixes)),
                      _).
 branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name, Branch_Uri) :-
@@ -130,11 +137,9 @@ branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name,
     descriptor_spec_string(Branch_Descriptor, Origin_Spec),
     with_transaction(Context,
                      (   (   branch_head_commit(Context, Branch_Descriptor.branch_name, Head_Commit_Uri)
-                         ->  insert_branch_object(Context,
-                                                  New_Branch_Name,
-                                                  _{commit: Head_Commit_Uri,
-                                                    source: Origin_Spec},
-                                                  Branch_Uri),
+                         ->  insert_new_branch(Context, New_Branch_Name,
+                                               _{commit: Head_Commit_Uri, source: Origin_Spec},
+                                               Branch_Uri),
                              link_commit_object_to_branch(Context, Branch_Uri, Head_Commit_Uri),
                              (   commit_id_uri(Context, Head_Commit_Id, Head_Commit_Uri)
                              ->  New_Branch_Descriptor = branch_descriptor{
@@ -154,10 +159,8 @@ branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name,
                                        true)
                              ;   true
                              )
-                         ;   insert_branch_object(Context,
-                                                  New_Branch_Name,
-                                                  _{source: Origin_Spec},
-                                                  Branch_Uri)
+                         ;   insert_new_branch(Context, New_Branch_Name,
+                                               _{source: Origin_Spec}, Branch_Uri)
                          )),
                      _).
 branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name, Branch_Uri) :-
@@ -177,18 +180,14 @@ branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name,
     create_context(Repository_Descriptor, Destination_Context),
     with_transaction(Destination_Context,
                      (   (   branch_head_commit(Origin_Context_Defaults, Branch_Descriptor.branch_name, Head_Commit_Uri)
-                         ->  insert_branch_object(Destination_Context,
-                                                  New_Branch_Name,
-                                                  _{commit: Head_Commit_Uri,
-                                                    source: Origin_Spec},
-                                                  Branch_Uri),
+                         ->  insert_new_branch(Destination_Context, New_Branch_Name,
+                                               _{commit: Head_Commit_Uri, source: Origin_Spec},
+                                               Branch_Uri),
                              commit_id_uri(Origin_Context_Defaults, Head_Commit_Id, Head_Commit_Uri),
                              copy_commits(Origin_Context_Defaults, Destination_Context, Head_Commit_Id),
                              link_commit_object_to_branch(Destination_Context, Branch_Uri, Head_Commit_Uri)
-                         ;   insert_branch_object(Destination_Context,
-                                                  New_Branch_Name,
-                                                  _{source: Origin_Spec},
-                                                  Branch_Uri))),
+                         ;   insert_new_branch(Destination_Context, New_Branch_Name,
+                                               _{source: Origin_Spec}, Branch_Uri))),
                      _).
 branch_create_(Repository_Descriptor, _Auth, Commit_Descriptor, New_Branch_Name, Branch_Uri) :-
     commit_descriptor{repository_descriptor:Origin_Repository_Descriptor} :< Commit_Descriptor,
@@ -202,11 +201,9 @@ branch_create_(Repository_Descriptor, _Auth, Commit_Descriptor, New_Branch_Name,
                          ->  true
                          ;   throw(error(origin_commit_does_not_exist(Commit_Descriptor.commit_id),_))),
 
-                         (   insert_branch_object(Context,
-                                                  New_Branch_Name,
-                                                  _{commit: Commit_Uri,
-                                                    source: Origin_Spec},
-                                                  Branch_Uri),
+                         (   insert_new_branch(Context, New_Branch_Name,
+                                               _{commit: Commit_Uri, source: Origin_Spec},
+                                               Branch_Uri),
                              link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri))),
                      _).
 branch_create_(Destination_Repository_Descriptor, _Auth, Commit_Descriptor, New_Branch_Name, Branch_Uri) :-
@@ -224,11 +221,9 @@ branch_create_(Destination_Repository_Descriptor, _Auth, Commit_Descriptor, New_
     create_context(Destination_Repository_Descriptor, Destination_Context),
     descriptor_spec_string(Commit_Descriptor, Origin_Spec),
     with_transaction(Destination_Context,
-                     (   insert_branch_object(Destination_Context,
-                                              New_Branch_Name,
-                                              _{commit: Commit_Uri,
-                                                source: Origin_Spec},
-                                              Branch_Uri),
+                     (   insert_new_branch(Destination_Context, New_Branch_Name,
+                                           _{commit: Commit_Uri, source: Origin_Spec},
+                                           Branch_Uri),
                          copy_commits(Origin_Context_Defaults, Destination_Context, Commit_Descriptor.commit_id),
                          link_commit_object_to_branch(Destination_Context, Branch_Uri, Commit_Uri)),
                      _).
@@ -280,9 +275,7 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
                         local),
         error(repository_is_not_local(Repository_Descriptor),_)),
 
-    do_or_die(
-        (\+ has_branch(Repository_Descriptor, New_Branch_Name)),
-        error(branch_already_exists(New_Branch_Name),_)),
+    assert_branch_absent(Repository_Descriptor, New_Branch_Name),
 
     do_or_die(
         branch_create_(Repository_Descriptor, Auth, Origin_Descriptor, New_Branch_Name, Branch_Uri),

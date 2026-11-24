@@ -597,6 +597,11 @@ opt_spec(apply,'terminusdb apply [Path] OPTIONS',
            shortflags([t]),
            default(squash),
            help('Variety of commit to create on apply (currently only squash)')],
+          [opt(graph_type),
+           type(atom),
+           longflags(['graph-type',graph_type]),
+           default(both),
+           help('Merge both graphs, schema only, or instance only')],
           [opt(match_final_state),
            type(boolean),
            longflags(['match-final-state',match_final_state]),
@@ -2105,6 +2110,7 @@ run_command(apply,[Path], Opts) :-
     option(message(Message), Opts),
     option(keep(Keep_Atom), Opts),
     option(type(Type_Atom), Opts),
+    option(graph_type(Graph_Type), Opts),
     option(match_final_state(Match_Final_State), Opts),
 
     api_report_errors(
@@ -2116,6 +2122,7 @@ run_command(apply,[Path], Opts) :-
                                                                    message: Message},
                                         Before_Commit, After_Commit,
                                         [type(Type_Atom),
+                                         graph_type(Graph_Type),
                                          keep(Keep),
                                          match_final_state(Match_Final_State)]),
                 format(current_output,"Successfully applied\n",[])

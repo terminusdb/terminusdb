@@ -183,7 +183,7 @@ with reasons.
     {"action":"delete_branch","resource":"org/db/local/branch/x",
      "confirm":"permanently delete x"}
     {"action":"merge","resource":"org/db","source":"org/db/local/branch/feature",
-     "commit_info":{...}}
+     "graph_type":"both","commit_info":{...}}
         — the other-end ref goes in "source", "to" or "onto" (interchangeable)
     {"action":"squash","resource":"org/db","commit_info":{...},
      "confirm":"rewrite history of main"}
@@ -195,12 +195,13 @@ with reasons.
      "commit_info":{...}}
         — replays the resource branch's commits onto the source head
 
-Merge computes the true common ancestor itself — never pass one. Conflicts
-return isError with `witnesses` naming the contested document and fields —
-`@expected` is the ancestor value, `@found` yours, `@incoming` theirs. Decide
-the correct values, then `write` the resolved documents on the target
-branch: that commit completes the merge manually. Retrying `merge` re-reports
-the same conflict (it is always computed against the shared ancestor).
+Merge selects `schema`, `instance`, or `both` (default). It starts from the common ancestor unless a prior MCP squash on the target recorded a newer source revision for that graph. The checkpoint is not a parent commit. `both` uses each graph's own base and commits both graphs together or neither.
+
+If a named source branch no longer descends from its recorded revision, merge fails for that graph. Review the history and use `/api/apply` with explicit before and after commits to apply a particular range. A checkpoint copied without its source commit does not apply in the destination repository. Older merge commits without checkpoints, manual resolutions, and `/api/apply` do not establish checkpoints. A merge only checkpoints graphs it changes on the target. If neither graph changes, merge succeeds without a commit or checkpoint.
+
+If the only checkpoints for a graph's selected base are squash replays from a target rebase, MCP rejects the merge rather than assuming the same changes landed. Review the history and use `/api/apply` with explicit before and after commits. Explicit apply does not restore the checkpoint, so later merges that need it still require explicit ranges.
+
+Conflicts return `isError` with `witnesses` naming the contested document and fields: `@expected` is the merge-base value, `@found` yours, and `@incoming` theirs. Resolve contested values by writing to the target branch; a manual write does not mark the source revision as merged.
 
 ### admin — operate the server
 

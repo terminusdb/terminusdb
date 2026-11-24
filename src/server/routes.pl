@@ -3134,6 +3134,13 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
         ;   Type_Atom = Type)
     ;   Type_Atom = squash
     ),
+    (   get_dict(graph_type, Document, Graph_Type0)
+    ->  (   string(Graph_Type0)
+        ->  atom_string(Graph_Type, Graph_Type0)
+        ;   Graph_Type = Graph_Type0
+        )
+    ;   Graph_Type = both
+    ),
 
     (   _{ conflict_resolution: Conflict_Resolution } :< Document
     ->  Resolution_Options = [conflict_resolution(Conflict_Resolution)]
@@ -3149,6 +3156,7 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
                                                   Commit_Info,
                                                   Before_Commit, After_Commit,
                                                   [type(Type_Atom),
+                                                   graph_type(Graph_Type),
                                                    match_final_state(Match_Final_State),
                                                    keep(Keep)
                                                    | Resolution_Options],
@@ -3156,6 +3164,7 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
                 ;   api_apply_squash_commit(System_DB, Auth, Path, Commit_Info,
                                             Before_Commit, After_Commit,
                                             [type(Type_Atom),
+                                             graph_type(Graph_Type),
                                              match_final_state(Match_Final_State),
                                              keep(Keep)
                                              | Resolution_Options]),

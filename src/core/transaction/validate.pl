@@ -333,7 +333,8 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     branch_descriptor{branch_name : Branch_Name} :< Descriptor,
     !,
     (   exists(validation_object_changed, [Instance_Object, Schema_Object])
-    ->  Commit_Info0 = (Validation_Object.commit_info),
+    ->  squash_checkpoint_for_changed_graphs(Schema_Object, Instance_Object,
+                                             Validation_Object.commit_info, Commit_Info0),
         (   enrich_commit_info(Validation_Object, Commit_Info0, Commit_Info)
         ->  true
         ;   Commit_Info = Commit_Info0
@@ -369,6 +370,20 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
         register_commit_in_change_window(Descriptor, ParentCommitId, Commit_Id,
                                          Instance_Object, Schema_Object)
     ;   true).
+
+squash_checkpoint_for_changed_graphs(Schema, Instance, Info0, Info) :-
+    (   _{merge_source:Merge} :< Info0,
+        _{squash_checkpoint:Checkpoint} :< Merge
+    ->  (   validation_object_changed(Schema)
+        ->  (   validation_object_changed(Instance)
+            ->  Graph = both
+            ;   Graph = schema
+            )
+        ;   Graph = instance
+        ),
+        Info = Info0.put(merge_source, Merge.put(squash_checkpoint, Checkpoint.put(graph_type, Graph)))
+    ;   Info = Info0
+    ).
 
 insert_rwo_layer(Transaction, RWO, Layer_Uri) :-
     (   var(RWO.read)
