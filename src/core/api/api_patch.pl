@@ -439,15 +439,20 @@ squash_apply_schema(System_DB, Auth, Path, Context, Source, Options) :-
     query_default_collection(Context, Target_Transaction),
     create_class_dictionary(Target_Transaction, Target),
     do_or_die(
-        merge_schema_dict(Base, Incoming, Target, Options.match_final_state, document, Merged),
+        merge_schema_dict(Base, Incoming, Options.match_final_state, document,
+                          Target-false, Merged-Already_Present),
         error(apply_schema_delta(Source.before_id, Source.after_id), _)),
     (   Target =@= Merged
     ->  true
     ;   resolve_descriptor_auth(write, System_DB, Auth, Path, schema, _),
         create_context(Target_Transaction.parent, Repo),
         squash_recorded_migrations(Repo, Source, Recorded),
-        do_or_die(plan_schema_migration(Target, Merged, Recorded, Operations),
-                  error(apply_unsupported_schema_migration, _)),
+        (   plan_schema_migration(Target, Merged, Recorded, Operations)
+        ->  true
+        ;   Already_Present == true, Recorded \== []
+        ->  throw(error(apply_partial_recorded_migration(Source.before_id, Source.after_id), _))
+        ;   throw(error(apply_unsupported_schema_migration, _))
+        ),
         do_or_die(stage_schema_migration(Target_Transaction, Operations, Merged, Staged),
                   error(apply_unsupported_schema_migration, _)),
         atom_json_dict(Migration, Operations, [default_tag(json), width(0)]),
@@ -473,31 +478,33 @@ squash_recorded_migration(Repo, Commit, Operations) :-
     ;   Change = migration(Operations)
     ).
 
-merge_schema_dict(Base, Incoming, Target, Match, Level, Merged) :-
+merge_schema_dict(Base, Incoming, Match, Level, State0, State) :-
     dict_keys(Base, Base_Keys),
     dict_keys(Incoming, Incoming_Keys),
     ord_union(Base_Keys, Incoming_Keys, Keys),
-    foldl(merge_schema_key(Base, Incoming, Match, Level), Keys, Target, Merged).
+    foldl(merge_schema_key(Base, Incoming, Match, Level), Keys, State0, State).
 
-merge_schema_key(Base, Incoming, Match, Level, Key, Target, Merged) :-
+merge_schema_key(Base, Incoming, Match, Level, Key, Target-Present0, Merged-Present) :-
     schema_key_value(Key, Base, Before),
     schema_key_value(Key, Incoming, After),
     schema_key_value(Key, Target, Current),
     (   Before =@= After
-    ->  Merged = Target
+    ->  Merged = Target, Present = Present0
     ;   Current =@= Before
     ->  (   After = value(Value)
         ->  put_dict(Key, Target, Value, Merged)
         ;   del_dict(Key, Target, _, Merged)
-        )
+        ),
+        Present = Present0
     ;   Match == true, Current =@= After
-    ->  Merged = Target
+    ->  Merged = Target, Present = true
     ;   Level == document, Key \== '@context',
         Before = value(Before_Doc), After = value(After_Doc), Current = value(Current_Doc),
         get_dict('@type', Before_Doc, Type),
         get_dict('@type', After_Doc, Type),
         get_dict('@type', Current_Doc, Type),
-        merge_schema_dict(Before_Doc, After_Doc, Current_Doc, Match, field, Merged_Doc),
+        merge_schema_dict(Before_Doc, After_Doc, Match, field,
+                          Current_Doc-Present0, Merged_Doc-Present),
         put_dict(Key, Target, Merged_Doc, Merged)
     ).
 

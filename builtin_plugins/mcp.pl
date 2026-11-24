@@ -369,6 +369,8 @@ mcp_error_hint(error(schema_type_unknown(Type), _),
            '"~w" is not a valid schema type — a property range is a datatype string like "xsd:string" or a family wrapper {"@type":"Optional","@class":"xsd:string"}; a schema document @type is Class, TaggedUnion, Enum or Foreign. Every valid spelling: schema action `datatypes` (no resource needed).', [Type]).
 mcp_error_hint(error(schema_check_failure(_), _),
                'Read each witness: `property` names the offending class member, `class` the range it wanted. Remember every non-@ member of a Class document is a property slot — "comment"/"description"/"title" are not annotations; valid type spellings come from schema action `datatypes`.').
+mcp_error_hint(error(apply_partial_recorded_migration(_, _), _),
+               'Part of the source schema change is already on the target. Review the remaining changes and apply an explicit migration; merge does not replay a subset of recorded operations.').
 mcp_error_hint(error(resource_not_found(Path), _),
                Hint) :-
     format(string(Hint),

@@ -3026,7 +3026,7 @@ paths:
                 type: object
                 example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
         400:
-          description: "Invalid apply type, graph selection, conflict resolution, or unsupported schema change"
+          description: "Invalid apply type, graph selection, conflict resolution, or unsupported schema change. ApplyPartialRecordedMigration means part of a recorded schema change is already present and no supported migration applies the remainder."
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
         403:

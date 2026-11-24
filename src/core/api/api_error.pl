@@ -538,6 +538,15 @@ api_global_error_jsonld(error(apply_unsupported_schema_migration,_), Type, JSON)
              'api:error' : _{ '@type' : 'api:ApplyUnsupportedSchemaMigration'},
              'api:message' : "No supported migration reproduces the merged schema."
             }.
+api_global_error_jsonld(error(apply_partial_recorded_migration(Before, After),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ApplyPartialRecordedMigration',
+                              'api:before_commit' : Before,
+                              'api:after_commit' : After},
+             'api:message' : "The target already has part of the source schema change. No supported migration applies the remainder. Review the remaining changes and apply an explicit migration; squash apply does not replay a subset of recorded operations."
+            }.
 api_global_error_jsonld(error(apply_schema_delta(Before, After),_), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "The schema change from ~q to ~q conflicts with the target schema.", [Before, After]),
