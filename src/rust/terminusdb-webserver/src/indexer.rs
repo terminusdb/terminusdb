@@ -1745,7 +1745,14 @@ async fn run_commit_task(
     let (commit_id, mode) = match next_commit {
         Some(c) => (c, "process"),
         None => {
-            match get_last_indexed(&transport, &key).await {
+            let last_indexed = {
+                let cancel_clone = cancel.clone();
+                tokio::select! {
+                    result = get_last_indexed(&transport, &key) => result,
+                    _ = cancel_clone.cancelled() => return TaskResult::Error("task cancelled".to_string()),
+                }
+            };
+            match last_indexed {
                 Ok(c) if !c.is_empty() => {
                     // We have a last-indexed commit. We need to find the next commit
                     // after it. The Prolog handler will do this — we pass the
@@ -1944,19 +1951,24 @@ async fn run_commit_task(
     };
 
     // 6. Stream the NDJSON body (leftover + remaining pipe data) to vectorlink /push.
-    let push_result = post_push_stream(
-        &transport,
-        &key,
-        &actual_commit_id,
-        &parent_commit,
-        leftover_body,
-        pipe_receiver,
-        &cancel,
-        &progress,
-        store_clustering,
-        new_doc_count,
-    )
-    .await;
+    let push_result = {
+        let cancel_clone = cancel.clone();
+        tokio::select! {
+            result = post_push_stream(
+                &transport,
+                &key,
+                &actual_commit_id,
+                &parent_commit,
+                leftover_body,
+                pipe_receiver,
+                &cancel,
+                &progress,
+                store_clustering,
+                new_doc_count,
+            ) => result,
+            _ = cancel_clone.cancelled() => Err("task cancelled".to_string()),
+        }
+    };
 
     // Clear the current commit marker — the task is done.
     progress.clear_current_commit();
@@ -2813,6 +2825,48 @@ mod tests {
         let registry = IndexerRegistry::new();
         registry.set_config("".to_string(), "Basic abc".to_string());
         assert!(registry.get_transport().is_err());
+    }
+
+    struct PendingEngineTransport;
+
+    impl EngineTransport for PendingEngineTransport {
+        fn execute<'a>(
+            &'a self,
+            _req: EngineRequest,
+        ) -> BoxFuture<'a, Result<EngineResponse, String>> {
+            Box::pin(std::future::pending())
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_commit_task_cancel_interrupts_engine_http() {
+        let transport = Arc::new(PendingEngineTransport);
+        let progress = BranchProgress::new();
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let task = tokio::spawn(run_commit_task(
+            BranchKey {
+                path: "admin/db/local/branch/main".to_string(),
+                branch: "main".to_string(),
+            },
+            transport,
+            progress,
+            cancel.clone(),
+            None,
+            false,
+        ));
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        cancel.cancel();
+
+        let result = tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .expect("cancelled task must not wait for the engine")
+            .expect("task join");
+        assert!(matches!(result, TaskResult::Error(err) if err.contains("cancelled")));
     }
 
     #[test]
