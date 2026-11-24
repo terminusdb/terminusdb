@@ -212,7 +212,7 @@ initialize_database_with_store(Key, Store, Force) :-
 current_woql_version("v1.0.3").
 current_repository_version("v1.0.1").
 :- dynamic current_ref_version/1.
-current_ref_version("v1.0.3").
+current_ref_version("v1.0.4").
 
 has_no_store :-
     catch(

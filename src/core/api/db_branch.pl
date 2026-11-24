@@ -707,4 +707,68 @@ test(create_branch_from_nothing_omits_created_from,
     get_document(Repo_Ctx, Branch_Uri, Branch_Doc),
     \+ get_dict(created_from, Branch_Doc, _).
 
+has_branch_origin(Repository_Descriptor) :-
+    once(ask(Repository_Descriptor,
+             t(_, rdf:type, '@schema':'BranchOrigin'))).
+
+test(delete_two_branches_from_same_head,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+    Origin_Branch_Path = "admin/foo/local/branch/main",
+    resolve_absolute_string_descriptor(Origin_Branch_Path, Origin_Branch_Descriptor),
+    Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
+
+    create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
+    with_transaction(Context1,
+                     once(ask(Context1, insert(foo,bar,baz))),
+                     _),
+
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, "admin/foo/local/branch/moo",
+                  branch(Origin_Branch_Path), _),
+    branch_create(system_descriptor{}, Auth, "admin/foo/local/branch/reed",
+                  branch(Origin_Branch_Path), _),
+
+    branch_delete(system_descriptor{}, Auth, "admin/foo/local/branch/moo"),
+    \+ has_branch(Repository_Descriptor, "moo"),
+    has_branch(Repository_Descriptor, "reed"),
+    has_branch_origin(Repository_Descriptor),
+
+    branch_delete(system_descriptor{}, Auth, "admin/foo/local/branch/reed"),
+    \+ has_branch(Repository_Descriptor, "reed"),
+    \+ has_branch_origin(Repository_Descriptor).
+
+test(delete_two_branches_from_same_head_reverse_order,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+    Origin_Branch_Path = "admin/foo/local/branch/main",
+    resolve_absolute_string_descriptor(Origin_Branch_Path, Origin_Branch_Descriptor),
+    Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
+
+    create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
+    with_transaction(Context1,
+                     once(ask(Context1, insert(foo,bar,baz))),
+                     _),
+
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, "admin/foo/local/branch/moo",
+                  branch(Origin_Branch_Path), _),
+    branch_create(system_descriptor{}, Auth, "admin/foo/local/branch/reed",
+                  branch(Origin_Branch_Path), _),
+
+    branch_delete(system_descriptor{}, Auth, "admin/foo/local/branch/reed"),
+    \+ has_branch(Repository_Descriptor, "reed"),
+    has_branch(Repository_Descriptor, "moo"),
+    has_branch_origin(Repository_Descriptor),
+
+    branch_delete(system_descriptor{}, Auth, "admin/foo/local/branch/moo"),
+    \+ has_branch(Repository_Descriptor, "moo"),
+    \+ has_branch_origin(Repository_Descriptor).
+
 :- end_tests(branch_api).
