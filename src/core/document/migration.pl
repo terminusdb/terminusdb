@@ -1217,20 +1217,29 @@ schema_inference_rule(strengthening, Before, After, Operations) :-
 plan_schema_migration(Before, After, Recorded, Operations) :-
     once((
         (   schema_inference_rule(weakening, Before, After, Terms),
-            migration_terms_json(Terms, After, Candidate)
+            migration_terms_json(Terms, Before, After, Candidate)
         ;   Recorded \= [],
             Candidate = Recorded,
             migration_list_to_ast_list(Candidate, Terms)
         ;   catch(schema_inference_rule(strengthening, Before, After, Terms),
                   error(weakening_failure(_), _), fail),
-            migration_terms_json(Terms, After, Candidate)
+            migration_terms_json(Terms, Before, After, Candidate)
         ),
         Terms \= [],
         catch(interpret_schema_operations(Terms, Before, Expected),
               error(schema_operation_failed(_, _), _), fail),
-        Expected =@= After,
+        atom_json_dict(Expected_JSON, Expected, [width(0)]),
+        atom_json_dict(After_JSON, After, [width(0)]),
+        Expected_JSON == After_JSON,
         Operations = Candidate
     )).
+
+migration_terms_json(Terms, Before, After, Operations) :-
+    (   get_dict('@context', Before, Context),
+        get_dict('@context', After, Context)
+    ->  migration_terms_json(Terms, After, Operations)
+    ;   migration_list_to_ast_list(Operations, Terms)
+    ).
 
 migration_terms_json(Terms, Schema, Operations) :-
     migration_list_to_ast_list(Expanded, Terms),
