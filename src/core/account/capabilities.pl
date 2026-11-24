@@ -713,6 +713,7 @@ logic_branch_descriptor(Descriptor) :-
  * (reachable from main) keep their normal access rules.
  */
 logic_only_commit(Repository_Descriptor, Commit_Id) :-
+    has_branch(Repository_Descriptor, "@logic"),
     \+ commit_in_branch_history(Repository_Descriptor, "main", Commit_Id),
     commit_in_branch_history(Repository_Descriptor, "@logic", Commit_Id),
     !.

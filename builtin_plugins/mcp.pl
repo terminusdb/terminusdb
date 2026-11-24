@@ -46,7 +46,7 @@
                api_get_documents_by_query/6]).
 :- use_module(core(api/api_jsonschema)).
 :- use_module(core(api/api_patch), [api_patch_resource/7,
-                                   api_apply_squash_commit/7]).
+                                   api_merge_squash_commit/7]).
 :- use_module(core(api/api_log), [api_log/5]).
 :- use_module(core(api/api_reset), [api_reset/4]).
 :- use_module(core(api/api_squash), [api_squash/6]).
@@ -368,6 +368,12 @@ mcp_error_hint(error(schema_type_unknown(Type), _),
            '"~w" is not a valid schema type — a property range is a datatype string like "xsd:string" or a family wrapper {"@type":"Optional","@class":"xsd:string"}; a schema document @type is Class, TaggedUnion, Enum or Foreign. Every valid spelling: schema action `datatypes` (no resource needed).', [Type]).
 mcp_error_hint(error(schema_check_failure(_), _),
                'Read each witness: `property` names the offending class member, `class` the range it wanted. Remember every non-@ member of a Class document is a property slot — "comment"/"description"/"title" are not annotations; valid type spellings come from schema action `datatypes`.').
+mcp_error_hint(error(apply_partial_recorded_migration(_, _), _),
+               'Part of the source schema change is already on the target. Review the remaining changes and apply an explicit migration; merge does not replay a subset of recorded operations.').
+mcp_error_hint(error(squash_source_history_changed(_), _),
+               'The source branch no longer descends from a revision merged for this graph. Review its history and use /api/apply with explicit before and after commits.').
+mcp_error_hint(error(squash_rebased_checkpoint(_), _),
+               'The target was rebased over a squash checkpoint for this graph. Review which source changes landed and use /api/apply with explicit before and after commits. Explicit apply does not restore the checkpoint.').
 mcp_error_hint(error(resource_not_found(Path), _),
                Hint) :-
     format(string(Hint),
@@ -516,6 +522,8 @@ register_builtin_tools :-
                          enum:["log","list_branches","create_branch","delete_branch","merge","squash","reset","rebase","clone"]},
                 resource:_{type:"string", description:"org/db or org/db/local/branch/name"},
                 source:_{type:"string", description:"the other-end ref for merge/rebase/reset and the origin for create_branch — \"to\"/\"onto\" are aliases"},
+                graph_type:_{type:"string", enum:["both","schema","instance"], default:"both",
+                             description:"Graphs to merge; only used by the merge action"},
                 to:_{type:"string", description:"same as \"source\" — commit id or path"},
                 branch:_{type:"string", description:"branch name for create_branch when resource is org/db"},
                 empty:_{type:"boolean", description:"create_branch: schema-less branch (default branches off main)"},
@@ -1910,8 +1918,14 @@ git_action(Auth, System_DB, "delete_branch", Path, Args, Result) :-
 git_action(Auth, System_DB, "merge", Path, Args, Result) :-
     !,
     git_ref_arg(Args, Source),
+    Graph = Args.get(graph_type, "both"),
+    (   memberchk(Graph, ["both", "schema", "instance"])
+    ->  atom_string(Graph_Type, Graph)
+    ;   throw(mcp_tool_error(bad_apply_graph_type(Graph),
+                            'Pass graph_type:"both", "schema", or "instance" to git merge.'))
+    ),
     write_commit_info(Args, _Author, _Message, Commit_Info),
-    git_merge(Auth, System_DB, Path, Source, Commit_Info, Result).
+    git_merge(Auth, System_DB, Path, Source, Commit_Info, Graph_Type, Result).
 
 git_action(Auth, System_DB, "squash", Path, Args, Result) :-
     !,
@@ -2028,60 +2042,39 @@ require_confirm(Args, Template, Name) :-
                'This is irreversible. Pass confirm:"~w" verbatim to proceed.', [Expected]),
         throw(mcp_tool_error(confirmation_required(Expected), Hint))).
 
-%% git_merge(+Auth, +System_DB, +Path, +Source, +Commit_Info, -Result) is det.
-%
-%  Merge Source (branch or commit path) into the branch at Path. The
-%  true common ancestor is computed — never caller-supplied — so the
-%  three-way apply sees real conflicts instead of silently discarding
-%  either side.
-git_merge(Auth, System_DB, Path, Source, Commit_Info, Result) :-
-    resolve_descriptor_auth(write, System_DB, Auth, Path, instance,
-                            Branch_Desc),
-    do_or_die(
-        branch_descriptor{repository_descriptor: Our_Repo} :< Branch_Desc,
-        error(not_a_branch_descriptor(Branch_Desc), _)),
-    create_context(Our_Repo, Our_Ctx),
-    descriptor_commit_id_uri(Our_Ctx, Branch_Desc, Our_Id, _Our_Uri),
-
+%% git_merge(+Auth, +System_DB, +Path, +Source, +Commit_Info, +Graph_Type, -Result) is det.
+git_merge(Auth, System_DB, Path, Source, Commit_Info, Graph_Type, Result) :-
     do_or_die(
         resolve_absolute_string_descriptor(Source, Source_Desc),
         error(invalid_absolute_path(Source), _)),
-    do_or_die(
-        Source_Desc.repository_descriptor = Our_Repo,
-        error(mcp_cross_repository_merge(Source), _)),
-    descriptor_commit_id_uri(Our_Ctx, Source_Desc, Their_Id, _Their_Uri),
-
-    ref_entity:most_recent_common_ancestor(
-        Our_Ctx, Our_Ctx, Our_Id, Their_Id,
-        Common_Option, _Our_Path, _Their_Path),
-    (   Common_Option = some(Common_Id)
-    ->  true
-    ;   throw(mcp_tool_error(
-                  no_common_ancestor(Path, Source),
-                  'histories share no commit — git action `reset` to a known commit, or admin `export`/`import` instead'))),
-    format(atom(Before_A), 'commit:~w', [Common_Id]),
-    atom_string(Before, Before_A),
-    format(atom(After_A), 'commit:~w', [Their_Id]),
-    atom_string(After, After_A),
     catch(
-        api_patch:api_apply_squash_commit(
-            System_DB, Auth, Path, Commit_Info,
-            Before, After, [conflict_incoming(true),
-                            % both sides resolving to the same value is
-                            % convergence, not a conflict
-                            match_final_state(true)]),
-        error(apply_squash_witnesses(Witnesses)),
-        (   format(string(Merge_Hint),
-                   'changes to the same fields conflict — decide the correct value per document (witnesses show @expected ancestor, @found yours, @incoming theirs), then `write` the resolved documents on ~w: that commit completes the merge manually (retrying `merge` re-reports the same conflict)',
-                   [Path]),
-            throw(mcp_tool_error(
-                      merge_conflict(Witnesses), Merge_Hint)))),
-    mcp_read_transaction(Auth, System_DB, Path, instance, _{},
-                         _T, Data_Version),
-    Result = _{'_text':"merge committed",
+        api_merge_squash_commit(System_DB, Auth, Path, Commit_Info, Source_Desc, Graph_Type, Common_Id),
+        Error,
+        git_merge_error(Error, Path, Source)),
+    resolve_absolute_string_descriptor(Path, Branch_Desc),
+    before_read(Branch_Desc, no_data_version, Actual_Version, _),
+    serialize_data_version(Actual_Version, Data_Version),
+    Result = _{'_text':"merge complete",
                merged_from:Source,
                common_ancestor:Common_Id,
                data_version:Data_Version}.
+
+git_merge_error(error(no_squash_common_ancestor, _), Path, Source) :-
+    !,
+    throw(mcp_tool_error(
+              no_common_ancestor(Path, Source),
+              'histories share no commit — git action `reset` to a known commit, or admin `export`/`import` instead')).
+git_merge_error(error(mcp_cross_repository_merge(_), Context), _, Source) :-
+    !,
+    throw(error(mcp_cross_repository_merge(Source), Context)).
+git_merge_error(error(apply_squash_witnesses(Witnesses)), Path, _) :-
+    !,
+    format(string(Hint),
+           'changes to the same fields conflict — witnesses show @expected base, @found yours, and @incoming theirs. Use `write` on ~w to resolve the documents. A manual write does not record a merge checkpoint.',
+           [Path]),
+    throw(mcp_tool_error(merge_conflict(Witnesses), Hint)).
+git_merge_error(Error, _, _) :-
+    throw(Error).
 
 % ==========================================================================
 % plugins tool — extension namespace
@@ -3435,6 +3428,37 @@ test(git_merge_computes_common_ancestor,
                 get_dict(name, D, N)),
             Names),
     sort(Names, ["Base","Feature","Main"]).
+
+test(git_merge_selects_graph,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, mcpmergegraphs))),
+      cleanup(teardown_temp_store(State))]) :-
+    superuser(Auth),
+    open_descriptor(system_descriptor{}, System),
+    Main = "admin/mcpmergegraphs",
+    Source = "admin/mcpmergegraphs/local/branch/feature",
+    CI = _{author:"a", message:"m"},
+    branch_create(System, Auth, Source, branch(Main), _),
+    open_string('{"@type":"Class","@id":"Venue","name":"xsd:string"}', Schema),
+    api_insert_documents(System, Auth, Source, Schema, no_data_version, _, _, _,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{"@type":"City","name":"Feature"}', Instance),
+    api_insert_documents(System, Auth, Source, Instance, no_data_version, _, _, _,
+                         [graph_type(instance), author("a"), message("m")]),
+    Merge = _{action:"merge", resource:Main, source:Source, commit_info:CI},
+    tool_call("git", Merge.put(graph_type, "schema"), 74, Schema_Call),
+    dispatch(Auth, System, Schema_Call, http, Schema_Result),
+    assertion(\+ get_dict(isError, Schema_Result.result, true)),
+    mcp_read_transaction(Auth, System, Main, schema, _{}, After_Schema, _),
+    mcp_doc_config(_{}, Config),
+    once(api_document:api_get_document(schema, After_Schema, "Venue", Config, _)),
+    assertion(\+ api_get_documents_by_type(After_Schema, instance, "City", Config, _)),
+    tool_call("git", Merge.put(graph_type, "instance"), 75, Instance_Call),
+    dispatch(Auth, System, Instance_Call, http, Instance_Result),
+    assertion(\+ get_dict(isError, Instance_Result.result, true)),
+    mcp_read_transaction(Auth, System, Main, instance, _{}, After_Instance, _),
+    once(api_get_documents_by_type(After_Instance, instance, "City", Config, City)),
+    assertion(City.name == "Feature").
 
 test(git_merge_conflict_witness_names_incoming_value,
      [setup((setup_temp_store(State),

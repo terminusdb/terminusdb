@@ -516,9 +516,40 @@ api_global_error_jsonld(error(bad_apply_type(Apply_Type),_), Type, JSON) :-
                               'api:apply_type' : Apply_Type},
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(bad_apply_graph_type(Graph_Type),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadApplyGraphType',
+                              'api:graph_type' : Graph_Type},
+             'api:message' : "Apply graph_type must be both, schema, or instance."
+            }.
+api_global_error_jsonld(error(apply_migration_rewrites_instances,_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ApplyMigrationRewritesInstances'},
+             'api:message' : "Squash apply cannot run a schema migration that rewrites instances."
+            }.
+api_global_error_jsonld(error(apply_unsupported_schema_migration,_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ApplyUnsupportedSchemaMigration'},
+             'api:message' : "No supported migration reproduces the merged schema."
+            }.
+api_global_error_jsonld(error(apply_partial_recorded_migration(Before, After),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ApplyPartialRecordedMigration',
+                              'api:before_commit' : Before,
+                              'api:after_commit' : After},
+             'api:message' : "The target already has part of the source schema change. No supported migration applies the remainder. Review the remaining changes and apply an explicit migration; squash apply does not replay a subset of recorded operations."
+            }.
 api_global_error_jsonld(error(apply_schema_delta(Before, After),_), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "The commits ~q and ~q carry different schemas. Squash apply merges instance documents only — merge the schema separately first.", [Before, After]),
+    format(string(Msg), "The schema change from ~q to ~q conflicts with the target schema.", [Before, After]),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:ApplySchemaDelta',

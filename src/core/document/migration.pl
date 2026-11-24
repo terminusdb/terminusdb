@@ -1,6 +1,9 @@
 :- module('document/migration', [
               perform_instance_migration/5,
               perform_instance_migration_on_transaction/4,
+              create_class_dictionary/2,
+              plan_schema_migration/4,
+              stage_schema_migration/4,
               infer_weakening_migration/3,
               infer_arbitrary_migration/3,
               operations_are_weakening/1,
@@ -1211,6 +1214,54 @@ schema_inference_rule(weakening, Before, After, Operations) :-
 schema_inference_rule(strengthening, Before, After, Operations) :-
     schema_strengthening(Before, After, Operations).
 
+plan_schema_migration(Before, After, Recorded, Operations) :-
+    once((
+        (   schema_inference_rule(weakening, Before, After, Terms),
+            migration_terms_json(Terms, Before, After, Candidate)
+        ;   Recorded \= [],
+            Candidate = Recorded,
+            migration_list_to_ast_list(Candidate, Terms)
+        ;   catch(schema_inference_rule(strengthening, Before, After, Terms),
+                  error(weakening_failure(_), _), fail),
+            migration_terms_json(Terms, Before, After, Candidate)
+        ),
+        Terms \= [],
+        catch(interpret_schema_operations(Terms, Before, Expected),
+              error(schema_operation_failed(_, _), _), fail),
+        atom_json_dict(Expected_JSON, Expected, [width(0)]),
+        atom_json_dict(After_JSON, After, [width(0)]),
+        Expected_JSON == After_JSON,
+        Operations = Candidate
+    )).
+
+migration_terms_json(Terms, Before, After, Operations) :-
+    (   get_dict('@context', Before, Context),
+        get_dict('@context', After, Context)
+    ->  migration_terms_json(Terms, After, Operations)
+    ;   migration_list_to_ast_list(Operations, Terms)
+    ).
+
+migration_terms_json(Terms, Schema, Operations) :-
+    migration_list_to_ast_list(Expanded, Terms),
+    (   get_dict('@context', Schema, Context)
+    ->  context_prefixes(Context, Prefixes, _),
+        maplist({Prefixes}/[Ex, C]>>contract_operation_json(Ex, Prefixes, C),
+                Expanded, Operations)
+    ;   Expanded = Operations
+    ).
+
+stage_schema_migration(Before, Operations, Expected, After) :-
+    perform_instance_migration_on_transaction(
+        Before, Operations, Staged, _Result,
+        [dry_run(true), forbid_instance_rewrites(true)]),
+    Before.instance_objects = [Before_Instance],
+    do_or_die(
+        (   create_class_dictionary(Staged, Actual),
+            Actual =@= Expected
+        ),
+        error(apply_unsupported_schema_migration, _)),
+    put_dict(instance_objects, Staged, [Before_Instance.put(write, _)], After).
+
 perform_migration_rule(weakening,_Before, After, Operations_List, Validation_Out, Meta_Data) :-
     transaction_objects_to_validation_objects([After], [Validation]),
     length(Operations_List, Schema_Operations),
@@ -1250,16 +1301,10 @@ infer_migration(Rule, [Validation], [New_Validation], Meta_Data) :-
     create_class_dictionary(Before_Transaction, Before),
     create_class_dictionary(After_Transaction, After),
     schema_inference_rule(Rule, Before, After, Operations),
-    migration_list_to_ast_list(Operations_List_Ex, Operations),
     /* Ops re-expand under the new context when replayed, so contract
      * under it here: the record stays portable and the perform path
      * sees the same vocabulary a user would submit. */
-    (   get_dict('@context', After, After_Context)
-    ->  context_prefixes(After_Context, Op_Prefixes, _Op_Defaults),
-        maplist({Op_Prefixes}/[Op_Ex, Op_C]>>contract_operation_json(Op_Ex, Op_Prefixes, Op_C),
-                Operations_List_Ex, Operations_List)
-    ;   Operations_List = Operations_List_Ex
-    ),
+    migration_terms_json(Operations, After, Operations_List),
     !,
     perform_migration_rule(Rule, Before_Transaction, After_Transaction, Operations_List, Validation0, Meta_Data),
     atom_json_dict(Migration, Operations_List, [default_tag(json), width(0)]),
@@ -1628,7 +1673,8 @@ extract_simple_type(Type, Simple) :-
     is_dict(Type),
     !,
     get_dict('@type', Type, Family),
-    memberchk(Family, ["Set", "Optional", "Cardinality"]),
+    atom_string(Family_Name, Family),
+    memberchk(Family_Name, ['Set', 'Optional', 'Cardinality']),
     get_dict('@class', Type, Simple_Unexpanded),
     default_prefixes(Prefixes),
     prefix_expand_schema(Simple_Unexpanded, Prefixes, Simple).
@@ -2322,24 +2368,36 @@ interpret_instance_operations(JSONOps, Before, After, Instance_Count) :-
     interpret_instance_operations(Ops, Before, After, 0, Instance_Count).
 
 
-interpret_operations([], After_Transaction, After_Transaction, Instance_Count, Instance_Count).
-interpret_operations([Operation|Operations], Before, After, Instance_Count_In, Instance_Count_Out) :-
+interpret_operations([], After_Transaction, After_Transaction, _, Instance_Count, Instance_Count).
+interpret_operations([Operation|Operations], Before, After, Options, Instance_Count_In, Instance_Count_Out) :-
     interpret_schema_operation(Operation, Before, Intermediate0),
     cycle_layer(schema,Intermediate0,Intermediate1),
 
     interpret_instance_operation(Operation, Before, Intermediate1, Instance_Count),
     Instance_Count1 is Instance_Count + Instance_Count_In,
     cycle_layer(instance,Intermediate1, Intermediate2),
+    check_instance_migration_delta(Intermediate2, Options),
 
-    interpret_operations(Operations, Intermediate2, After, Instance_Count1, Instance_Count_Out).
+    interpret_operations(Operations, Intermediate2, After, Options, Instance_Count1, Instance_Count_Out).
 
-interpret_operations(JSONOps, Before, After, Instance_Count) :-
+check_instance_migration_delta(Transaction, Options) :-
+    (   option(forbid_instance_rewrites(true), Options)
+    ->  Transaction.instance_objects = [Instance],
+        do_or_die(
+            (   layer_addition_count(Instance.read, 0),
+                layer_removal_count(Instance.read, 0)
+            ),
+            error(apply_migration_rewrites_instances, _))
+    ;   true
+    ).
+
+interpret_operations(JSONOps, Before, After, Options, Instance_Count) :-
     migration_list_to_ast_list(JSONOps, Ops),
     % Foreign-class guards before the dictionary preflight.
     maplist(refute_foreign_schema_operation(Before), Ops),
     % Preflight to test that everything is ok...
     calculate_schema_migration(Before, Ops, _),
-    interpret_operations(Ops, Before, Intermediate, 0, Instance_Count),
+    interpret_operations(Ops, Before, Intermediate, Options, 0, Instance_Count),
     squash_layer(Before, Intermediate, After).
 
 squash_layer(Before,Intermediate,After) :-
@@ -2469,7 +2527,7 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, After_
     ensure_transaction_has_builder(instance, Before_Transaction),
     ensure_transaction_has_builder(schema, Before_Transaction),
     refute_ungated_rebase(Operations, Options),
-    interpret_operations(Operations,Before_Transaction,After_Transaction,Count),
+    interpret_operations(Operations, Before_Transaction, After_Transaction, Options, Count),
     length(Operations, Op_Count),
     % run logic here.
     (   option(dry_run(true), Options)

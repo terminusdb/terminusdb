@@ -4,7 +4,7 @@
       "@description" : "This is the Ref schema. It gives a specification for storage of references, branches and commits in our commit graph.",
       "@authors" : ["Gavin Mendel-Gleason", "Matthijs van Otterdijk"]
   },
-  "@metadata" : { "schema_version" : "v1.0.4" },
+  "@metadata" : { "schema_version" : "v1.0.6" },
   "@base" : "terminusdb://ref/data/",
   "@schema" : "http://terminusdb.com/schema/ref#",
   "layer" : "http://terminusdb.com/schema/layer#",
@@ -27,15 +27,40 @@
       "@comment" : "The operation that produced a merge commit." },
   "@value" : ["apply", "rebase", "concat", "squash"] }
 
+{ "@id" : "SquashMergeGraph",
+  "@type" : "Enum",
+  "@documentation" : {
+      "@comment" : "The graph or graphs incorporated by an MCP squash merge." },
+  "@value" : ["schema", "instance", "both"] }
+
+{ "@id" : "SquashMergeCheckpoint",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@key" : { "@type" : "Random" },
+  "@documentation" : {
+      "@comment" : "Marks the owning merge's single source commit as a future merge base, not a parent.",
+      "@properties" : {
+          "graph_type" : "The graphs changed by this merge, for which the source commit is a future merge base.",
+          "source_branch" : "The repository-local branch name when the source is a branch. Used to detect source history rewinds, not to resolve the recorded commit."
+      }
+  },
+  "graph_type" : "SquashMergeGraph",
+  "source_branch" : { "@type" : "Optional", "@class" : "xsd:string" } }
+
 { "@id" : "CommitMerge",
   "@type" : "Class",
   "@subdocument" : [],
-  "@key" : { "@type" : "ValueHash" },
+  "@key" : { "@type" : "Random" },
   "@documentation" : {
-      "@comment" : "Merge provenance: the ordered source commits merged into a commit and the operation that produced it. Source references are literals — they may point at commits not present in this commit graph." },
+      "@comment" : "Each merge commit owns its provenance, including when multiple merges use the same source commits. Source references are literals — they may point at commits not present in this commit graph.",
+      "@properties" : {
+          "squash_checkpoint" : "Present only on committed MCP squash merges. The commits list then contains exactly one source commit that was local at merge time. Ordinary apply provenance does not establish a checkpoint."
+      }
+  },
   "commits" : { "@type" : "List",
                 "@class" : "xsd:anyURI" },
-  "operation" : "MergeOperation" }
+  "operation" : "MergeOperation",
+  "squash_checkpoint" : { "@type" : "Optional", "@class" : "SquashMergeCheckpoint" } }
 
 { "@id" : "BranchOrigin",
   "@type" : "Class",
