@@ -18229,6 +18229,26 @@ test(mandatory_marker_rejects_non_list_property,
            '@type' : "Class",
            tags : _{ '@type' : "Set", '@class' : "xsd:string", '@mandatory' : [] } }).
 
+test(mandatory_list_rejects_link_removal,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    run_insert_document(Desc, commit_info{author:"test",message:"test"},
+                        _{ '@type' : "RequiredItem", name : "empty", tags : [] }, Id),
+    create_context(Desc, _{author:"test",message:"remove"}, Remove_Context),
+    catch(
+        with_transaction(
+            Remove_Context,
+            ask(Remove_Context, delete(Id, tags, rdf:nil)),
+            _),
+        Error,
+        true),
+    nonvar(Error),
+    Error = error(schema_check_failure(Witnesses), _),
+    member(Witness, Witnesses),
+    witness{'@type':instance_not_cardinality_one} :< Witness.
+
 test(optional_list_replace_can_unset,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),

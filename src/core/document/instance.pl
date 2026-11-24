@@ -345,7 +345,7 @@ refute_cardinality(Schema,Validation_Object,S_Id,P_Id,C,Witness) :-
     ),
     schema_class_predicate_conjunctive_type(Schema, C, Predicate, Desc),
     (   Desc = list(Element),
-        schema_property_is_mandatory(Schema, C, Predicate, false)
+        \+ schema_property_is_mandatory(Schema, C, Predicate, true)
     ->  refute_optional_list_cardinality(Element,Validation_Object,S_Id,P_Id,Witness)
     ;   refute_cardinality_(Desc,Validation_Object,S_Id,P_Id,Witness)).
 
