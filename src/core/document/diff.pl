@@ -30,7 +30,8 @@
 % copy_value(Bool)   Do we want to include the value in a copy or leave it implicit
 
 simple_diff(Before,After,Diff,Options) :-
-    option(keep(Keep), Options),
+    do_or_die(option(keep(Keep), Options),
+              error(missing_diff_option(keep), _)),
     simple_diff(Before,After,Keep,_,Diff,Options).
 
 best_cost(best(Cost,_),Cost).
@@ -791,7 +792,7 @@ test(deep_list_patch, []) :-
     simple_diff(Before,After,Diff,[keep(json{})]),
     simple_patch(Diff,Before,success(After),[]).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 test(deep_list_id_patch, []) :-
     OldAtom = '{

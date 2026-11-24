@@ -5,7 +5,8 @@
               refute_referential_integrity/2,
               is_instance/3,
               is_instance_class/3,
-              instance_of/3
+              instance_of/3,
+              schema_layer/2
           ]).
 
 /*
@@ -28,7 +29,7 @@
 
 :- use_module(schema).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(aggregate)).
 :- use_module(library(lists)).
 :- use_module(library(dicts)).
@@ -174,8 +175,10 @@ refute_cardinality_(not_tagged_union(C,_),Validation_Object,S,P,Witness) :-
                        predicate: Predicate
                      }.
 refute_cardinality_(set(_C),_Validation_Object,_S,_P,_Witness) :-
-    % no bad cardinality possible
+    % no bad cardinality possible for unconstrained set
     fail.
+refute_cardinality_(set(C,N,M),Validation_Object,S,P,Witness) :-
+    refute_bounded_cardinality(C,N,M,Validation_Object,S,P,Witness).
 refute_cardinality_(array(_C,_D),_Validation_Object,_S,_P,_Witness) :-
     % a property whose value is an array
     % No bad cardinality possible - absence means empty array
@@ -248,6 +251,9 @@ refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
                          }
     ).
 refute_cardinality_(cardinality(C,N,M),Validation_Object,S,P,Witness) :-
+    refute_bounded_cardinality(C,N,M,Validation_Object,S,P,Witness).
+
+refute_bounded_cardinality(C,N,M,Validation_Object,S,P,Witness) :-
     card_count(Validation_Object,S,P,Count),
     \+ (   N =< Count,
            Count =< M
@@ -278,7 +284,7 @@ internal_simple_json(X, X) :-
     atom(X),
     !.
 internal_simple_json(D^^T, X) :-
-    typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], X).
+    typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', X).
 
 range_term_list(Validation_Object, S, P, L) :-
     database_instance(Validation_Object, Instance),
@@ -289,21 +295,28 @@ range_term_list(Validation_Object, S, P, L) :-
             L).
 
 refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
+    database_schema(Validation_Object, Schema),
+    refute_cardinality(Schema,Validation_Object,S_Id,P_Id,C,Witness).
+
+refute_cardinality(_Schema,Validation_Object,S_Id,P_Id,C,Witness) :-
     is_array_type(C),
     !,
     refute_cardinality_(array, Validation_Object, S_Id, P_Id, Witness).
-refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
+refute_cardinality(_Schema,Validation_Object,S_Id,P_Id,C,Witness) :-
     is_list_type(C),
     !,
     refute_cardinality_(list, Validation_Object, S_Id, P_Id, Witness).
-refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
-    oneof_descriptor(Validation_Object, C, tagged_union(TU,TC)),
+refute_cardinality(Schema,Validation_Object,S_Id,P_Id,C,Witness) :-
+    (   schema_oneof_descriptor(Schema, C, tagged_union(TU,TC))
+    ;   schema_subclass_of(Schema, C, Super),
+        schema_oneof_descriptor(Schema, Super, tagged_union(TU,TC))
+    ),
     instance_layer(Validation_Object, Layer),
     (   integer(P_Id)
     ->  terminus_store:predicate_id(Layer, Predicate, P_Id)
     ;   Predicate = P_Id
     ),
-    class_predicate_type(Validation_Object,C,Predicate,_),
+    schema_class_predicate_type(Schema,C,Predicate,_),
     atom_string(P,Predicate),
     dict_keys(TC,Keys),
     member(P,Keys),
@@ -315,26 +328,29 @@ refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
         P_Id \= Q_Id,
         refute_cardinality_(not_tagged_union(TU,TC),Validation_Object,S_Id,Q_Id,Witness)
     ).
-refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
+refute_cardinality(Schema,Validation_Object,S_Id,P_Id,C,Witness) :-
     instance_layer(Validation_Object, Layer),
     (   integer(P_Id)
     ->  terminus_store:predicate_id(Layer, Predicate, P_Id)
     ;   Predicate = P_Id
     ),
-    class_predicate_conjunctive_type(Validation_Object, C, Predicate, Desc),
+    schema_class_predicate_conjunctive_type(Schema, C, Predicate, Desc),
     refute_cardinality_(Desc,Validation_Object,S_Id,P_Id,Witness).
 
-refute_cardinality_new(Validation_Object,S_Id,C,Witness) :-
+refute_cardinality_new(Schema,Validation_Object,S_Id,C,Witness) :-
     instance_layer(Validation_Object, Layer),
-    class_predicate_conjunctive_type(Validation_Object, C, Predicate, _),
+    schema_class_predicate_conjunctive_type(Schema, C, Predicate, _),
     (   terminus_store:predicate_id(Layer, Predicate, P_Id)
     ->  \+ terminus_store:id_triple_addition(Layer, S_Id, P_Id, _) % unchecking
     ;   P_Id = Predicate % doesn't exist in the dictionary
     ),
-    refute_cardinality(Validation_Object, S_Id, P_Id, C, Witness).
-refute_cardinality_new(Validation_Object,S_Id,C,Witness) :-
+    refute_cardinality(Schema, Validation_Object, S_Id, P_Id, C, Witness).
+refute_cardinality_new(Schema,Validation_Object,S_Id,C,Witness) :-
     instance_layer(Validation_Object, Layer),
-    oneof_descriptor(Validation_Object, C, tagged_union(_TU,TC)),
+    (   schema_oneof_descriptor(Schema, C, tagged_union(_TU,TC))
+    ;   schema_subclass_of(Schema, C, Super),
+        schema_oneof_descriptor(Schema, Super, tagged_union(_TU,TC))
+    ),
     dict_keys(TC,Keys),
     (   member(Predicate,Keys),
         terminus_store:predicate_id(Layer, Predicate, P_Id),
@@ -389,7 +405,11 @@ subject_deleted(Validation_Object, S_Id) :-
     instance_layer(Validation_Object, Layer),
     global_prefix_expand(rdf:type, Rdf_Type),
     terminus_store:predicate_id(Layer, Rdf_Type, Rdf_Type_Id),
-    terminus_store:id_triple_removal(Layer, S_Id, Rdf_Type_Id, _).
+    terminus_store:id_triple_removal(Layer, S_Id, Rdf_Type_Id, _),
+    % A type removal paired with a type addition is a retype, not a
+    % deletion — leave it to refute_subject_type_change so the witness
+    % names the actual change.
+    \+ terminus_store:id_triple_addition(Layer, S_Id, Rdf_Type_Id, _).
 
 
 subject_predicate_changed(Validation_Object, S_Id, P_Id) :-
@@ -402,8 +422,8 @@ subject_predicate_updated(Validation_Object, S_Id, P_Id) :-
     distinct(S_Id-P_Id,(terminus_store:id_triple_removal(Layer, S_Id, P_Id,_),
                         terminus_store:id_triple_addition(Layer, S_Id ,P_Id,_))).
 
-refute_key(Validation_Object, S_Id,P_Id,Class,Witness) :-
-    key_descriptor(Validation_Object, Class,Desc),
+refute_key(_Schema,Validation_Object, S_Id,P_Id,Class,Witness) :-
+    key_descriptor(Validation_Object, Class, Desc),
     subject_predicate_updated(Validation_Object,S_Id,P_Id),
     instance_layer(Validation_Object, Layer),
     terminus_store:subject_id(Layer, Subject_String, S_Id),
@@ -439,7 +459,7 @@ schema_layer(Validation_Object, Layer) :-
 
 refute_existing_object_keys(Validation_Object,Class,Witness) :-
     % this is just wrong
-    key_descriptor(Validation_Object, Class,Desc),
+    key_descriptor(Validation_Object, Class, Desc),
     instance_layer(Validation_Object, Layer),
     global_prefix_expand(rdf:type, Rdf_Type),
     terminus_store:predicate_id(Layer, Rdf_Type, Rdf_Type_Id),
@@ -453,7 +473,13 @@ refute_existing_object_keys(Validation_Object,Class,Witness) :-
     terminus_store:subject_id(Layer, Subject_String, S_Id),
 
     memberchk(Desc, [lexical(_,_), hash(_,_), value_hash]),
-    'document/json':get_document(Validation_Object, Subject_String, Document),
+    % A subdocument's @id is minted under its parent's path, so the
+    % standalone node can never re-elaborate — check the root document.
+    (   is_subdocument(Validation_Object, Class)
+    ->  atom_string(Subject_Atom, Subject_String),
+        root_document_uri(Validation_Object, Subject_Atom, Check_Uri)
+    ;   Check_Uri = Subject_String),
+    'document/json':get_document(Validation_Object, Check_Uri, Document),
     catch(
         'document/json':json_elaborate(Validation_Object, Document, _),
         error(submitted_id_does_not_match_generated_id(Submitted,Generated),_),
@@ -465,6 +491,26 @@ refute_existing_object_keys(Validation_Object,Class,Witness) :-
     (   var(Witness)
     ->  fail
     ;   true).
+
+%% root_document_uri(+DB, +Uri, -Root_Uri)
+%% Follow back-links from a subdocument URI upward to its root document.
+%% Mirrors document/migration's find_root_document — kept local because
+%% migration already depends on this module, so importing would cycle.
+%% A node with no parent (corrupt data) makes the caller fail instead of
+%% elaborating a standalone subdocument, which always throws.
+root_document_uri(DB, Uri, Root_Uri) :-
+    root_document_uri_(DB, Uri, [Uri], Root_Uri).
+
+root_document_uri_(DB, Uri, Visited, Root_Uri) :-
+    database_instance(DB, Instance),
+    xrdf(Instance, Parent, _P, Uri),
+    Parent \= Uri,
+    \+ memberchk(Parent, Visited),
+    xrdf(Instance, Parent, rdf:type, Parent_Type),
+    (   is_subdocument(DB, Parent_Type)
+    ->  root_document_uri_(DB, Parent, [Parent|Visited], Root_Uri)
+    ;   Root_Uri = Parent
+    ).
 
 refute_subject_deletion(Validation_Object, S_Id, Witness) :-
     subject_deleted(Validation_Object, S_Id),
@@ -495,6 +541,13 @@ refute_subject_deletion_(Validation_Object, S_Id,Witness) :-
                         predicate : Predicate,
                         object : Subject }).
 
+/* Retyping is legal inside a migration transaction: operations such as
+ * RebaseIRIPrefix rewrite class IRIs in place and are preflighted
+ * before they run. Outside a migration the refutation still holds. */
+refute_subject_type_change(Validation_Object, _S_Id, _Witness) :-
+    get_dict(inside_migration, Validation_Object, true),
+    !,
+    fail.
 refute_subject_type_change(Validation_Object,S_Id,Witness) :-
     instance_layer(Validation_Object, Layer),
 
@@ -509,7 +562,7 @@ refute_subject_type_change(Validation_Object,S_Id,Witness) :-
                     old_type : Old_Type,
                     new_type : New_Type}.
 
-refute_object_type(_Validation_Object,Class,_,_,_) :-
+refute_object_type(_Schema,_Validation_Object,Class,_,_,_) :-
     (   is_json_document_type(Class)
     ;   is_json_subdocument_type(Class)
     ),
@@ -517,7 +570,7 @@ refute_object_type(_Validation_Object,Class,_,_,_) :-
     % predicates, but this will be faster.
     !,
     fail.
-refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
+refute_object_type(_Schema,Validation_Object,Class,S_Id,P_Id,Witness) :-
     is_array_type(Class),
     !,
     instance_layer(Validation_Object, Layer),
@@ -539,7 +592,7 @@ refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
     Witness = json{ '@type' : invalid_array_type,
                     subject: Subject,
                     class: Class }.
-refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
+refute_object_type(_Schema,Validation_Object,Class,S_Id,P_Id,Witness) :-
     is_list_type(Class),
     !,
     instance_layer(Validation_Object, Layer),
@@ -553,15 +606,15 @@ refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
     Witness = json{ '@type' : invalid_list_type,
                     subject: Subject,
                     class: Class }.
-refute_object_type(Validation_Object, Class,S_Id,P_Id,Witness) :-
+refute_object_type(Schema,Validation_Object, Class,S_Id,P_Id,Witness) :-
     instance_layer(Validation_Object, Layer),
     terminus_store:predicate_id(Layer, Predicate_String, P_Id),
     atom_string(Predicate, Predicate_String),
-    (   class_predicate_type(Validation_Object, Class, Predicate, Type)
+    (   schema_class_predicate_type(Schema, Class, Predicate, Type)
     ->  terminus_store:id_triple_addition(Layer,S_Id,P_Id,O_Id),
         terminus_store:object_id(Layer,O,O_Id),
         storage_object(O,Object),
-        refute_object_type_(Type,Validation_Object,Object,Witness)
+        refute_object_type_(Schema,Type,Validation_Object,Object,Witness)
     ;   terminus_store:id_triple(Layer,S_Id,P_Id,_),
         terminus_store:subject_id(Layer, Subject_String, S_Id),
         atom_string(Subject, Subject_String),
@@ -571,44 +624,54 @@ refute_object_type(Validation_Object, Class,S_Id,P_Id,Witness) :-
                         subject: Subject }
     ).
 
-refute_object_type_(enum(C,List),_Validation_Object,Object,Witness) :-
+refute_object_type_(_Schema,enum(C,List),_Validation_Object,Object,Witness) :-
     \+ memberchk(Object, List),
     Witness = witness{ '@type' : instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(base_type(C),_Validation_Object,Object,Witness) :-
+refute_object_type_(_Schema,base_type(C),_Validation_Object,Object,Witness) :-
     refute_basetype_elt(Object,C,Witness).
-refute_object_type_(foreign(_),_,_,_) :-
+refute_object_type_(_Schema,foreign(_),_,_,_) :-
     fail.
-refute_object_type_(class(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,class(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
+    % Skip validation for Foreign types - they reference external data
+    \+ is_schema_foreign(Schema, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(set(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,set(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
+    % Skip validation for Foreign types - they reference external data
+    \+ is_schema_foreign(Schema, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(cardinality(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,cardinality(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
+    % Skip validation for Foreign types - they reference external data
+    \+ is_schema_foreign(Schema, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(optional(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,optional(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
+    % Skip validation for Foreign types - they reference external data
+    \+ is_schema_foreign(Schema, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(array(C,_D),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,array(C,_D),Validation_Object,Object,Witness) :-
+    % Skip validation for Foreign types - they reference external data
+    \+ is_schema_foreign(Schema, C),
     database_instance(Validation_Object, Instance),
     xrdf_added(Instance,Object,sys:value,O),
     \+ is_instance(Validation_Object,O,C),
@@ -618,7 +681,9 @@ refute_object_type_(array(C,_D),Validation_Object,Object,Witness) :-
                   object: O,
                   array: Object
               }.
-refute_object_type_(list(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,list(C),Validation_Object,Object,Witness) :-
+    % Skip validation for Foreign types - they reference external data
+    \+ is_schema_foreign(Schema, C),
     (   \+ is_rdf_list(Validation_Object, Object)
     ->  Witness = witness{'@type':not_a_valid_list,
                           class:C,
@@ -632,13 +697,13 @@ refute_object_type_(list(C),Validation_Object,Object,Witness) :-
                       list: Object
                   }
     ).
-refute_object_type_(table(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,table(C),Validation_Object,Object,Witness) :-
     (   \+ is_rdf_list(Validation_Object, Object)
     ->  Witness = witness{'@type':not_a_valid_table,
                           class:C,
                           table:Object}
     ;   member_array(Validation_Object, Array_Elt, Object),
-        refute_object_type_(array(C,2),Validation_Object,Array_Elt,Array_Witness),
+        refute_object_type_(Schema,array(C,2),Validation_Object,Array_Elt,Array_Witness),
         (   witness{'@type':array_element_not_of_class,
                     object: Elt} :< Array_Witness,
             Witness = witness{
@@ -663,7 +728,7 @@ refute_abstract(Subject, Class, Witness) :-
                   subject: Subject
               }.
 
-refute_typed_subject(Validation_Object,S_Id,Class,Witness) :-
+refute_typed_subject(Schema,Validation_Object,S_Id,Class,Witness) :-
     subject_predicate_changed(Validation_Object,S_Id,P_Id),
     % We also need to check arrays / lists for coherence here?
     (   instance_layer(Validation_Object, Layer),
@@ -674,27 +739,27 @@ refute_typed_subject(Validation_Object,S_Id,Class,Witness) :-
         ;   global_prefix_expand(rdf:type, Predicate),
             (   refute_subject_deletion(Validation_Object, S_Id, Witness)
             ;   refute_subject_type_change(Validation_Object,S_Id,Witness)
-            ;   refute_cardinality_new(Validation_Object,S_Id,Class,Witness)))
-    ;   is_abstract(Validation_Object,Class)
+            ;   refute_cardinality_new(Schema,Validation_Object,S_Id,Class,Witness)))
+    ;   schema_is_abstract(Schema,Class)
     ->  refute_abstract(S_Id, Class, Witness)
     ;   refute_subject_type_change(Validation_Object,S_Id,Witness)
-    ;   refute_key(Validation_Object,S_Id,P_Id,Class,Witness)
+    ;   refute_key(Schema,Validation_Object,S_Id,P_Id,Class,Witness)
         % NOTE: Perhaps this can be more intelligence predicates
-    ;   refute_cardinality(Validation_Object,S_Id,P_Id,Class,Witness)
-    ;   refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness)
+    ;   refute_cardinality(Schema,Validation_Object,S_Id,P_Id,Class,Witness)
+    ;   refute_object_type(Schema,Validation_Object,Class,S_Id,P_Id,Witness)
     ).
 
-refute_subject(Validation_Object,S_Id,Witness) :-
+refute_subject(Schema,Validation_Object,S_Id,Witness) :-
     (   refute_subject_deletion(Validation_Object,S_Id,Witness)
     *-> true
-    ;   refute_subject_1(Validation_Object, S_Id, Witness)).
+    ;   refute_subject_1(Schema,Validation_Object, S_Id, Witness)).
 
-refute_subject_1(Validation_Object,S_Id,_Witness) :-
+refute_subject_1(_Schema,Validation_Object,S_Id,_Witness) :-
     instance_layer(Validation_Object, Layer),
     \+ terminus_store:id_triple(Layer,S_Id, _,_),
     !,
     fail.
-refute_subject_1(Validation_Object,S_Id,Witness) :-
+refute_subject_1(_Schema,Validation_Object,S_Id,Witness) :-
     instance_layer(Validation_Object, Layer),
     terminus_store:subject_id(Layer, Subject, S_Id),
     foreign_instance_of(Validation_Object, Subject, Class),
@@ -709,27 +774,29 @@ refute_subject_1(Validation_Object,S_Id,Witness) :-
                   foreign_type: Class,
                   instance: Subject
               }.
-refute_subject_1(Validation_Object,S_Id,Witness) :-
+refute_subject_1(Schema,Validation_Object,S_Id,Witness) :-
     instance_layer(Validation_Object, Layer),
     terminus_store:subject_id(Layer, Subject, S_Id),
     (   instance_of(Validation_Object, Subject, Class)
-    ->  refute_typed_subject(Validation_Object, S_Id, Class, Witness)
+    ->  refute_typed_subject(Schema, Validation_Object, S_Id, Class, Witness)
     ;   Witness = witness{
                       '@type': subject_has_no_type,
                       subject: Subject
                   }).
 
 refute_instance(Validation_Object, Witness) :-
+    database_schema(Validation_Object, Schema),
     subject_changed(Validation_Object, Subject),
-    refute_subject(Validation_Object,Subject,Witness).
+    refute_subject(Schema,Validation_Object,Subject,Witness).
 
 refute_instance_schema(Validation_Object, Witness) :-
     refute_schema(Validation_Object,Witness).
 refute_instance_schema(Validation_Object, Witness) :-
+    database_schema(Validation_Object, Schema),
     instance_layer(Validation_Object, Layer),
     distinct(S_Id,
              terminus_store:id_triple(Layer, S_Id, _, _)),
-    refute_subject(Validation_Object,S_Id,Witness).
+    refute_subject(Schema,Validation_Object,S_Id,Witness).
 
 /*
 
@@ -1228,6 +1295,16 @@ refute_basetype_elt_('http://terminusdb.com/schema/xdd#dateRange',S^^_, Reason) 
                      'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:dateRange'}
                  }
     ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#dateTimeInterval',S^^_, Reason) :-
+    (   \+ is_date_time_interval(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed dateTimeInterval',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:dateTimeInterval'}
+                 }
+    ).
 refute_basetype_elt_('http://terminusdb.com/schema/xdd#integerRange',S^^_, Reason) :-
     (   \+ is_integer_range(S),
         term_to_atom(S,A)
@@ -1319,7 +1396,7 @@ refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#integer',S^^_,Reason) :-
                  }
     ).
 refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#double',S^^_,Reason) :-
-    (   \+ float(S),
+    (   \+ is_double(S),
         term_to_atom(S,A)
     ->  Reason = json{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1329,7 +1406,7 @@ refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#double',S^^_,Reason) :-
                  }
     ).
 refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#float',S^^_,Reason) :-
-    (   \+ float(S),
+    (   \+ is_float(S),
         term_to_atom(S,A)
     ->  Reason = json{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1638,6 +1715,26 @@ refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#NCName',S^^_,Reason) :-
                      'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:NCName'}
                  }
     ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#QName',S^^_,Reason) :-
+    (   \+  (split_clark(S,_Ns,Local), is_ncname(Local)),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:QName',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:QName'}
+                 }
+    ).
+refute_basetype_elt_('https://xbrl.org/2021SQName',S^^_,Reason) :-
+    (   \+  (split_clark(S,_Ns,Local), non_whitespace(Local)),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xbrl:SQName',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xbrl:SQName'}
+                 }
+    ).
 refute_basetype_elt_('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral',T,Reason) :-
     (   \+ (atom(T) ; string(T)),
         term_to_atom(T,A)
@@ -1648,3 +1745,72 @@ refute_basetype_elt_('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral',T
                      'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'rdf:PlainLiteral'}
                  }
     ).
+
+:- begin_tests(basetype_literal_validation).
+
+test('xsd:float accepts integral input', [fail]) :-
+    refute_basetype_elt(5^^'http://www.w3.org/2001/XMLSchema#float',
+                        'http://www.w3.org/2001/XMLSchema#float',
+                        _Reason).
+
+test('xsd:float accepts a float in range', [fail]) :-
+    refute_basetype_elt(5.5^^'http://www.w3.org/2001/XMLSchema#float',
+                        'http://www.w3.org/2001/XMLSchema#float',
+                        _Reason).
+
+test('xsd:float rejects values beyond the finite f32 range', []) :-
+    refute_basetype_elt(1e40^^'http://www.w3.org/2001/XMLSchema#float',
+                        'http://www.w3.org/2001/XMLSchema#float',
+                        _Reason).
+
+test('xsd:double accepts integral input', [fail]) :-
+    refute_basetype_elt(5^^'http://www.w3.org/2001/XMLSchema#double',
+                        'http://www.w3.org/2001/XMLSchema#double',
+                        _Reason).
+
+test('xsd:double rejects a non-numeric input', []) :-
+    refute_basetype_elt("not a number"^^'http://www.w3.org/2001/XMLSchema#double',
+                        'http://www.w3.org/2001/XMLSchema#double',
+                        _Reason).
+
+test('xsd:int accepts the i32 bounds', [fail]) :-
+    refute_basetype_elt(2147483647^^'http://www.w3.org/2001/XMLSchema#int',
+                        'http://www.w3.org/2001/XMLSchema#int',
+                        _Reason).
+
+test('xsd:int rejects values above the i32 bound', []) :-
+    refute_basetype_elt(2147483648^^'http://www.w3.org/2001/XMLSchema#int',
+                        'http://www.w3.org/2001/XMLSchema#int',
+                        _Reason).
+
+test('xsd:long accepts the i64 bounds', [fail]) :-
+    refute_basetype_elt(9223372036854775807^^'http://www.w3.org/2001/XMLSchema#long',
+                        'http://www.w3.org/2001/XMLSchema#long',
+                        _Reason).
+
+test('xsd:long rejects values above the i64 bound', []) :-
+    refute_basetype_elt(9223372036854775808^^'http://www.w3.org/2001/XMLSchema#long',
+                        'http://www.w3.org/2001/XMLSchema#long',
+                        _Reason).
+
+test('xsd:unsignedInt accepts the u32 bound', [fail]) :-
+    refute_basetype_elt(4294967295^^'http://www.w3.org/2001/XMLSchema#unsignedInt',
+                        'http://www.w3.org/2001/XMLSchema#unsignedInt',
+                        _Reason).
+
+test('xsd:unsignedInt rejects values above the u32 bound', []) :-
+    refute_basetype_elt(4294967296^^'http://www.w3.org/2001/XMLSchema#unsignedInt',
+                        'http://www.w3.org/2001/XMLSchema#unsignedInt',
+                        _Reason).
+
+test('xsd:unsignedLong accepts the u64 bound', [fail]) :-
+    refute_basetype_elt(18446744073709551615^^'http://www.w3.org/2001/XMLSchema#unsignedLong',
+                        'http://www.w3.org/2001/XMLSchema#unsignedLong',
+                        _Reason).
+
+test('xsd:unsignedLong rejects values above the u64 bound', []) :-
+    refute_basetype_elt(18446744073709551616^^'http://www.w3.org/2001/XMLSchema#unsignedLong',
+                        'http://www.w3.org/2001/XMLSchema#unsignedLong',
+                        _Reason).
+
+:- end_tests(basetype_literal_validation).

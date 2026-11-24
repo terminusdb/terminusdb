@@ -1,0 +1,26 @@
+# Jepsen ACID suite: a control node drives a single TerminusDB node over SSH,
+# running jepsen.tests.cycle.append (Elle) transactions while a nemesis kills
+# and pauses the server. Results land in ./store/.
+services:
+  n1:
+    build:
+      context: .
+      dockerfile: node.Dockerfile
+      args:
+        TERMINUSDB_IMAGE: ${TERMINUSDB_IMAGE:-terminusdb/terminusdb-server:local}
+    ports:
+      - "127.0.0.1:6364:6363"  # debugging convenience only; jepsen uses n1:6363
+    hostname: n1
+
+  control:
+    build:
+      context: .
+      dockerfile: control.Dockerfile
+    volumes:
+      - ./:/jepsen
+    environment:
+      TIME_LIMIT: ${TIME_LIMIT:-120}
+      CONCURRENCY: ${CONCURRENCY:-8}
+      MAX_WRITES_PER_KEY: ${MAX_WRITES_PER_KEY:-128}
+    depends_on:
+      - n1

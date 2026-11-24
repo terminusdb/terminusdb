@@ -4,7 +4,7 @@
       "@description" : "This is the Ref schema. It gives a specification for storage of references, branches and commits in our commit graph.",
       "@authors" : ["Gavin Mendel-Gleason", "Matthijs van Otterdijk"]
   },
-  "@metadata" : { "schema_version" : "v1.0.1" },
+  "@metadata" : { "schema_version" : "v1.0.4" },
   "@base" : "terminusdb://ref/data/",
   "@schema" : "http://terminusdb.com/schema/ref#",
   "layer" : "http://terminusdb.com/schema/layer#",
@@ -21,17 +21,48 @@
   "@key" : { "@type" : "ValueHash" },
   "layer:identifier" : "xsd:string" }
 
+{ "@id" : "MergeOperation",
+  "@type" : "Enum",
+  "@documentation" : {
+      "@comment" : "The operation that produced a merge commit." },
+  "@value" : ["apply", "rebase", "concat", "squash"] }
+
+{ "@id" : "CommitMerge",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@key" : { "@type" : "ValueHash" },
+  "@documentation" : {
+      "@comment" : "Merge provenance: the ordered source commits merged into a commit and the operation that produced it. Source references are literals — they may point at commits not present in this commit graph." },
+  "commits" : { "@type" : "List",
+                "@class" : "xsd:anyURI" },
+  "operation" : "MergeOperation" }
+
+{ "@id" : "BranchOrigin",
+  "@type" : "Class",
+  "@shared" : [],
+  "@unfoldable" : [],
+  "@key" : { "@type" : "ValueHash" },
+  "@documentation" : {
+      "@comment" : "Branch creation provenance: the graph spec the branch was created from (a dangling literal when it names another repository) and the commit it pointed at when the branch was created." },
+  "commit" : { "@type" : "Optional",
+               "@class" : "Commit" },
+  "source" : { "@type" : "Optional",
+               "@class" : "xsd:string" } }
+
 { "@id" : "Branch",
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "A named branch object which points to the current head (or none if empty).",
       "@properties" : { "name" : "The name of the branch.",
-                        "head" : "An optional commit object giving the present latest commit."}
+                        "head" : "An optional commit object giving the present latest commit.",
+                        "created_from" : "The origin the branch was created from (if one exists)."}
   },
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] },
   "head" : { "@type" : "Optional",
              "@class" : "Commit" },
+  "created_from" : { "@type" : "Optional",
+                     "@class" : "BranchOrigin" },
   "name" : "xsd:string" }
 
 { "@id" : "Commit",
@@ -45,8 +76,16 @@
                         "identifier" : "The identifier of the commit.",
                         "timestamp" : "The timestamp for the commit.",
                         "metadata" : "User supplied metadata for commit as JSON.",
+                        "user" : "The authenticated database user IRI who performed the commit.",
                         "parent" : "The previous commit (if one exists).",
-                        "migration" : "The schema migration script (if one exists)."
+                        "merge_source" : "Merge provenance for commits produced by a merge operation (if one exists).",
+                        "migration" : "The schema migration script (if one exists).",
+                        "instance_added" : "Set of instance document IRIs added in this commit.",
+                        "instance_updated" : "Set of instance document IRIs updated in this commit.",
+                        "instance_removed" : "Set of instance document IRIs removed in this commit.",
+                        "schema_added" : "Set of schema document IRIs added in this commit.",
+                        "schema_updated" : "Set of schema document IRIs updated in this commit.",
+                        "schema_removed" : "Set of schema document IRIs removed in this commit."
                       }
   },
   "@key" : { "@type" : "Lexical",
@@ -62,8 +101,24 @@
                  "@class" : "sys:JSON"},
   "parent" : { "@type" : "Optional",
                "@class" : "Commit" },
+  "merge_source" : { "@type" : "Optional",
+                     "@class" : "CommitMerge" },
+  "user" : { "@type" : "Optional",
+             "@class" : "xsd:anyURI" },
   "migration": { "@type": "Optional",
-                 "@class": "xsd:string" } }
+                 "@class": "xsd:string" },
+  "instance_added" : { "@type" : "Set",
+                       "@class" : "xsd:string" },
+  "instance_updated" : { "@type" : "Set",
+                         "@class" : "xsd:string" },
+  "instance_removed" : { "@type" : "Set",
+                         "@class" : "xsd:string" },
+  "schema_added" : { "@type" : "Set",
+                     "@class" : "xsd:string" },
+  "schema_updated" : { "@type" : "Set",
+                       "@class" : "xsd:string" },
+  "schema_removed" : { "@type" : "Set",
+                       "@class" : "xsd:string" } }
 
 { "@id" : "InitialCommit",
   "@type" : "Class",

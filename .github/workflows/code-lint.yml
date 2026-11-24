@@ -20,20 +20,23 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install swi-prolog
-        run: ./.github/install-swi-prolog.sh stable
+        run: ./.github/install-swi-prolog.sh 10.0.2
 
       - name: Checkout tus
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          repository: terminusdb/tus
+          repository: terminusdb-org/tus
           path: tus
-          ref: v0.0.5
+          ref: v0.0.17
 
       - name: Install tus
-        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
+        run: |
+          swipl -g "ignore(catch(pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)]), _, fail))" \
+               -g "ignore(catch(pack_attach('$GITHUB_WORKSPACE/tus', []), _, fail))" \
+               -g "(use_module(library(tus)) -> writeln(tus_ok) ; halt(1))" -g halt
 
       - name: Remove tus sources
         run: rm -rf ./tus
@@ -50,10 +53,10 @@ jobs:
       
     steps:
       - name: Checkout repository      
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Lint
-        run: npx @redocly/cli lint docs/openapi.yaml
+        run: make lint-openapi
 
   clippy:
     name: Rust Clippy
@@ -61,9 +64,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - run: sudo apt update && sudo apt install software-properties-common -y
       - run: sudo apt-add-repository ppa:swi-prolog/stable -y && sudo apt update && sudo apt install swi-prolog-nox protobuf-compiler libprotobuf-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/rust
+          add-job-id-key: false
+          # Clippy stores cargo-check artifacts, not build artifacts. Sharing
+          # the native-build key poisons it: GHA cache entries are immutable,
+          # so a clippy save makes every later cargo build a full rebuild.
+          shared-key: clippy
       - uses: actions-rs/clippy-check@v1
         continue-on-error: true
         with:

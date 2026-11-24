@@ -20,7 +20,7 @@
                        gMonth//2,
                        gMonthDay//3,
                        gDay//2,
-                       duration//7,
+                       duration//8,
                        yearMonthDuration//3,
                        dayTimeDuration//5,
                        string/3,
@@ -32,6 +32,9 @@
                        time//5,
                        coordinatePolygon//1,
                        dateRange//2,
+                       dateTimeInterval//2,
+                       dateTimeInterval//3,
+                       dateTimeIntervalComponent//1,
                        decimalRange//2,
                        email//0,
                        gYearRange//2,
@@ -172,8 +175,11 @@ decimal(M) -->
     }.
 decimal(M) --> integer(M) .
 
+% Fraction digits stay exact — a GMP rational, never an f64 (a float
+% renders `1.0e-10`, not ISO notation, and loses precision past ~15 digits).
 unsignedDecimal(M) --> natural(I), fullstop, digits(S),
-		       { string_concat("0.", S, T), number_string(E,T), M is I + E } .
+		       { string_length(S, L), number_string(F, S),
+			 M is I + F rdiv 10^L } .
 unsignedDecimal(M) --> natural(M) .
 
 exp --> "e" .
@@ -195,16 +201,16 @@ time_offset(0) -->
 time_offset(S) -->
     "+",
     twoDigitNatural(ZH), ":", twoDigitNatural(ZM), ":", twoDigitNatural(ZS),
-    { S is (ZH * 3600) + (ZM * 60) + ZS }.
+    { S is -((ZH * 3600) + (ZM * 60) + ZS) }.
 time_offset(S) -->
     "+", twoDigitNatural(ZH), ":", twoDigitNatural(ZM),
-    { S is (ZH * 3600) + (ZM * 60) }.
+    { S is -((ZH * 3600) + (ZM * 60)) }.
 time_offset(S) -->
     "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM), ":", twoDigitNatural(ZS),
-    { S is (-1 * ((ZH * 3600) + (ZM * 60) + ZS)) }.
+    { S is (ZH * 3600) + (ZM * 60) + ZS }.
 time_offset(S) -->
     "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM),
-    { S is (-1 * ((ZH * 3600) + (ZM * 60))) }.
+    { S is (ZH * 3600) + (ZM * 60) }.
 
 optional_time_offset(Offset) -->
     time_offset(Offset).
@@ -301,8 +307,18 @@ maybeTime(H,M,S) --> time_separator, maybeHour(MH), maybeMinute(MM), maybeSecond
 maybeTime(0,0,0) --> "" .
 
 
-duration(Sign,Y,Mo,D,H,M,S) --> sign(Sign), "P", maybeYear(Y), maybeMonth(Mo), maybeDay(D),
-				maybeTime(H,M,S) .
+duration(Sign,W,Y,Mo,D,H,M,S) -->
+	sign(Sign), "P",
+	(   weeks(W),
+	    {Y = 0, Mo = 0, D = 0, H = 0, M = 0, S = 0}
+	;   maybeYear(Y), maybeMonth(Mo), maybeDay(D),
+	    maybeTime(H,M,S),
+	    {W = 0}
+	) .
+
+% The ISO 8601 week form is exclusive: `PnW` never combines with the
+% year/month/day/time fields.
+weeks(W) --> natural(W), "W" .
 
 yearMonthDuration(Sign,Y,Mo) --> sign(Sign), "P", maybeYear(Y), maybeMonth(Mo) .
 
@@ -443,6 +459,59 @@ dateRange(date(Y1,M1,D1,Offset1),date(Y2,M2,D2,Offset2)) -->
     "[" , whitespace, date(Y1,M1,D1,Offset1), whitespace,
 	"," , whitespace, date(Y2,M2,D2,Offset2), whitespace,
 	"]" .
+
+% Grammar for xdd:dateTimeInterval literals — the datatype contract is
+% terminusdb-enterprise/docs/specifications/xdd-datetimeinterval.md
+dateTimeInterval(Start,End,Duration) -->
+    dateTimeIntervalComponent(Start), "/" , dateTimeIntervalComponent(End), "/" , dateTimeIntervalComponent(Duration).
+dateTimeInterval(Start,End) -->
+    dateTimeIntervalComponent(Start), "/" , dateTimeIntervalComponent(End).
+
+%% Zone-presence-aware rules for xdd:dateTimeInterval endpoints only.
+%% Unlike optional_time_offset (which maps absence to 0), these emit the
+%% atom 'none' for a zone-less endpoint — local-time-ness is meaningful in
+%% XBRL OIM and must survive to storage. Numeric offsets keep the SWI
+%% convention (seconds west of Greenwich).
+interval_time_offset(Offset) -->
+    time_offset(Offset).
+interval_time_offset(none) -->
+    "".
+
+interval_time(H,M,S,NS,Offset) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
+	".", digits(D),
+    { length(L, 9),
+      atom_codes(D,Codes),
+      append(Codes, Tail, L),
+      maplist([0'0]>>true, Tail),
+      atom_codes(Number,L),
+      atom_number(Number, NS)
+    },
+    interval_time_offset(Offset).
+interval_time(H,M,S,0,Offset) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
+	interval_time_offset(Offset) .
+interval_time(H,M,0,0,Offset) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), interval_time_offset(Offset).
+
+intervalDateTime(SY,Mo,D,H,M,S,NS,Offset) -->
+    year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
+    time_separator, interval_time(H,M,S,NS,Offset).
+
+dateTimeIntervalComponent(duration(Sign,W,Y,Mo,D,H,M,S)) -->
+    duration(Sign,W,Y,Mo,D,H,M,S), !.
+dateTimeIntervalComponent(date_time(Y,Mo,D,H,M,S,NS,Offset)) -->
+    intervalDateTime(Y,Mo,D,H,M,S,NS,Offset), !.
+dateTimeIntervalComponent(date(Y,M,D,Offset)) -->
+    date(Y,M,D,Offset).
+%% ISO 8601-2 open endpoint (`..`): unbounded past as start, unbounded
+%% future as end. Position decides direction at normalise time.
+dateTimeIntervalComponent(open) -->
+    "..", !.
+%% ISO 8601-2 unknown endpoint (empty): an endpoint exists but is
+%% unspecified. Must stay last — it consumes nothing.
+dateTimeIntervalComponent(unknown) -->
+    "", !.
 
 terminal([],_S).
 

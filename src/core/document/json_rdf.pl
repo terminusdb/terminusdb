@@ -18,7 +18,6 @@
 :- use_module(core(document/instance)).
 :- use_module(core(document/schema)).
 
-:- use_module(library(sha)).
 :- use_module(library(lists)).
 :- use_module(library(pcre)).
 :- use_module(library(uri)).
@@ -39,7 +38,16 @@ is_json_subdocument_type(Type) :-
 json_data_prefix('terminusdb:///json/').
 
 json_type_rdf_type(X,R),
+nonvar(X),
+X = _^^T,
+atom(T) =>
+    % Pre-typed wire literal (e.g. 247r2^^xsd:decimal from the preserve
+    % parser) — already a valid literal; process it as-is.
+    R = X.
+json_type_rdf_type(X,R),
 string(X) =>
+    % Strings are stored as xsd:string by default
+    % Note: @@id and @@type values should be treated as xsd:anyURI when validated at dict level
     global_prefix_expand(xsd:string, T),
     R = X^^T.
 json_type_rdf_type(X,R),
@@ -68,31 +76,31 @@ X = null =>
     global_prefix_expand(xsd:token, T),
     R = X^^T.
 
-json_hash_init(Ctx) :-
-    sha_new_ctx(Ctx, []).
-
-json_hash_expand(Context_In, Val, Hash_Out, Context_Out),
-string(Val) =>
-    sha_hash_ctx(Context_In, Val, Context_Out, Hash_List),
-    hash_atom(Hash_List, Hash_Out_Atom),
-    atom_string(Hash_Out_Atom, Hash_Out).
-
-json_hash_extract(Context, Hash) :-
-    sha_hash_ctx(Context, "", _, Hash_List),
-    hash_atom(Hash_List, Hash_Atom),
-    atom_string(Hash_Atom, Hash).
-
-json_hash_init(Val, Context) :-
-    json_hash_init(Context_1),
-    json_hash_expand(Context_1, Val, _, Context).
-
-json_hash(Val, Hash) :-
-    json_hash_init(Val, Hash).
+%% Content-addressed node hashing for raw JSON values.
+%% The digest input bytes are identical to the historical incremental
+%% sha_hash_ctx encoding ("Dict(" prop "-" childhash ... ")"), but the
+%% string is assembled once and hashed in Rust: hash_atom+atom_string
+%% conversion dominated at ~4.6us per extraction.
+json_pieces_hash(Pieces_Rev, Hash) :-
+    reverse(Pieces_Rev, Pieces),
+    atomics_to_string(Pieces, Input),
+    utils:sha1_hex(Input, Hash).
 
 json_document_triple(Dict, Id, Triple),
 is_dict(Dict) =>
     global_prefix_expand(sys:'JSONDocument', Sys_JSON_Document),
     global_prefix_expand(rdf:type, Rdf_Type),
+
+    % Validate sys:JSONDocument top-level @id field
+    % @id: MUST be string IRI (xsd:anyURI) - strict validation
+    % @type: Treated like sys:JSON - permissive (any JSON value), escaped to @@type
+    dict_pairs(Dict, _, Pairs),
+    (   member('@id'-Doc_Id_Value, Pairs)
+    ->  do_or_die(
+            string(Doc_Id_Value),
+            error(invalid_jsondocument_at_id_must_be_iri(Doc_Id_Value), _))
+    ;   true
+    ),
 
     (   Triple = t(Id, Rdf_Type, Sys_JSON_Document)
     ;   dict_pairs(Dict, _, Pairs),
@@ -115,30 +123,29 @@ json_subdocument_triple(Id, Property, Dict, Triple) :-
 
 json_subdocument_triple(Dict, Triple_Or_Hash),
 is_dict(Dict) =>
-    json_hash_init("Dict(", Init_Hash),
-    State = state(Init_Hash,[]),
+    % sys:JSON nested dicts: pure JSON storage with no special treatment
+    % @@id and @@type are stored as-is like any other JSON values
     dict_pairs(Dict, _, Pairs),
+    State = state(["Dict("],[]),
     (   member(Property-Value, Pairs),
         json_subdocument_triple(Value, X),
         (   X = t(_,_,_)
         ->  Triple_Or_Hash = X
         ;   X = hash(Inner_Hash, Link),
-            State = state(Context_In,Members_In),
+            State = state(Pieces_In,Members_In),
             uri_encoded(segment, Property, Encoded_Property),
             global_prefix_expand(json:Encoded_Property, Expanded_Property),
             atom_string(Encoded_Property, Encoded_Property_String),
             term_string(Encoded_Property_String, Encoded_Property_String_Quoted),
-            json_hash_expand(Context_In, Encoded_Property_String_Quoted, _, Context_Out1),
-            json_hash_expand(Context_Out1, "-", _, Context_Out2),
-            json_hash_expand(Context_Out2, Inner_Hash, _, Context_Out),
+            Pieces_Out = [Inner_Hash, "-", Encoded_Property_String_Quoted|Pieces_In],
             Members_Out = [Expanded_Property-Link|Members_In],
-            nb_setarg(1, State, Context_Out),
+            nb_setarg(1, State, Pieces_Out),
             nb_setarg(2, State, Members_Out),
             fail)
-    ;   State = state(Context, Members),
-        json_hash_expand(Context, ")", Hash, _),
+    ;   State = state(Pieces_Rev, Members),
+        json_pieces_hash([")"|Pieces_Rev], Hash),
         json_data_prefix(Data_Prefix),
-        format(atom(Node), "~sJSON/SHA1/~s", [Data_Prefix, Hash]),
+        atomic_list_concat([Data_Prefix, 'JSON/SHA1/', Hash], Node),
         (   global_prefix_expand(rdf:type, Rdf_Type),
             global_prefix_expand(sys:'JSON', Json_Type),
             Triple_Or_Hash = t(Node, Rdf_Type, Json_Type)
@@ -148,30 +155,36 @@ is_dict(Dict) =>
 json_subdocument_triple(List, Triple_Or_Hash),
 is_list(List) =>
     reverse(List, Rev),
-    json_hash_init("List(", Hash_In),
     global_prefix_expand(rdf:nil, Rdf_Nil),
-    Hash = hash(Hash_In, Rdf_Nil),
+    Hash = hash(["List("], Rdf_Nil),
     json_list_triple(Rev, Hash, Triple_Or_Hash).
 json_subdocument_triple(Val, Triple_Or_Hash) =>
-    json_hash_init("val(", Context),
     format(string(Val_Quoted), "~q", [Val]),
-    json_hash_expand(Context, Val_Quoted, _, Context2),
-    json_hash_expand(Context2, ")", Hash, _),
+    json_pieces_hash([")", Val_Quoted, "val("], Hash),
     json_type_rdf_type(Val, Rdf_Val),
     Triple_Or_Hash = hash(Hash, Rdf_Val).
 
-json_list_triple(Nil, Hash, Hash2),
+json_list_triple(Nil, hash(Pieces, Node), Triple_Or_Hash),
 Nil == [] =>
-    Hash2 = Hash.
-json_list_triple([First|Rest], hash(Context_In, Node_In), Triple_Or_Hash) =>
+    % The hash handed to the parent is the list's content hash: the head
+    % cons cell's digest (sha1 of "List(" ++ all element digests ++ ")"),
+    % or sha1("List()") for the empty list. The pre-refactor code handed
+    % up the raw incremental SHA context string, a serialized C struct
+    % containing pointers — process-dependent bytes, so dicts containing
+    % lists never had stable node IRIs.
+    json_pieces_hash([")"|Pieces], LastHash),
+    Triple_Or_Hash = hash(LastHash, Node).
+json_list_triple([First|Rest], hash(Pieces_In, Node_In), Triple_Or_Hash) =>
     json_subdocument_triple(First, X),
     (   X = t(_,_,_)
     ->  Triple_Or_Hash = X
     ;   X = hash(Document_Hash, Document_Node),
-        json_hash_expand(Context_In, Document_Hash, _, Context_Out),
-        json_hash_expand(Context_Out, ")", Hash_Out, _),
+        % shortcut: cons input is O(len) string concat per cell, fine for
+        % typical JSON list sizes; revisit if huge lists hash hot.
+        Pieces_Out = [Document_Hash|Pieces_In],
+        json_pieces_hash([")"|Pieces_Out], Hash_Out),
         json_data_prefix(Data_Prefix),
-        format(atom(Node_Out), "~sCons/SHA1/~s", [Data_Prefix,Hash_Out]),
+        atomic_list_concat([Data_Prefix, 'Cons/SHA1/', Hash_Out], Node_Out),
         global_prefix_expand(rdf:type, Rdf_Type),
         global_prefix_expand(rdf:first, Rdf_First),
         global_prefix_expand(rdf:rest, Rdf_Rest),
@@ -179,13 +192,13 @@ json_list_triple([First|Rest], hash(Context_In, Node_In), Triple_Or_Hash) =>
         (   Triple_Or_Hash = t(Node_Out, Rdf_Type, Rdf_List)
         ;   Triple_Or_Hash = t(Node_Out, Rdf_First, Document_Node)
         ;   Triple_Or_Hash = t(Node_Out, Rdf_Rest, Node_In)
-        ;   json_list_triple(Rest, hash(Context_Out, Node_Out), Triple_Or_Hash))).
+        ;   json_list_triple(Rest, hash(Pieces_Out, Node_Out), Triple_Or_Hash))).
 
 
 assign_json_document_id(Prefixes,Id) :-
     get_dict('@base', Prefixes, Base),
-    atomic_list_concat([Base,'JSONDocument/'],Obj_Base),
-    idgen_random(Obj_Base, Id).
+    atom_concat(Base, 'JSONDocument/', Obj_Base),
+    idgen_uuid_v7(Obj_Base, Id).
 
 bind_vars(Object) :-
     term_variables(Object, Vars),
@@ -232,14 +245,18 @@ graph_get_json_object(Graph, Id, [Head|Tail]) :-
     ),
     xrdf(Graph, Id, rdf:rest, Rest),
     graph_get_json_object(Graph, Rest, Tail).
+
 graph_get_json_object(Graph, Id, Document) :-
     (   xrdf(Graph, Id, rdf:type, sys:'JSONDocument')
     ;   xrdf(Graph, Id, rdf:type, sys:'JSON')),
     !,
     findall(Prop-Value,
             (   xrdf(Graph, Id, Key, Val_or_Uri),
-                (   Key = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
-                ->  fail % ignore type field
+                (   % Only skip the document's type declaration, not @@type data fields
+                    Key = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+                    (   Val_or_Uri = 'http://terminusdb.com/schema/sys#JSON'
+                    ;   Val_or_Uri = 'http://terminusdb.com/schema/sys#JSONDocument')
+                ->  fail % Skip document type
                 ;   marshall_value(Val_or_Uri,Value)
                 ->  true % strip type from value
                 ;   graph_get_json_object(Graph, Val_or_Uri, Value) % subdocument or list
@@ -247,7 +264,27 @@ graph_get_json_object(Graph, Id, Document) :-
                 compress_json_field(Key,Prop)
             ),
             Pairs),
-    dict_pairs(Document, json, Pairs).
+    dict_pairs(EscapedDocument, json, Pairs),
+    % Unescape @@-prefixed keys back to @-prefixed keys for sys:JSON
+    unescape_at_prefixed_keys(EscapedDocument, Document).
+
+% Helper to recursively unescape @@-prefixed keys back to @-prefixed keys (for sys:JSON retrieval)
+unescape_at_prefixed_keys(Value, UnescapedValue) :-
+    is_dict(Value),
+    !,
+    dict_pairs(Value, Tag, Pairs),
+    maplist([Key-Val, UnescapedKey-UnescapedVal]>>(
+        (   atom_string(Key, KeyStr),
+            sub_string(KeyStr, 0, 2, _, "@@")
+        ->  sub_string(KeyStr, 1, _, 0, Rest),
+            atom_string(UnescapedKey, Rest)
+        ;   UnescapedKey = Key
+        ),
+        % Recursively unescape nested dicts
+        unescape_at_prefixed_keys(Val, UnescapedVal)
+    ), Pairs, UnescapedPairs),
+    dict_pairs(UnescapedValue, Tag, UnescapedPairs).
+unescape_at_prefixed_keys(Value, Value).
 
 insert_json_object(Query_Context, JSON, Id) :-
     is_query_context(Query_Context),
@@ -257,9 +294,11 @@ insert_json_object(Query_Context, JSON, Id) :-
 insert_json_object(Transaction, JSON, Id) :-
     database_instance(Transaction, [Instance]),
     database_prefixes(Transaction,Prefixes),
+    % If no ID was provided by caller, generate one
     (   var(Id)
     ->  assign_json_document_id(Prefixes,Id)
-    ;   true),
+    ;   true
+    ),
     % insert
     forall(
         json_document_triple(JSON, Id, t(S,P,O)),
@@ -291,11 +330,13 @@ delete_json_object(Query_Context, Unlink, Id) :-
     delete_json_object(TO, Unlink, Id).
 
 :- begin_tests(json_rdf, [concurrent(true)]).
+:- use_module(core(util/test_utils), [ends_with_uuid_v7/1]).
 
 test(assign_json_document_id,[]) :-
     Prefixes = _{ '@base' : 'foo/' },
     assign_json_document_id(Prefixes,Id),
-    atom_concat('foo/JSONDocument', _, Id).
+    atom_concat('foo/JSONDocument/', _, Id),
+    ends_with_uuid_v7(Id).
 
 test(generate_data_triples,[]) :-
     JSON = json{
@@ -423,6 +464,48 @@ test(generate_list_triples,[]) :-
 		'http://terminusdb.com/schema/json#name',
 		"Susan"^^'http://www.w3.org/2001/XMLSchema#string')
 	].
+
+% UTF-8 content must hash byte-identically to the historical sha_hash_ctx
+% path: Rust hashes the UTF-8 bytes of the assembled input string.
+test(generate_utf8_triples,[]) :-
+    JSON = json{'naïve_名前': json{'🎉_tag': ["ö-文字", "café"]}},
+    findall(
+        Triple,
+        json_document_triple(JSON, 'x:id', Triple),
+        Triples),
+
+    Triples =
+    [ t('x:id',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://terminusdb.com/schema/sys#JSONDocument'),
+      t('terminusdb:///json/Cons/SHA1/78cdeed354af13ad2fcca21ddb74880ce967c6d1',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
+      t('terminusdb:///json/Cons/SHA1/78cdeed354af13ad2fcca21ddb74880ce967c6d1',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
+        "café"^^'http://www.w3.org/2001/XMLSchema#string'),
+      t('terminusdb:///json/Cons/SHA1/78cdeed354af13ad2fcca21ddb74880ce967c6d1',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
+      t('terminusdb:///json/Cons/SHA1/149a24210a3ae8c9a9d1c0865955fb72317a0e30',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
+      t('terminusdb:///json/Cons/SHA1/149a24210a3ae8c9a9d1c0865955fb72317a0e30',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
+        "ö-文字"^^'http://www.w3.org/2001/XMLSchema#string'),
+      t('terminusdb:///json/Cons/SHA1/149a24210a3ae8c9a9d1c0865955fb72317a0e30',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
+        'terminusdb:///json/Cons/SHA1/78cdeed354af13ad2fcca21ddb74880ce967c6d1'),
+      t('terminusdb:///json/JSON/SHA1/dc19ca5b3cfb8ca6cadd7d60b33ee288bdd4263c',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://terminusdb.com/schema/sys#JSON'),
+      t('terminusdb:///json/JSON/SHA1/dc19ca5b3cfb8ca6cadd7d60b33ee288bdd4263c',
+        'http://terminusdb.com/schema/json#%F0%9F%8E%89_tag',
+        'terminusdb:///json/Cons/SHA1/149a24210a3ae8c9a9d1c0865955fb72317a0e30'),
+      t('x:id',
+        'http://terminusdb.com/schema/json#na%C3%AFve_%E5%90%8D%E5%89%8D',
+        'terminusdb:///json/JSON/SHA1/dc19ca5b3cfb8ca6cadd7d60b33ee288bdd4263c')
+    ].
 
 :- use_module(core(util/test_utils)).
 test(round_trip_complex,[

@@ -27,7 +27,7 @@ pub struct FilterInputObjectTypeInfo {
 impl FilterInputObjectTypeInfo {
     pub fn new(type_name: &GraphQLName, all_frames: &Arc<AllFrames>) -> Self {
         Self {
-            filter_type_name: filter_name(&type_name),
+            filter_type_name: filter_name(type_name),
             type_name: type_name.as_static(),
             frames: all_frames.clone(),
         }
@@ -195,7 +195,7 @@ impl GraphQLType for FilterInputObject {
             ));
 
             registry
-                .build_input_object_type::<FilterInputObject>(&info, &args)
+                .build_input_object_type::<FilterInputObject>(info, &args)
                 .into_meta()
         } else {
             panic!("expected type of kind class but found something else");
@@ -218,7 +218,7 @@ impl GraphQLValue for FilterInputObject {
     type TypeInfo = FilterInputObjectTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.filter_type_name.as_str())
+        Some(info.filter_type_name.as_str())
     }
 }
 
@@ -235,7 +235,7 @@ pub struct CollectionFilterInputObjectTypeInfo {
 impl CollectionFilterInputObjectTypeInfo {
     pub fn new<'a>(type_name: &GraphQLName<'a>, all_frames: &Arc<AllFrames>) -> Self {
         Self {
-            filter_type_name: collection_filter_name(&type_name),
+            filter_type_name: collection_filter_name(type_name),
             type_name: type_name.as_static(),
             frames: all_frames.clone(),
         }
@@ -244,7 +244,7 @@ impl CollectionFilterInputObjectTypeInfo {
 
 impl GraphQLType for CollectionFilterInputObject {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.filter_type_name.as_str())
+        Some(info.filter_type_name.as_str())
     }
 
     fn meta<'r>(
@@ -302,7 +302,7 @@ impl GraphQLValue for CollectionFilterInputObject {
     type TypeInfo = CollectionFilterInputObjectTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.filter_type_name.as_str())
+        Some(info.filter_type_name.as_str())
     }
 }
 
@@ -329,7 +329,7 @@ impl EnumFilterInputObjectTypeInfo {
 
 impl GraphQLType for EnumFilterInputObject {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.filter_type_name.as_str())
+        Some(info.filter_type_name.as_str())
     }
 
     fn meta<'r>(
@@ -377,7 +377,7 @@ impl GraphQLValue for EnumFilterInputObject {
     type TypeInfo = EnumFilterInputObjectTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.filter_type_name.as_str())
+        Some(info.filter_type_name.as_str())
     }
 }
 
@@ -390,11 +390,23 @@ pub struct CollectionStringFilterInputObject {
 }
 
 #[derive(GraphQLInputObject)]
+#[graphql(name = "RelationshipFilter")]
+pub struct RelationshipFilterInputObject {
+    /// Relation name — extensible. Allen interval relations: before, meets,
+    /// overlaps, starts, during, finishes, equals, and the six inverses
+    /// (after, met_by, overlapped_by, started_by, contains, finished_by).
+    pub rel: String,
+    /// Interval or instant literal; instants compare as zero-duration points.
+    pub value: String,
+}
+
+#[derive(GraphQLInputObject)]
 #[allow(non_snake_case)]
 #[graphql(name = "StringFilter")]
 pub struct StringFilterInputObject {
     pub eq: Option<String>,
     pub ne: Option<String>,
+    pub relationship: Option<RelationshipFilterInputObject>,
     pub lt: Option<String>,
     pub le: Option<String>,
     pub gt: Option<String>,
@@ -509,6 +521,7 @@ pub struct CollectionDateTimeFilterInputObject {
 pub struct DateTimeFilterInputObject {
     pub eq: Option<DateTime>,
     pub ne: Option<DateTime>,
+    pub relationship: Option<RelationshipFilterInputObject>,
     pub lt: Option<DateTime>,
     pub le: Option<DateTime>,
     pub gt: Option<DateTime>,

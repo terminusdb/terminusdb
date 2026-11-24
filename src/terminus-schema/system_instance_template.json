@@ -22,7 +22,20 @@
                "meta_write_access",
                "commit_read_access",
                "commit_write_access",
-               "manage_capabilities"
+               "manage_capabilities",
+               "search",
+               "search_snippets",
+               "reindex_write",
+               "woql_main_exec",
+               "woql_logic_exec",
+               "woql_logic_read",
+               "woql_logic_write",
+               "woql_other_exec",
+               "woql_search",
+               "woql_instance_read",
+               "woql_instance_write",
+               "woql_schema_read",
+               "woql_schema_write"
              ]}
 
 { "@id" : "Capability/server_access",
@@ -44,7 +57,16 @@
                "meta_read_access",
                "commit_read_access",
                "instance_read_access",
-               "schema_read_access"
+               "schema_read_access",
+               "search",
+               "search_snippets"
+             ]}
+
+{ "@id" : "Role/executor",
+  "@type" : "Role",
+  "name" : "Executor Role",
+  "action" : [ "search",
+               "woql_logic_exec"
              ]}
 
 { "@id" : "User/admin",

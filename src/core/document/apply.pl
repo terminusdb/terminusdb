@@ -8,6 +8,7 @@
 :- use_module(core('util/tables')).
 
 :- use_module(library(apply)).
+:- use_module(library(assoc)).
 :- use_module(library(dicts)).
 :- use_module(library(lists)).
 :- use_module(library(when)).
@@ -17,6 +18,9 @@
 
 :- use_module(core(document/patch)).
 :- use_module(core(document/json)).
+:- use_module(core(document/json_rdf), [is_json_document_type/1]).
+:- use_module(core(document/normalize)).
+:- use_module(core(transaction/database)).
 
 % apply_diff(+Context, +Diff, Conflict ,Options)
 %
@@ -35,17 +39,33 @@ apply_diff(Context, Diff, Conflict, Options) :-
     ->  Delete_Candidate = Delete_ID
     ;   throw(error(missing_field('@id', Delete_Candidate), _))
     ),
-    catch(
-        (   delete_document(Context, Delete_ID),
-            Conflict = null
-        ),
-        error(document_not_found(ID), _),
-        (   option(match_final_state(true), Options)
-        ->  Conflict = null
-        ;   Conflict = json{ '@op' : 'DeleteConflict',
-                             '@id_does_not_exists' : ID
-                           }
+    (   is_dict(Delete_Candidate)
+    ->  (   get_document(Context, Delete_ID, Current)
+        ->  query_context_transaction_objects(Context, [Transaction]),
+            normalize_document(Transaction, Delete_Candidate, Normalized_Delete),
+            (   Current = Normalized_Delete
+            ->  delete_document(Context, Delete_ID),
+                Conflict = null
+            % The document at target differs from the base embedded in
+            % the diff, so the other side edited it since the merge
+            % base: delete-versus-edit conflict.
+            ;   compressed_document_id(Context, Delete_ID, ID_String),
+                Conflict0 = json{ '@op' : 'DeleteEditConflict',
+                                  '@id' : ID_String,
+                                  '@deleted_by' : "theirs" },
+                (   option(dry_run(true), Options)
+                ->  Conflict = Conflict0.put(_{ '@expected' : Normalized_Delete,
+                                                '@found' : Current })
+                ;   Conflict = Conflict0 )
+            )
+        ;   missing_delete_conflict(Context, Delete_ID, Options, Conflict)
         )
+    ;   catch(
+            (   delete_document(Context, Delete_ID),
+                Conflict = null
+            ),
+            error(document_not_found(ID), _),
+            missing_delete_conflict(Context, ID, Options, Conflict))
     ).
 apply_diff(Context, Diff, Conflict, Options) :-
     get_dict('@insert', Diff, Insert),
@@ -56,11 +76,14 @@ apply_diff(Context, Diff, Conflict, Options) :-
         ),
         error(can_not_insert_existing_object_with_id(Id), _),
         (   option(match_final_state(true), Options),
+            query_context_transaction_objects(Context, [Transaction]),
+            normalize_document(Transaction, Insert, Normalized_Insert),
             get_document(Context,Id,Document),
-            Document = Insert
+            Document = Normalized_Insert
         ->  Conflict = null
-        ;   Conflict = json{ '@op' : 'InsertConflict',
-                             '@id_already_exists' : Id }
+        ;   compressed_document_id(Context, Id, ID_String),
+            Conflict = json{ '@op' : 'InsertConflict',
+                             '@id_already_exists' : ID_String }
         )
     ).
 apply_diff(Context, Diff, Conflict, Options) :-
@@ -68,16 +91,117 @@ apply_diff(Context, Diff, Conflict, Options) :-
         get_dict('@id', Diff, ID),
         error(missing_field('@id', Diff), _)
     ),
-    get_document(Context, ID, JSON_In),
-    simple_patch(Diff,JSON_In,Result,Options),
-    (   Result = success(JSON_Out)
-    ->  replace_document(Context, JSON_Out, _),
-        Conflict = null
-    ;   Result = conflict(Conflict_Prototype),
-        put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
+    (   get_document(Context, ID, JSON_In,
+                     options{compress_ids: true, unfold: true, keep_json_type: true})
+    ->  simple_patch(Diff,JSON_In,Result,Options),
+        (   Result = success(JSON_Out)
+        ->  apply_replace_document(Context, JSON_In, JSON_Out, _),
+            Conflict = null
+        ;   Result = conflict(Conflict_Prototype),
+            compressed_document_id(Context, ID, ID_String),
+            put_dict(_{ '@id' : ID_String }, Conflict_Prototype, Conflict)
+        )
+    % The document is absent at target but edited in the diff: the
+    % target side deleted it — edit-versus-delete conflict.
+    ;   compressed_document_id(Context, ID, ID_String),
+        Conflict = json{ '@op' : 'DeleteEditConflict',
+                         '@id' : ID_String,
+                         '@deleted_by' : "ours" }
+    ).
+
+% The diff carries expanded document IRIs; witnesses report the
+% compressed @base form, matching the id convention documents use.
+compressed_document_id(Context, Id, Id_Str) :-
+    get_dict(prefixes, Context, Prefixes),
+    compress_dict_uri(Id, Prefixes, Compressed, [compress_ids(true)]),
+    (   atom(Compressed)
+    ->  atom_string(Compressed, Id_Str)
+    ;   Id_Str = Compressed ).
+
+missing_delete_conflict(Context, ID, Options, Conflict) :-
+    (   option(match_final_state(true), Options)
+    ->  Conflict = null
+    ;   compressed_document_id(Context, ID, Id_Str),
+        Conflict = json{ '@op' : 'DeleteConflict',
+                         '@id_does_not_exists' : Id_Str
+                       }
+    ).
+
+%% apply_replace_document(+Context, +JSON_In, +JSON_Out, -Id) is det.
+%% apply_replace_document(+Context, +JSON_In, +JSON_Out, +Captures_In, -Ids, +Captures_Out) is det.
+%
+% JSONDocument instances bypass schema elaboration and are written
+% through the raw JSON path, mirroring the @type detection in
+% insert_document/9.
+apply_replace_document(Context, JSON_In, JSON_Out, Id) :-
+    (   get_dict('@type', JSON_In, Type),
+        is_json_document_type(Type)
+    ->  del_dict('@type', JSON_Out, _, JSON_Raw),
+        replace_document(Context, JSON_Raw, false, true, Id)
+    ;   replace_document(Context, JSON_Out, Id)
+    ).
+apply_replace_document(Context, JSON_In, JSON_Out, Captures_In, Ids, Captures_Out) :-
+    (   get_dict('@type', JSON_In, Type),
+        is_json_document_type(Type)
+    ->  del_dict('@type', JSON_Out, _, JSON_Raw),
+        replace_document(Context, JSON_Raw, false, true, Captures_In, Ids, _Dependencies, Captures_Out)
+    ;   replace_document(Context, JSON_Out, false, false, Captures_In, Ids, _Dependencies, Captures_Out)
     ).
 
 
+apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Captures_Out) :-
+    get_dict('@delete', Diff, Delete_Candidate),
+    !,
+    (   is_dict(Delete_Candidate)
+    ->  do_or_die(get_dict('@id', Delete_Candidate, Delete_ID),
+                  error(missing_field('@id', Delete_Candidate), _))
+    ;   (string(Delete_Candidate) ; atom(Delete_Candidate))
+    ->  Delete_Candidate = Delete_ID
+    ;   throw(error(missing_field('@id', Delete_Candidate), _))
+    ),
+    catch(
+        (   delete_document(Context, Delete_ID),
+            Conflict = null,
+            Ids = [Delete_ID],
+            Captures_Out = Captures_In
+        ),
+        error(document_not_found(ID), _),
+        (   option(match_final_state(true), Options)
+        ->  Conflict = null,
+            Ids = [],
+            Captures_Out = Captures_In
+        ;   compressed_document_id(Context, ID, Id_Str),
+            Conflict = json{ '@op' : 'DeleteConflict',
+                             '@id_does_not_exists' : Id_Str },
+            Ids = [],
+            Captures_Out = Captures_In
+        )
+    ).
+apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Captures_Out) :-
+    get_dict('@insert', Diff, Insert),
+    !,
+    catch(
+        (   insert_document(Context, Insert, false, Captures_In, Inserted_Ids, _Dependencies, Captures_Out),
+            Inserted_Ids = [Inserted_Id|_],
+            Conflict = null,
+            Ids = [Inserted_Id]
+        ),
+        error(can_not_insert_existing_object_with_id(Id), _),
+        (   option(match_final_state(true), Options),
+            query_context_transaction_objects(Context, [Transaction]),
+            normalize_document(Transaction, Insert, Normalized_Insert),
+            get_document(Context, Id, Document),
+            Document = Normalized_Insert
+        ->  Conflict = null,
+            Ids = [],
+            Captures_Out = Captures_In
+        ;   compressed_document_id(Context, Id, Id_Str),
+            Conflict = json{ '@op' : 'InsertConflict',
+                             '@id_already_exists' : Id_Str },
+            Ids = [],
+            Captures_Out = Captures_In
+        )
+    ).
 apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Captures_Out) :-
     do_or_die(
         get_dict('@id', Diff, ID),
@@ -85,15 +209,19 @@ apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Capt
     ),
     get_dict(prefixes, Context, Prefixes),
     normalize_diff(Prefixes, Diff, Normalized_Diff),
-    get_document(Context, ID, JSON_In),
-    simple_patch(Normalized_Diff,JSON_In,Result,Options),
+    resolve_refs_in_diff(Captures_In, Normalized_Diff, Resolved_Diff),
+    get_document(Context, ID, JSON_In,
+                 options{compress_ids: true, unfold: true, keep_json_type: true}),
+    put_dict(options{prefixes:Prefixes}, Options, Options_With_Prefixes),
+    simple_patch(Resolved_Diff,JSON_In,Result,Options_With_Prefixes),
     (   Result = success(JSON_Out)
-    ->  replace_document(Context, JSON_Out, false, false, Captures_In, Ids, _Dependencies, Captures_Out),
+    ->  apply_replace_document(Context, JSON_In, JSON_Out, Captures_In, Ids, Captures_Out),
         Conflict = null
     ;   Result = conflict(Conflict_Prototype),
         Ids = [],
         Captures_Out = Captures_In,
-        put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
+        compressed_document_id(Context, ID, ID_String),
+        put_dict(_{ '@id' : ID_String }, Conflict_Prototype, Conflict)
     ).
 
 normalize_diff(Prefixes, Diff, Normalized),
@@ -121,6 +249,95 @@ normalize_pairs(Prefixes,Key-Value, Result) =>
     Result = New_Key-New_Value,
     compress_schema_uri(Key, Prefixes, New_Key, [compress_ids(true)]),
     normalize_diff(Prefixes, Value, New_Value).
+
+%% resolve_refs_in_diff(+Captures, +Diff, -Resolved) is det.
+%
+% Walks a diff structure and replaces any {"@ref":"name"} dict with the
+% actual document ID string stored in the captures assoc. This allows
+% field-level patches (SwapValue) to use @ref in @before/@after values
+% when the target is a document reference field.
+%
+resolve_refs_in_diff(Captures, Diff, Resolved),
+is_dict(Diff),
+get_dict('@ref', Diff, Ref),
+\+ get_dict('@op', Diff, _) =>
+    (   get_assoc(Ref, Captures, Id)
+    ->  Resolved = Id
+    ;   throw(error(not_all_captures_found([Ref]), _))
+    ).
+resolve_refs_in_diff(Captures, Diff, Resolved),
+is_dict(Diff) =>
+    dict_pairs(Diff, _, Pairs),
+    maplist(resolve_refs_pairs(Captures), Pairs, New_Pairs),
+    dict_create(Resolved, json, New_Pairs).
+resolve_refs_in_diff(Captures, Diff, Resolved),
+is_list(Diff) =>
+    maplist(resolve_refs_in_diff(Captures), Diff, Resolved).
+resolve_refs_in_diff(_, Diff, Resolved) =>
+    Diff = Resolved.
+
+resolve_refs_pairs(Captures, Key-Value, Key-New_Value) :-
+    resolve_refs_in_diff(Captures, Value, New_Value).
+
+:- begin_tests(resolve_refs_in_diff).
+
+test(basic_ref_resolution, []) :-
+    empty_assoc(Empty),
+    put_assoc("PersonB", Empty, "http://somewhere.for.now/document/Person/Bob", Captures),
+    Diff = json{friend:json{'@ref':"PersonB"}},
+    resolve_refs_in_diff(Captures, Diff, Resolved),
+    get_dict(friend, Resolved, Friend),
+    atom_string(Friend, "http://somewhere.for.now/document/Person/Bob").
+
+test(nested_ref_in_swapvalue, []) :-
+    empty_assoc(Empty),
+    put_assoc("PersonA", Empty, "http://somewhere.for.now/document/Person/Alice", C1),
+    put_assoc("PersonB", C1, "http://somewhere.for.now/document/Person/Bob", Captures),
+    Diff = json{'@op':"SwapValue",
+                '@before':json{'@ref':"PersonB"},
+                '@after':json{'@ref':"PersonA"}},
+    resolve_refs_in_diff(Captures, Diff, Resolved),
+    get_dict('@before', Resolved, Before),
+    get_dict('@after', Resolved, After),
+    atom_string(Before, "http://somewhere.for.now/document/Person/Bob"),
+    atom_string(After, "http://somewhere.for.now/document/Person/Alice").
+
+test(no_refs_passthrough, []) :-
+    empty_assoc(Captures),
+    Diff = json{name:"Alice", age:30},
+    resolve_refs_in_diff(Captures, Diff, Resolved),
+    Resolved = Diff.
+
+test(ref_in_list, []) :-
+    empty_assoc(Empty),
+    put_assoc("PersonA", Empty, "http://somewhere.for.now/document/Person/Alice", Captures),
+    Diff = [json{'@ref':"PersonA"}, "plain"],
+    resolve_refs_in_diff(Captures, Diff, Resolved),
+    nth0(0, Resolved, First),
+    atom_string(First, "http://somewhere.for.now/document/Person/Alice"),
+    nth0(1, Resolved, Second),
+    atom_string(Second, "plain").
+
+test(missing_capture_throws, []) :-
+    empty_assoc(Captures),
+    Diff = json{'@ref':"NonExistent"},
+    catch(resolve_refs_in_diff(Captures, Diff, _), Error, true),
+    nonvar(Error),
+    Error = error(not_all_captures_found(["NonExistent"]), _).
+
+test(op_dict_not_treated_as_ref, []) :-
+    empty_assoc(Empty),
+    put_assoc("PersonB", Empty, "http://somewhere.for.now/document/Person/Bob", Captures),
+    Diff = json{'@op':"SwapValue",
+                '@before':json{'@ref':"PersonB"},
+                '@after':"new_value"},
+    resolve_refs_in_diff(Captures, Diff, Resolved),
+    get_dict('@op', Resolved, "SwapValue"),
+    get_dict('@before', Resolved, Before),
+    atom_string(Before, "http://somewhere.for.now/document/Person/Bob"),
+    get_dict('@after', Resolved, "new_value").
+
+:- end_tests(resolve_refs_in_diff).
 
 /*
 Schematic of application

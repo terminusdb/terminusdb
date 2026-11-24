@@ -1,4 +1,4 @@
-:- module(api_optimize, [api_optimize/3]).
+:- module(api_optimize, [api_optimize/3, api_optimize_queued/3, descriptor_optimize/1, run_queued_optimize/1]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
@@ -8,6 +8,20 @@
 :- use_module(library(plunit)).
 :- use_module(core(util/test_utils)).
 :- use_module(core(triple)).
+:- use_module(core(document/meta_commit_queue)).
+:- use_module(core(document/commit_queue), [
+                  enqueue_commit/2,
+                  schedule_database_optimization_with_reply/2,
+                  database_active_branch_count/2,
+                  branch_queue_empty/1,
+                  increment_database_active_count/1,
+                  decrement_database_active_count/1
+              ]).
+:- use_module(core(api/api_document), [
+                  producer_timeout/1,
+                  get_commit_result/4,
+                  deliver_commit_result/2
+              ]).
 
 % Does some crazy-magic unspecified optimizations
 api_optimize(SystemDB, Auth, Path) :-
@@ -32,17 +46,229 @@ api_optimize(SystemDB, Auth, Path) :-
         ),
         error(not_a_valid_descriptor_for_optimization(Descriptor),_)),
 
-    descriptor_optimize(Descriptor).
+    descriptor_lock_key(Descriptor, Lock_Key),
+    with_meta_commit_lock(
+        Lock_Key,
+        descriptor_optimize(Descriptor)
+    ).
+
+% api_optimize_queued/3 is the API entry point that routes ALL descriptor
+% types through the commit queue scheduling system. Branch descriptors use
+% the branch commit queue via enqueue_commit. Non-branch descriptors
+% (system, database, repository) use schedule_database_optimization which
+% places work on the database or global optimization queue, processed by
+% idle commit workers. Both paths wait for completion with a timeout.
+%
+% This avoids blocking HTTP worker threads with synchronous meta_commit_lock
+% acquisition, which was causing 25+ second delays when multiple optimize
+% calls competed for the same lock.
+api_optimize_queued(SystemDB, Auth, Path) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_absolute_path(Path),_)),
+    check_optimize_auth(SystemDB, Auth, Descriptor),
+    (   branch_descriptor{} :< Descriptor
+    ->  submit_branch_optimize(Descriptor, Path, Result),
+        handle_optimize_result(Result)
+    ;   submit_scheduled_optimize(Descriptor, Result),
+        handle_optimize_result(Result)
+    ).
+
+check_optimize_auth(SystemDB, Auth, Descriptor) :-
+    do_or_die(
+        (   system_descriptor{} :< Descriptor,
+            do_or_die(is_super_user(Auth),
+                      error(requires_super_user,_))
+        ;   database_descriptor{} :< Descriptor,
+            check_descriptor_auth(SystemDB, Descriptor,
+                                  '@schema':'Action/meta_write_access', Auth)
+        ;   repository_descriptor{} :< Descriptor,
+            check_descriptor_auth(SystemDB, Descriptor,
+                                  '@schema':'Action/meta_write_access', Auth)
+        ;   branch_descriptor{} :< Descriptor,
+            check_descriptor_auth(SystemDB, Descriptor,
+                                  '@schema':'Action/meta_write_access', Auth)
+        ),
+        error(not_a_valid_descriptor_for_optimization(Descriptor),_)).
+
+% submit_branch_optimize(+Descriptor, +Path, -Result) is det.
+%
+% For branch descriptors:
+%   - If the branch queue is empty (no pending commits), run the optimization
+%     directly in the current thread under the meta_commit_lock. This avoids
+%     the 8+ second scheduling overhead of routing through the commit queue
+%     when there is no concurrent work to conflict with.
+%   - If there ARE pending commits on the branch queue, enqueue the optimization
+%     through the commit queue so it runs after pending commits drain.
+submit_branch_optimize(Descriptor, Path, Result) :-
+    (   commit_queue:branch_queue_empty(Path)
+    ->  descriptor_lock_key(Descriptor, DatabaseKey),
+        commit_queue:increment_database_active_count(DatabaseKey),
+        call_cleanup(
+            catch(
+                (   with_meta_commit_lock(DatabaseKey, descriptor_optimize(Descriptor)),
+                    Result = optimize_success
+                ),
+                Error,
+                Result = error(Error)
+            ),
+            commit_queue:decrement_database_active_count(DatabaseKey)
+        )
+    ;   submit_queued_optimize(Descriptor, Path, Result)
+    ).
+
+submit_queued_optimize(Descriptor, Path, Result) :-
+    descriptor_lock_key(Descriptor, Database_Key),
+    message_queue_create(ReplyQueue, []),
+    gensym(request, RequestId),
+    Package = optimize_contract{
+        package_type: optimize_when_idle,
+        branch_key: Path,
+        database_key: Database_Key,
+        descriptor: Descriptor,
+        reply_queue: ReplyQueue,
+        request_id: RequestId
+    },
+    commit_queue:enqueue_commit(Path, Package),
+    producer_timeout(ProducerTimeout),
+    (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
+    ->  true
+    ;   Result = timeout(RequestId)
+    ),
+    catch(message_queue_destroy(ReplyQueue), _, true).
+
+% submit_scheduled_optimize(+Descriptor, -Result) is det.
+%
+% For non-branch descriptors (system, database, repository):
+%   - If there are no active branches for this database, run the optimization
+%     directly in the current thread under the meta_commit_lock. This avoids
+%     the 8-14s scheduling overhead of routing through the commit queue when
+%     there is no concurrent work to conflict with.
+%   - If there ARE active branches, schedule through the commit queue so the
+%     optimization runs after pending commits drain, and wait for the result.
+submit_scheduled_optimize(Descriptor, Result) :-
+    descriptor_lock_key(Descriptor, DatabaseKey),
+    (   commit_queue:database_active_branch_count(DatabaseKey, Count),
+        Count > 0
+    ->  message_queue_create(ReplyQueue, []),
+        gensym(request, RequestId),
+        OptRecord = optimize_record{
+            descriptor: Descriptor,
+            reply_queue: ReplyQueue,
+            request_id: RequestId
+        },
+        commit_queue:schedule_database_optimization_with_reply(Descriptor, OptRecord),
+        producer_timeout(ProducerTimeout),
+        (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
+        ->  true
+        ;   Result = timeout(RequestId)
+        ),
+        catch(message_queue_destroy(ReplyQueue), _, true)
+    ;   commit_queue:increment_database_active_count(DatabaseKey),
+        call_cleanup(
+            catch(
+                (   with_meta_commit_lock(DatabaseKey, descriptor_optimize(Descriptor)),
+                    Result = optimize_success
+                ),
+                Error,
+                Result = error(Error)
+            ),
+            commit_queue:decrement_database_active_count(DatabaseKey)
+        )
+    ).
+
+handle_optimize_result(optimize_success) :- !.
+handle_optimize_result(error(Error)) :- throw(error(Error, _)).
+handle_optimize_result(timeout(RequestId)) :- throw(error(commit_queue_timeout(RequestId), _)).
+handle_optimize_result(timeout) :- throw(error(commit_queue_timeout, _)).
+
+% run_queued_optimize(+Package) is det.
+%
+% Called by the commit worker when it dequeues an optimize_contract. The worker
+% already holds the branch lock; this predicate acquires the meta_commit_lock,
+% runs the optimization, and retries immediately once if the first attempt fails
+% because the label version changed. The result is sent back to the reply queue.
+run_queued_optimize(Package) :-
+    get_dict(database_key, Package, Database_Key),
+    catch(
+        (   with_meta_commit_lock(
+                Database_Key,
+                (   run_queued_optimize_with_retry(Package, Result, 2)
+                ->  true
+                ;   Result = error(unknown_optimize_failure)
+                )
+            ),
+            deliver_commit_result(Package, Result)
+        ),
+        Error,
+        deliver_commit_result(Package, error(Error))
+    ).
+
+run_queued_optimize_with_retry(Package, Result, _Retries) :-
+    try_descriptor_optimize(Package, _LastError),
+    !,
+    Result = optimize_success.
+run_queued_optimize_with_retry(Package, Result, Retries) :-
+    try_descriptor_optimize(Package, LastError),
+    LastError = error(label_version_changed(_Name, _Version), _),
+    Retries > 1,
+    !,
+    New_Retries is Retries - 1,
+    run_queued_optimize_with_retry(Package, Result, New_Retries).
+run_queued_optimize_with_retry(Package, Result, _Retries) :-
+    try_descriptor_optimize(Package, LastError),
+    LastError = error(label_version_changed(Name, Version), _),
+    !,
+    Result = error(label_version_changed(Name, Version)).
+run_queued_optimize_with_retry(_Package, Result, _Retries) :-
+    Result = error(unknown_optimize_failure).
+
+try_descriptor_optimize(Package, LastError) :-
+    get_dict(descriptor, Package, Descriptor),
+    catch(
+        descriptor_optimize(Descriptor),
+        Error,
+        (   LastError = Error,
+            (   Error = error(label_version_changed(_, _), _)
+            ->  fail
+            ;   throw(Error)
+            )
+        )
+    ).
+
+% descriptor_lock_key(+Descriptor, -Lock_Key) maps any optimize-able descriptor
+% to the meta_commit_lock key of the database it belongs to. This ensures the
+% synchronous /api/optimize endpoint is serialized with commits and with
+% scheduled auto-optimizations on the same database.
+descriptor_lock_key(Descriptor, Key) :-
+    (   system_descriptor{} :< Descriptor
+    ->  meta_commit_queue:system_meta_lock_key(Key)
+    ;   database_descriptor{} :< Descriptor
+    ->  meta_commit_queue:database_descriptor_key(Descriptor, Key)
+    ;   repository_descriptor{database_descriptor: DB_Desc} :< Descriptor
+    ->  descriptor_lock_key(DB_Desc, Key)
+    ;   branch_descriptor{repository_descriptor: Repo_Desc} :< Descriptor
+    ->  descriptor_lock_key(Repo_Desc, Key)
+    ).
 
 named_graph_optimize(Graph_Name) :-
-    storage(Store),
-    safe_open_named_graph(Store,Graph_Name,Graph),
-    (   head(Graph, Layer, Version)
-    ->  squash(Layer,New_Layer),
-        do_or_die(
-            nb_force_set_head(Graph,New_Layer,Version),
-            error(label_version_changed(Graph_Name,Version),_))
-    ;   true).
+    graph_label_to_lock_key(Graph_Name, Lock_Key),
+    with_meta_commit_lock(
+        Lock_Key,
+        (
+            storage(Store),
+            safe_open_named_graph(Store,Graph_Name,Graph),
+            (   head(Graph, Layer, Version)
+            ->  (   parent(Layer, _)
+                ->  squash(Layer,New_Layer),
+                    do_or_die(
+                        nb_force_set_head(Graph,New_Layer,Version),
+                        error(label_version_changed(Graph_Name,Version),_))
+                ;   true  % Already a base layer, nothing to squash
+                )
+            ;   true)
+        )
+    ).
 
 descriptor_optimize(system_descriptor{}) :-
     system_instance_name(Graph_Name),
@@ -63,9 +289,38 @@ descriptor_optimize(repository_descriptor{
                  },
 
     open_descriptor(Descriptor, Transaction_Object),
+    storage(Store),
+    % Optimize in-memory repository schema layers
+    Schema_Objects = (Transaction_Object.schema_objects),
+    forall(
+        (   member(Schema, Schema_Objects),
+            Layer = (Schema.read),
+            ground(Layer)
+        ),
+        (   % Rollup creates parallel files. No need to call replace_graph_head_if_named.
+            rollup(Layer),
+            layer_to_id(Layer, Schema_Layer_Id),
+            terminus_store:invalidate_layer_cache_entry(Store, Schema_Layer_Id)
+        )
+    ),
+    % Optimize in-memory instance graph after rollup
     [Instance] = (Transaction_Object.instance_objects),
     Layer = (Instance.read),
-    exponential_rollup_strategy(Layer).
+    (   ground(Layer)
+    ->  % Rollup creates parallel files. No need to call replace_graph_head_if_named.
+        exponential_rollup_strategy(Layer),
+        % Invalidate the full parent chain cache
+        imprecise_rollup_upto(Layer, Layer),
+        layer_to_id(Layer, Layer_Id),
+        terminus_store:invalidate_layer_cache_entry(Store, Layer_Id)
+    ;   true
+    ),
+    % Clear per-descriptor retained layer references.
+    % Note: abolish_all_tables is intentionally NOT called here.
+    % Global table abolition is too expensive for the optimize path
+    % since it destroys tabled results for ALL databases. Table
+    % cleanup is handled by the GC path in the auto-optimize plugin.
+    retractall(descriptor:retained_descriptor_layers(Descriptor, _)).
 descriptor_optimize(branch_descriptor{
                         repository_descriptor : Repository_Descriptor,
                         branch_name : Branch_Name
@@ -76,12 +331,21 @@ descriptor_optimize(branch_descriptor{
                     },
 
     open_descriptor(Descriptor, Transaction_Object),
+    storage(Store),
     Schema_Objects = (Transaction_Object.schema_objects),
     forall(
         (   member(Schema, Schema_Objects),
-            Layer = (Schema.read)
+            Layer = (Schema.read),
+            ground(Layer)
         ),
-        rollup(Layer)
+        (   % Rollup creates a parallel file and registers it via register_rollup.
+            % No need to call replace_graph_head_if_named - it's unnecessary and
+            % can cause race conditions by reverting the label to an old layer.
+            rollup(Layer),
+            % Invalidate cache so next load uses the rollup
+            layer_to_id(Layer, Schema_Layer_Id),
+            terminus_store:invalidate_layer_cache_entry(Store, Schema_Layer_Id)
+        )
     ),
     Instance_Objects = (Transaction_Object.instance_objects),
     forall(
@@ -89,9 +353,38 @@ descriptor_optimize(branch_descriptor{
             Layer = (Instance.read),
             ground(Layer)
         ),
-        exponential_rollup_strategy(Layer)
-    ).
-
+        (   % Rollup creates parallel files. No need to update label file.
+            exponential_rollup_strategy(Layer),
+            % Invalidate the ENTIRE parent chain cache by triggering register_rollup.
+            % imprecise_rollup_upto(Layer, Layer) is a no-op for rollup creation,
+            % but register_rollup still runs and invalidates the full parent chain.
+            imprecise_rollup_upto(Layer, Layer),
+            % Invalidate cache so next load uses the rollup
+            layer_to_id(Layer, Layer_Id),
+            terminus_store:invalidate_layer_cache_entry(Store, Layer_Id)
+        )
+    ),
+    % Clear per-descriptor retained layer references.
+    retractall(descriptor:retained_descriptor_layers(Descriptor, _)),
+    % Also roll up the repository layer (commit graph) to prevent O(n) traversal.
+    % The commit graph accumulates child layers with each commit.
+    % Rollup is safe here because it only creates parallel files - it does NOT
+    % modify the label file, so there's no race condition with concurrent transactions.
+    open_descriptor(Repository_Descriptor, Repo_Transaction),
+    [Repo_Instance] = (Repo_Transaction.instance_objects),
+    Repo_Layer = (Repo_Instance.read),
+    (   ground(Repo_Layer)
+    ->  exponential_rollup_strategy(Repo_Layer),
+        % Invalidate the full parent chain cache
+        imprecise_rollup_upto(Repo_Layer, Repo_Layer),
+        % Invalidate cache so next load uses the rolled up layer
+        layer_to_id(Repo_Layer, Repo_Layer_Id),
+        storage(Store),
+        terminus_store:invalidate_layer_cache_entry(Store, Repo_Layer_Id),
+        % Clear retained layers for all descriptors in the chain
+        retractall(descriptor:retained_descriptor_layers(Repository_Descriptor, _)),
+        retractall(descriptor:retained_descriptor_layers(Descriptor, _))
+    ;   true).
 
 % Write a generator that gives us back Start and Stop positions as commit_ids
 % based on a heuristic of exponential rollup
@@ -150,7 +443,7 @@ positions(Length, Base, Start, End) :-
         Start is Shifted_Start + Offset,
         End is Shifted_End + Offset).
 
-rollup_base(3).
+rollup_base(3).  % Standard base
 
 exponential_rollup_strategy(Layer) :-
     triple_store(Store),
@@ -375,5 +668,103 @@ test(optimize_branch,
     resolve_absolute_string_descriptor(System_Path,system_descriptor{}),
     api_optimize(system_descriptor{}, Auth, System_Path).
 
+
+test(optimize_system_idempotent,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+
+    super_user_authority(Auth),
+
+    % First optimization
+    api_optimize(system_descriptor{}, Auth, "_system"),
+
+    open_descriptor(system_descriptor{}, Transaction1),
+    [Instance_Object1] = (Transaction1.instance_objects),
+    Layer1 = (Instance_Object1.read),
+    layer_to_id(Layer1, Layer1_Id),
+    \+ parent(Layer1, _),
+
+    % Second optimization (should be a no-op)
+    api_optimize(system_descriptor{}, Auth, "_system"),
+
+    open_descriptor(system_descriptor{}, Transaction2),
+    [Instance_Object2] = (Transaction2.instance_objects),
+    Layer2 = (Instance_Object2.read),
+    layer_to_id(Layer2, Layer2_Id),
+    \+ parent(Layer2, _),
+
+    % Head layer must be unchanged
+    Layer1_Id = Layer2_Id.
+
+test(optimize_db_idempotent,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+
+    Path = 'admin/testdb',
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    super_user_authority(Auth),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 1" },
+                    Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            insert(a,b,c)),
+        _),
+
+    resolve_absolute_string_descriptor(Database_Path, Database_Descriptor),
+
+    % First optimization
+    api_optimize(system_descriptor{}, Auth, Database_Path),
+
+    open_descriptor(Database_Descriptor, Transaction1),
+    [Instance_Object1] = (Transaction1.instance_objects),
+    Layer1 = (Instance_Object1.read),
+    layer_to_id(Layer1, Layer1_Id),
+    \+ parent(Layer1, _),
+
+    % Second optimization (should be a no-op)
+    api_optimize(system_descriptor{}, Auth, Database_Path),
+
+    open_descriptor(Database_Descriptor, Transaction2),
+    [Instance_Object2] = (Transaction2.instance_objects),
+    Layer2 = (Instance_Object2.read),
+    layer_to_id(Layer2, Layer2_Id),
+    \+ parent(Layer2, _),
+
+    % Head layer must be unchanged
+    Layer1_Id = Layer2_Id.
+
+test(optimize_branch_queued,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup((commit_queue:stop_workers,
+               teardown_temp_store(State)))
+     ])
+:-
+    Path = 'admin/testdb/local/branch/main',
+    super_user_authority(Auth),
+
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    create_context(Descriptor, commit_info{author:"test", message:"commit 1"}, Context1),
+    with_transaction(Context1, ask(Context1, insert(a,b,c)), _),
+    create_context(Descriptor, commit_info{author:"test", message:"commit 2"}, Context2),
+    with_transaction(Context2, ask(Context2, insert(d,e,f)), _),
+
+    commit_queue:start_workers(1),
+    api_optimize_queued(system_descriptor{}, Auth, Path),
+    commit_queue:stop_workers.
 
 :- end_tests(optimize).

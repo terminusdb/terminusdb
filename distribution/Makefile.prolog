@@ -34,13 +34,43 @@ SWIPL = LANG=C.UTF-8 $(SWIPL_DIR)swipl
 TARGET := terminusdb
 RUST_TARGET := src/rust/librust.$(DYLIB_EXT)
 
+# DIST-tracking stamp.
+#
+# librust.$(DYLIB_EXT) is a single fixed path regardless of distribution, but
+# the community and enterprise dylibs export different Prolog FFI.
+#
+# The $(RUST_TARGET) rule below has no prerequisites, so once the file exists
+# make never re-runs distribution/Makefile.rust, and switching DIST silently
+# leaves the previous distribution's dylib in place. That manifests as
+# "Unknown procedure" errors during tests.
+#
+# To make DIST switches transparent (no `make clean` required), we record the
+# last DIST used to produce $(RUST_TARGET) in a stamp file. When the current
+# DIST differs, we remove $(RUST_TARGET) at parse time so the normal rule
+# fires and rebuilds it from the correct cargo build directory. Same logic
+# also lives in distribution/Makefile.rust for direct `make rust` invocations.
+#
+# Important: this is only safe when distribution/Makefile.rust is actually
+# present so the rebuild path exists. In the Docker base stage we ship a
+# pre-built dylib and never copy Makefile.rust — removing the dylib there
+# would leave the build with no way to recreate it. So we make the
+# destructive part of the stamp logic conditional on Makefile.rust existing.
+LAST_DIST_FILE := src/rust/.last-dist
+LAST_DIST := $(shell cat $(LAST_DIST_FILE) 2>/dev/null)
+ifneq ($(wildcard distribution/Makefile.rust),)
+  ifneq ($(LAST_DIST),$(DIST))
+    $(shell rm -f $(RUST_TARGET))
+    $(shell printf '%s' '$(DIST)' > $(LAST_DIST_FILE))
+  endif
+endif
+
 ################################################################################
 
 .PHONY: default
 default: $(TARGET)
 
 .PHONY: dev
-dev: $(RUST_TARGET) dev-build
+dev: $(RUST_TARGET) plugins-rust dev-build
 
 .PHONY: i
 i: $(RUST_TARGET)
@@ -48,18 +78,22 @@ i: $(RUST_TARGET)
 
 .PHONY: test
 test: $(RUST_TARGET)
+ifdef SUITE
 	$(SWIPL) \
-	  --on-error=halt \
-	  --on-warning=halt \
-	  -g 'run_tests, halt' \
+	  -g '(run_tests($(SUITE)) -> halt(0) ; halt(1))' \
 	  -f src/interactive.pl
+else
+	$(SWIPL) \
+	  -g '(run_tests -> halt(0) ; halt(1))' \
+	  -f src/interactive.pl
+endif
 
 .PHONY: download-lint
 download-lint: $(SWIPL_LINT_PATH)
 
 .PHONY: lint
 lint: $(SWIPL_LINT_PATH)
-	$(SWIPL) -f src/load_paths.pl src/core/query/expansions.pl $(SWIPL_LINT_PATH)
+	$(SWIPL) -s src/load_paths.pl -s src/core/query/expansions.pl -g "use_module(library(plunit))" -s $(SWIPL_LINT_PATH) -g lint_files -t halt
 
 .PHONY: clean
 clean:
@@ -95,5 +129,16 @@ $(TARGET): $(shell find $(SRC_DIRS) -not -path 'src/rust/*' \( -name '*.pl' -o -
 $(RUST_TARGET):
 	@$(MAKE) -f distribution/Makefile.rust $@
 
+.PHONY: plugins-rust
+plugins-rust:
+	@$(MAKE) -f distribution/Makefile.rust $@
+
 $(SWIPL_LINT_PATH):
 	curl -L --create-dirs -o $@ "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/$(SWIPL_LINT_VERSION)/pl_lint.pl"
+	# Fix the broken config loader and avoid halt/1 inside :- initialization/1,
+	# which no longer terminates the process in SWI-Prolog 10.
+	sed -i.bak -e "s#catch(\['\./\.lint_config\.pl'\], _, true)#catch(consult('./.lint_config.pl'), _, true)#" $@
+	sed -i.bak -e "s/:- initialization(lint_files)./:- export(lint_files\/0)./" $@
+	# Add ignore_module/1 support for suppressing $-prefixed runtime module warnings.
+	awk '{print} /:- dynamic ignore_file\/1\./ {print ":- dynamic ignore_module/1."}' $@ > $@.tmp && mv $@.tmp $@
+	awk '{print} /atom_string\(ModuleAtom, Module\),/ {print "    (   catch(ignore_module(ModuleAtom), _, false)"; print "    ->  fail"; print "    ;   true"; print "    ),"}' $@ > $@.tmp && mv $@.tmp $@

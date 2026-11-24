@@ -7,33 +7,28 @@ on:
   pull_request:
     paths:
       - ".github/workflows/snap-build.yml"
+      - "snap/**"
   
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
 
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
 
-    outputs:
-      snap: ${{ steps.snapcraft.outputs.snap }}
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Copy Sources
-        run: rsync -r ./ distribution/terminusdb_source/
+        uses: actions/checkout@v7
 
       - name: Build
         uses: snapcore/action-build@v1
         id: snapcraft
         with:
-          path: distribution
+          snapcraft-args: pack
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: terminusdb-snap
           path: ${{ steps.snapcraft.outputs.snap }}
@@ -46,10 +41,10 @@ jobs:
 
     steps:   
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: terminusdb-snap
           path: download_snap/
@@ -134,6 +129,13 @@ jobs:
           netstat -ln | grep 6363 || echo "WARNING: Nothing listening on port 6363!"
           cd tests && npm i && npm run test
 
+      - name: Dump snap journal
+        if: always()
+        run: |
+          # Confined apps re-parented into snap.*.scope can die with stderr
+          # already severed; journald still records them
+          sudo journalctl -u 'snap.terminusdb.*' --no-pager -n 100 || true
+
       - name: Check Server Status After Tests
         if: always()
         run: |
@@ -153,7 +155,7 @@ jobs:
       
       - name: Upload Server Logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: terminusdb-server-logs
           path: terminusdb.log

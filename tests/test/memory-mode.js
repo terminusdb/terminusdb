@@ -1,0 +1,401 @@
+const { expect } = require('chai')
+const { spawn, execFile } = require('child_process')
+const http = require('http')
+const { util } = require('../lib')
+// Skip these tests when no local binary is available (e.g., Docker-based CI)
+const SKIP_MEMORY_MODE_TESTS = process.env.SKIP_MEMORY_MODE_TESTS === 'true'
+
+describe('In-Memory Mode', function () {
+  if (SKIP_MEMORY_MODE_TESTS) {
+    // eslint-disable-next-line mocha/no-skipped-tests
+    it.skip('skipped: requires local terminusdb binary (set SKIP_MEMORY_MODE_TESTS=true)', function () {})
+    return
+  }
+  this.timeout(30000)
+
+  const PORT = 9393
+  const PASSWORD = 'test_password_123'
+  let serverProcess = null
+  async function waitForServer (maxRetries = 200) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const res = await new Promise((resolve, reject) => {
+          const req = http.get(`http://127.0.0.1:${PORT}/api/ok`, (res) => {
+            let data = ''
+            res.on('data', chunk => { data += chunk })
+            res.on('end', () => { res.body = data; resolve(res) })
+          })
+          req.on('error', reject)
+          req.setTimeout(1000, () => {
+            req.destroy()
+            reject(new Error('timeout'))
+          })
+        })
+        if (res.statusCode === 200) return true
+      } catch (e) {
+        // Server not ready yet
+      }
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    throw new Error('Server did not start in time')
+  }
+
+  async function waitForApi (auth, maxRetries = 20) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const res = await httpRequest({
+          hostname: '127.0.0.1',
+          port: PORT,
+          path: '/api/',
+          method: 'GET',
+          headers: { Authorization: `Basic ${auth}` },
+        })
+        if (res.status === 200) return res
+      } catch (e) {
+        // Endpoint not ready yet
+      }
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    throw new Error('/api/ did not return 200 in time')
+  }
+
+  async function waitForJsonEndpoint (path, auth, maxRetries = 50) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const res = await new Promise((resolve, reject) => {
+          const req = http.request({
+            hostname: '127.0.0.1',
+            port: PORT,
+            path,
+            method: 'GET',
+            headers: { Authorization: `Basic ${auth}` },
+          }, (res) => {
+            let data = ''
+            res.on('data', chunk => { data += chunk })
+            res.on('end', () => { resolve({ status: res.statusCode, body: data }) })
+          })
+          req.on('error', reject)
+          req.setTimeout(2000, () => {
+            req.destroy()
+            reject(new Error('timeout'))
+          })
+          req.end()
+        })
+        if (res.status === 200) {
+          JSON.parse(res.body)
+          return true
+        }
+      } catch (e) {
+        // Endpoint not ready yet
+      }
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    throw new Error(`Endpoint ${path} did not return valid JSON in time`)
+  }
+
+  async function httpRequest (options, body = null) {
+    return new Promise((resolve, reject) => {
+      const req = http.request(options, (res) => {
+        let data = ''
+        res.on('data', chunk => { data += chunk })
+        res.on('end', () => resolve({ status: res.statusCode, body: data }))
+      })
+      req.on('error', reject)
+      if (body) req.write(body)
+      req.end()
+    })
+  }
+
+  function startServer (args) {
+    serverProcess = spawn(util.terminusdbScript(), args, {
+      env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    serverProcess.stdout.on('data', d => process.stdout.write(`[memory-server] ${d}`))
+    serverProcess.stderr.on('data', d => process.stderr.write(`[memory-server] ${d}`))
+    serverProcess.on('error', err => process.stderr.write(`[memory-server] spawn error: ${err}\n`))
+    serverProcess.on('exit', (code, signal) => process.stderr.write(`[memory-server] exited code=${code} signal=${signal}\n`))
+  }
+
+  function stopServer (done) {
+    if (!serverProcess) return done()
+    // snapd re-parents the confined app into its own scope: the spawned launcher
+    // exits early, so the real server survives SIGTERM to the wrapper pid and
+    // stays bound to the port. Reap it by pattern when running under a snap.
+    if ((process.env.TERMINUSDB_EXEC_PATH || '').startsWith('/snap/')) {
+      execFile('pkill', ['-f', 'terminusdb serve (-m|--memory)'], () => {})
+    }
+    if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+      serverProcess = null
+      done()
+    } else {
+      serverProcess.once('exit', () => {
+        serverProcess = null
+        done()
+      })
+      serverProcess.kill('SIGTERM')
+    }
+  }
+
+  describe('server startup tests', function () {
+    afterEach(function (done) {
+      stopServer(done)
+    })
+
+    it('should start server in memory mode with custom password', async function () {
+      startServer(['serve', '--memory', PASSWORD])
+
+      await waitForServer()
+
+      // Verify we can authenticate with the custom password
+      const auth = Buffer.from(`admin:${PASSWORD}`).toString('base64')
+      const response = await waitForApi(auth)
+
+      expect(response.status).to.equal(200)
+    })
+
+    it('should start server in memory mode with default password', async function () {
+      startServer(['serve', '-m'])
+
+      await waitForServer()
+
+      // Verify we can authenticate with the default password 'root'
+      const auth = Buffer.from('admin:root').toString('base64')
+      const response = await waitForApi(auth)
+
+      expect(response.status).to.equal(200)
+    })
+
+    it('should allow database creation in memory mode', async function () {
+      startServer(['serve', '--memory', PASSWORD])
+
+      await waitForServer()
+
+      const auth = Buffer.from(`admin:${PASSWORD}`).toString('base64')
+      const body = JSON.stringify({ label: 'Memory Test DB' })
+
+      // Create a database
+      const createResponse = await httpRequest({
+        hostname: '127.0.0.1',
+        port: PORT,
+        path: '/api/db/admin/memory_test_db',
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      }, body)
+
+      expect(createResponse.status).to.equal(200)
+      const result = JSON.parse(createResponse.body)
+      expect(result['api:status']).to.equal('api:success')
+    })
+
+    it('should return info endpoint with version information', async function () {
+      startServer(['serve', '--memory', PASSWORD])
+
+      await waitForServer()
+
+      const auth = Buffer.from(`admin:${PASSWORD}`).toString('base64')
+      await waitForJsonEndpoint('/api/info', auth)
+
+      const response = await httpRequest({
+        hostname: '127.0.0.1',
+        port: PORT,
+        path: '/api/info',
+        method: 'GET',
+        headers: { Authorization: `Basic ${auth}` },
+      })
+
+      const info = JSON.parse(response.body)
+      expect(response.status, JSON.stringify(info)).to.equal(200)
+
+      // Verify response structure
+      expect(info['@type']).to.equal('api:InfoResponse')
+      expect(info['api:status']).to.equal('api:success')
+
+      // Verify api:info contains key properties
+      expect(info['api:info']).to.be.an('object')
+      expect(info['api:info']).to.have.property('authority')
+      expect(info['api:info']).to.have.property('storage')
+      expect(info['api:info']).to.have.property('terminusdb')
+      expect(info['api:info']).to.have.property('terminusdb_store')
+
+      // Verify terminusdb version info
+      expect(info['api:info'].terminusdb).to.have.property('version').that.is.a('string')
+      expect(info['api:info'].terminusdb).to.have.property('git_hash').that.is.a('string')
+
+      // Verify storage info
+      expect(info['api:info'].storage).to.have.property('version')
+
+      // Verify terminusdb_store version
+      expect(info['api:info'].terminusdb_store).to.have.property('version').that.is.a('string')
+    })
+  })
+
+  describe('full CRUD lifecycle in memory mode', function () {
+    const DB_NAME = 'memory_crud_test'
+    const DB_PATH = `/api/document/admin/${DB_NAME}`
+    let auth
+
+    before(async function () {
+      startServer(['serve', '--memory', PASSWORD])
+
+      await waitForServer()
+      auth = Buffer.from(`admin:${PASSWORD}`).toString('base64')
+
+      // Create database for CRUD tests
+      const body = JSON.stringify({ label: 'CRUD Test DB' })
+      const createResponse = await httpRequest({
+        hostname: '127.0.0.1',
+        port: PORT,
+        path: `/api/db/admin/${DB_NAME}`,
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      }, body)
+      expect(createResponse.status).to.equal(200)
+    })
+
+    after(function (done) {
+      stopServer(done)
+    })
+
+    it('should create schema', async function () {
+      const schema = {
+        '@type': 'Class',
+        '@id': 'Person',
+        name: 'xsd:string',
+        age: 'xsd:integer',
+      }
+      const body = JSON.stringify(schema)
+
+      const response = await httpRequest({
+        hostname: '127.0.0.1',
+        port: PORT,
+        path: `${DB_PATH}?graph_type=schema&author=test&message=Add%20Person%20schema`,
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      }, body)
+
+      expect(response.status).to.equal(200)
+    })
+
+    it('should add document', async function () {
+      const doc = {
+        '@type': 'Person',
+        '@id': 'Person/john',
+        name: 'John Doe',
+        age: 30,
+      }
+      const body = JSON.stringify(doc)
+
+      const response = await httpRequest({
+        hostname: '127.0.0.1',
+        port: PORT,
+        path: `${DB_PATH}?author=test&message=Add%20John`,
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      }, body)
+
+      expect(response.status).to.equal(200)
+    })
+
+    it('should retrieve document', async function () {
+      const response = await httpRequest({
+        hostname: '127.0.0.1',
+        port: PORT,
+        path: `${DB_PATH}?id=Person/john`,
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+      })
+
+      expect(response.status).to.equal(200)
+      const doc = JSON.parse(response.body)
+      expect(doc['@id']).to.equal('Person/john')
+      expect(doc.name).to.equal('John Doe')
+      expect(doc.age).to.equal(30)
+    })
+
+    it('should delete document', async function () {
+      const body = JSON.stringify('Person/john')
+
+      const response = await httpRequest({
+        hostname: '127.0.0.1',
+        port: PORT,
+        path: `${DB_PATH}?author=test&message=Delete%20John`,
+        method: 'DELETE',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      }, body)
+
+      // 204 No Content indicates success for DELETE
+      expect(response.status).to.equal(204)
+    })
+
+    it('should confirm document is deleted', async function () {
+      // Query all Person documents to verify john is gone
+      const response = await httpRequest({
+        hostname: '127.0.0.1',
+        port: PORT,
+        path: `${DB_PATH}?type=Person&as_list=true`,
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+      })
+
+      expect(response.status).to.equal(200)
+      const docs = JSON.parse(response.body)
+      expect(docs).to.be.an('array')
+      expect(docs).to.have.lengthOf(0)
+    })
+
+    it('should delete database', async function () {
+      const response = await httpRequest({
+        hostname: '127.0.0.1',
+        port: PORT,
+        path: `/api/db/admin/${DB_NAME}`,
+        method: 'DELETE',
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+      })
+
+      expect(response.status).to.equal(200)
+      const result = JSON.parse(response.body)
+      expect(result['api:status']).to.equal('api:success')
+    })
+
+    it('should confirm database is deleted', async function () {
+      const response = await httpRequest({
+        hostname: '127.0.0.1',
+        port: PORT,
+        path: `/api/db/admin/${DB_NAME}`,
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+      })
+
+      expect(response.status).to.equal(404)
+    })
+  })
+})

@@ -6,6 +6,8 @@
               % json.pl
               idgen_random/2,
               idgen_random/3,
+              idgen_uuid_v7/2,
+              idgen_uuid_v7/3,
               idgen_hash/3,
               idgen_lexical/3,
 
@@ -40,6 +42,7 @@
               delete_documents_by_type/3,
               insert_document/3,
               insert_document/7,
+              insert_document/8,
               insert_document_unsafe/8,
               replace_document/2,
               replace_document/3,
@@ -62,14 +65,19 @@
 
               % instance.pl
               is_instance/3,
+              is_instance_class/3,
 
               % schema.pl
               class_subsumed/3,
+              is_simple_class/2,
+              is_subdocument/2,
+              system_frame_class/1,
               class_frame/3,
               class_frame/4,
               all_class_frames/2,
               all_class_frames/3,
               is_schemaless/1,
+              schema_metadata_descriptor/3,
 
               % query.pl
               match_query_document_uri/4,
@@ -81,7 +89,9 @@
 
               % patch.pl
               simple_patch/4,
+              diff_with_subdocument_ids/3,
               patch_cost/2,
+              strip_wire_hints/2,
 
               % normalize.pl
               normalize_document/3,

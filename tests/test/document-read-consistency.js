@@ -85,7 +85,7 @@ describe('document-read-consistency', function () {
           return forward(operation)
         }),
         new HttpLink({
-          uri: `${agent.baseUrl}${api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })}`,
+          uri: `${agent.baseUrl}${api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })}?compress_ids=false`,
           fetch,
         }),
       ),

@@ -365,6 +365,57 @@ test(user_update, [
 
     crypto_password_hash(Password,Hash_Atom).
 
+test(user_update_deletes_old_hash, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Name = "GavinOld",
+    add_user(Name, some("password"), User_URI),
+
+    Password = "my_pass_is_strong",
+
+    Document =
+    _{ password : Password },
+
+    update_user(Name, Document),
+
+    findall(Hash,
+            ask(system_descriptor{},
+                t(User_URI, key_hash, Hash^^xsd:string)),
+            Hashes),
+
+    length(Hashes, 1),
+
+    member(Hash, Hashes),
+    atom_string(Hash_Atom, Hash),
+    crypto_password_hash(Password, Hash_Atom).
+
+test(api_update_user_password_deletes_old_hash, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Name = "GavinApi",
+    add_user(Name, some("password"), User_URI),
+
+    Password = "my_pass_is_strong_api",
+
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Admin),
+    api_update_user_password(System_DB, Admin, Name, Password),
+
+    findall(Hash,
+            ask(system_descriptor{},
+                t(User_URI, key_hash, Hash^^xsd:string)),
+            Hashes),
+
+    length(Hashes, 1),
+
+    member(Hash, Hashes),
+    atom_string(Hash_Atom, Hash),
+    crypto_password_hash(Password, Hash_Atom).
+
 test(organization_creation, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))

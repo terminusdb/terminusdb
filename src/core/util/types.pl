@@ -27,6 +27,7 @@
               is_gday/1,
               is_gyear_month/1,
               is_gmonth_day/1,
+              is_date_time_interval/1,
               is_gyear_range/1,
               is_time/1,
               is_boolean/1,
@@ -39,6 +40,8 @@
               is_unsigned_short/1,
               is_unsigned_int/1,
               is_unsigned_long/1,
+              is_float/1,
+              is_double/1,
               is_positive_integer/1,
               is_negative_integer/1,
               is_nonpositive_integer/1,
@@ -318,6 +321,30 @@ is_date_range(date_range(Date1,Date2)) :-
     is_date(Date1),
     is_date(Date2).
 
+is_date_time_interval(date_time_interval(C1,C2,D,Flag,_,_)) :-
+    !,
+    is_interval_component(C1),
+    is_interval_component(C2),
+    is_duration(D),
+    is_interval_flag(Flag).
+% The stored value is the canonical lexical spelling — validating it is
+% the same call the write path makes.
+is_date_time_interval(S) :-
+    (string(S) ; atom(S)),
+    '$xdd':interval_parse(S, _).
+
+is_interval_flag(explicit).
+is_interval_flag(start_duration).
+is_interval_flag(duration_end).
+is_interval_flag(point).
+
+is_interval_component(C) :- is_date(C), !.
+is_interval_component(C) :- is_date_time(C), !.
+%% ISO 8601-2 non-finite endpoints stored in component positions
+is_interval_component(neg_infinity).
+is_interval_component(infinity).
+is_interval_component(unknown).
+
 is_integer_range(integer_range(Integer1,Integer2)) :-
     integer(Integer1),
     integer(Integer2).
@@ -374,8 +401,9 @@ is_time(time(HH,MM,SS)) :-
 is_boolean(true).
 is_boolean(false).
 
-is_duration(duration(Sign,Y,M,D,HH,MM,SS)) :-
+is_duration(duration(Sign,W,Y,M,D,HH,MM,SS)) :-
     member(Sign, [1,-1]),
+    number(W),
     number(Y),
     number(M),
     number(D),
@@ -422,6 +450,18 @@ is_unsigned_long(S) :-
     integer(S),
     S >= 0,
     S =< 18446744073709551615.
+
+% IEEE-754 binary32 range; integral input is accepted because storage
+% canonicalizes it to a float.
+is_float(S) :-
+    number(S),
+    abs(S) =< 3.4028234663852886e38.
+
+% IEEE-754 binary64 range; rejects integers too large for a float as well
+% as infinities.
+is_double(S) :-
+    number(S),
+    abs(S) =< 1.7976931348623157e308.
 
 is_positive_integer(S) :-
     integer(S),

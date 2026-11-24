@@ -5,10 +5,54 @@ use rug::Integer;
 use serde_json::*;
 use std::borrow::Cow;
 use std::collections::HashSet;
+use tdb_succinct::tfc::lexical_interval::{
+    decode_lexical_entry, legacy_interval_to_lexical, render_lexical_interval, Component,
+    LexicalInterval, FLAG_EXPLICIT, TZ_ZONELESS,
+};
 use tdb_succinct::*;
 use terminusdb_store_prolog::value::split_lang_string;
 
-pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
+/// String render of a DateTimeInterval entry across storage formats:
+/// variable-width lexical entries render through the lexical decoder;
+/// un-upgraded fixed-width entries (legacy 48 and branch 52) decode via the
+/// legacy layout so archived layers still render.
+fn interval_entry_to_string(tde: &TypedDictEntry) -> String {
+    let bytes = tde.to_bytes();
+    match bytes.len() {
+        INTERVAL_LEGACY_ENCODED_WIDTH => render_lexical_interval(&legacy_interval_to_lexical(
+            &DateTimeInterval::from_legacy_lexical(bytes),
+        )),
+        INTERVAL_ENCODED_WIDTH => render_lexical_interval(&legacy_interval_to_lexical(
+            &DateTimeInterval::from_lexical(bytes),
+        )),
+        _ => decode_lexical_entry(&bytes)
+            .map(|iv| render_point_aware(&iv))
+            .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).into_owned()),
+    }
+}
+
+/// A stored zoneless [t,t) is the as-of point spelling: the entry cannot
+/// distinguish a supplied pair from a bare component, and the value is the
+/// same instant either way. A day-aligned instant is the bare date. Zoned
+/// points keep the pair spelling.
+fn render_point_aware(iv: &LexicalInterval) -> String {
+    if iv.flag == FLAG_EXPLICIT && iv.start == iv.end {
+        if let Component::Finite(f) = &iv.start {
+            if f.tz_class == TZ_ZONELESS {
+                let mut single = iv.clone();
+                single.canonical = f.canonical.clone();
+                let s = render_lexical_interval(&single);
+                return match s.strip_suffix("T00:00:00") {
+                    Some(date) => date.to_string(),
+                    None => s,
+                };
+            }
+        }
+    }
+    render_lexical_interval(iv)
+}
+
+pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
     let result = match tde.datatype() {
         Datatype::String => tde.as_val::<String, String>(),
         Datatype::Token => tde.as_val::<Token, String>(),
@@ -20,6 +64,7 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
         Datatype::NCName => tde.as_val::<NCName, String>(),
         Datatype::Notation => tde.as_val::<Notation, String>(),
         Datatype::QName => tde.as_val::<QName, String>(),
+        Datatype::SQName => tde.as_val::<SQName, String>(),
         Datatype::ID => tde.as_val::<ID, String>(),
         Datatype::IDRef => tde.as_val::<IDRef, String>(),
         Datatype::Entity => tde.as_val::<Entity, String>(),
@@ -39,6 +84,7 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
         Datatype::DayTimeDuration => tde.as_val::<DayTimeDuration, String>(),
         Datatype::Base64Binary => tde.as_val::<Base64Binary, String>(),
         Datatype::HexBinary => tde.as_val::<HexBinary, String>(),
+        Datatype::DateTimeInterval => interval_entry_to_string(tde),
         x => panic!("not a stringy type: {:?}", x),
     };
 
@@ -47,6 +93,14 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
 
 pub fn value_to_bigint(tde: &TypedDictEntry) -> Integer {
     match tde.datatype() {
+        Datatype::Int8 => tde.as_val::<i8, i8>().into(),
+        Datatype::Int16 => tde.as_val::<i16, i16>().into(),
+        Datatype::Int32 => tde.as_val::<i32, i32>().into(),
+        Datatype::Int64 => tde.as_val::<i64, i64>().into(),
+        Datatype::UInt8 => tde.as_val::<u8, u8>().into(),
+        Datatype::UInt16 => tde.as_val::<u16, u16>().into(),
+        Datatype::UInt32 => tde.as_val::<u32, u32>().into(),
+        Datatype::UInt64 => tde.as_val::<u64, u64>().into(),
         Datatype::BigInt => tde.as_val::<Integer, Integer>(),
         Datatype::PositiveInteger => tde.as_val::<PositiveInteger, Integer>(),
         Datatype::NonNegativeInteger => tde.as_val::<NonNegativeInteger, Integer>(),
@@ -79,18 +133,13 @@ lazy_static! {
     .collect();
     static ref DECIMAL_TYPES: HashSet<&'static str> = ["decimal",].into_iter().collect();
     static ref FLOAT_TYPES: HashSet<&'static str> = ["double", "float",].into_iter().collect();
-    static ref SMALL_INTEGER_TYPES: HashSet<&'static str> = [
-        "byte",
-        "short",
-        "int",
-        "long",
-        "unsignedByte",
-        "unsignedShort",
-        "unsignedInt",
-    ]
-    .into_iter()
-    .collect();
+    static ref SMALL_INTEGER_TYPES: HashSet<&'static str> =
+        ["byte", "short", "int", "unsignedByte", "unsignedShort",]
+            .into_iter()
+            .collect();
     static ref BIG_INTEGER_TYPES: HashSet<&'static str> = [
+        "long",
+        "unsignedInt",
         "unsignedLong",
         "integer",
         "positiveInteger",
@@ -161,7 +210,29 @@ pub fn type_is_json(s: &str) -> bool {
     s == "JSON" || s == "JSONObject"
 }
 
+/// Formatter consulted by `value_to_json` for stored decimal lexicals.
+pub type DecimalLexicalHook = fn(&str, bool) -> String;
+
+lazy_static! {
+    /// Extension hook for downstream editions to transform a stored
+    /// decimal lexical before it is emitted as a JSON number.
+    static ref DECIMAL_LEXICAL_HOOK: std::sync::RwLock<Option<DecimalLexicalHook>> =
+        std::sync::RwLock::new(None);
+}
+
+/// Register the decimal lexical formatter consulted by `value_to_json`.
+pub fn register_decimal_lexical_hook(hook: DecimalLexicalHook) {
+    *DECIMAL_LEXICAL_HOOK.write().unwrap() = Some(hook);
+}
+
 pub fn value_to_json(tde: &TypedDictEntry) -> Value {
+    value_to_json_xsd(tde, false)
+}
+
+/// `xsd_10` selects the request's XSD canonicalization version and is
+/// forwarded to the registered decimal lexical hook. With no hook
+/// registered the output is identical to `value_to_json`.
+pub fn value_to_json_xsd(tde: &TypedDictEntry, xsd_10: bool) -> Value {
     match tde.datatype() {
         Datatype::Boolean => Value::Bool(tde.as_val::<bool, bool>()),
         Datatype::Token => {
@@ -187,16 +258,20 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::String => Value::String(tde.as_val::<String, String>()),
         Datatype::Decimal => {
             let s = tde.as_val::<Decimal, String>();
+            let s = match *DECIMAL_LEXICAL_HOOK.read().unwrap() {
+                Some(hook) => hook(&s, xsd_10),
+                None => s,
+            };
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::BigInt => {
             let s = tde.as_val::<Integer, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::GYear => Value::String(tde.as_val::<GYear, String>()),
@@ -223,6 +298,7 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::NCName => Value::String(tde.as_val::<NCName, String>()),
         Datatype::Notation => Value::String(tde.as_val::<Notation, String>()),
         Datatype::QName => Value::String(tde.as_val::<QName, String>()),
+        Datatype::SQName => Value::String(tde.as_val::<SQName, String>()),
         Datatype::ID => Value::String(tde.as_val::<ID, String>()),
         Datatype::IDRef => Value::String(tde.as_val::<IDRef, String>()),
         Datatype::Entity => Value::String(tde.as_val::<Entity, String>()),
@@ -230,28 +306,28 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
             let s = tde.as_val::<PositiveInteger, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::NonNegativeInteger => {
             let s = tde.as_val::<NonNegativeInteger, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::NonPositiveInteger => {
             let s = tde.as_val::<NonPositiveInteger, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::NegativeInteger => {
             let s = tde.as_val::<NegativeInteger, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::Date => Value::String(tde.as_val::<Date, String>()),
@@ -263,6 +339,7 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::Base64Binary => Value::String(tde.as_val::<Base64Binary, String>()),
         Datatype::HexBinary => Value::String(tde.as_val::<HexBinary, String>()),
         Datatype::AnySimpleType => Value::String(tde.as_val::<AnySimpleType, String>()),
+        Datatype::DateTimeInterval => Value::String(interval_entry_to_string(tde)),
     }
 }
 
@@ -362,6 +439,9 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::QName => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<QName, String>()))
         }
+        Datatype::SQName => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<SQName, String>()))
+        }
         Datatype::ID => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<ID, String>()))
         }
@@ -426,16 +506,22 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::AnySimpleType => juniper::Value::Scalar(DefaultScalarValue::String(
             tde.as_val::<AnySimpleType, String>(),
         )),
+        Datatype::DateTimeInterval => {
+            juniper::Value::Scalar(DefaultScalarValue::String(interval_entry_to_string(tde)))
+        }
     }
 }
 
-pub fn enum_node_to_value(enum_type: &str, enum_uri: &str) -> String {
-    let enum_list: Vec<&str> = enum_uri.split(enum_type).collect();
-    // 1.. is from slash on
-    let enum_value = &(enum_list[1])[1..];
-    enum_value.to_string()
+pub fn enum_node_to_value(_enum_type: &str, enum_uri: &str) -> String {
+    // the lexical is always the last encoded segment — members may live
+    // under the enum's @base rather than its own IRI
+    let pos = enum_uri.rfind('/').unwrap();
+    let encoded = &enum_uri[pos + 1..];
+    urlencoding::decode(encoded).unwrap().to_string()
 }
 
+/// TODO: Generic scalar input value type for future GraphQL input handling.
+#[allow(dead_code)]
 pub enum ScalarInputValue {
     Boolean(bool),
     Int(i32),
@@ -461,4 +547,93 @@ pub fn value_to_array_index(tde: &TypedDictEntry) -> usize {
     tde.as_val::<NonNegativeInteger, Integer>()
         .try_into()
         .expect("couldn't cast array element index to a usize")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn base_type_kind_sorts_integer_types_by_storage_width() {
+        // These storage types fit inside GraphQL's 32-bit Int.
+        for name in ["byte", "short", "int", "unsignedByte", "unsignedShort"] {
+            assert_eq!(BaseTypeKind::SmallInteger, base_type_kind(name), "{name}");
+        }
+        // GraphQL's Int cannot express bounds for wider storage types, so
+        // they filter and serialize through the BigInt scalar.
+        for name in [
+            "long",
+            "unsignedInt",
+            "unsignedLong",
+            "integer",
+            "positiveInteger",
+            "nonNegativeInteger",
+            "negativeInteger",
+            "nonPositiveInteger",
+        ] {
+            assert_eq!(BaseTypeKind::BigIntger, base_type_kind(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn base_type_kind_recognizes_float_and_decimal() {
+        assert_eq!(BaseTypeKind::Float, base_type_kind("float"));
+        assert_eq!(BaseTypeKind::Float, base_type_kind("double"));
+        assert_eq!(BaseTypeKind::Decimal, base_type_kind("decimal"));
+    }
+
+    #[test]
+    fn value_to_bigint_reads_every_integer_storage_type() {
+        assert_eq!(Integer::from(-5), value_to_bigint(&i8::make_entry(&-5i8)));
+        assert_eq!(Integer::from(-5), value_to_bigint(&i16::make_entry(&-5i16)));
+        assert_eq!(Integer::from(-5), value_to_bigint(&i32::make_entry(&-5)));
+        assert_eq!(
+            Integer::from(i64::MIN),
+            value_to_bigint(&i64::make_entry(&i64::MIN))
+        );
+        assert_eq!(
+            Integer::from(u8::MAX),
+            value_to_bigint(&u8::make_entry(&u8::MAX))
+        );
+        assert_eq!(
+            Integer::from(u16::MAX),
+            value_to_bigint(&u16::make_entry(&u16::MAX))
+        );
+        assert_eq!(
+            Integer::from(u32::MAX),
+            value_to_bigint(&u32::make_entry(&u32::MAX))
+        );
+        assert_eq!(
+            Integer::from(u64::MAX),
+            value_to_bigint(&u64::make_entry(&u64::MAX))
+        );
+        assert_eq!(
+            Integer::from(7),
+            value_to_bigint(&Integer::make_entry(&Integer::from(7)))
+        );
+        assert_eq!(
+            Integer::from(7),
+            value_to_bigint(&PositiveInteger::make_entry(&PositiveInteger(
+                Integer::from(7)
+            )))
+        );
+        assert_eq!(
+            Integer::from(-7),
+            value_to_bigint(&NegativeInteger::make_entry(&NegativeInteger(
+                Integer::from(-7)
+            )))
+        );
+        assert_eq!(
+            Integer::from(0),
+            value_to_bigint(&NonNegativeInteger::make_entry(&NonNegativeInteger(
+                Integer::from(0)
+            )))
+        );
+        assert_eq!(
+            Integer::from(-7),
+            value_to_bigint(&NonPositiveInteger::make_entry(&NonPositiveInteger(
+                Integer::from(-7)
+            )))
+        );
+    }
 }

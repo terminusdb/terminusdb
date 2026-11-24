@@ -21,14 +21,39 @@ endif
 
 ifeq "$(shell uname)" "Darwin"
   DYLIB_EXT := dylib
-  FEATURES := --no-default-features
+  # Disable default features on macOS to exclude jemalloc background_threads
+  # (background_threads requires Linux pthreads, prints warning on macOS)
+  FEATURES ?= --no-default-features
 else
   DYLIB_EXT := so
-  FEATURES :=
+  # Default features include jemalloc-bg-threads for Linux performance
+  FEATURES ?=
 endif
 
 TARGET := $(COMMUNITY_SRC_DIR)/librust.$(DYLIB_EXT)
 CARGO_BUILD_TARGET := $(BUILD_DIR)/target/$(PROFILE)/libterminusdb_dylib.$(DYLIB_EXT)
+
+# DIST-tracking stamp.
+#
+# The shipped dylib lives at a single fixed path ($(TARGET) = librust.$(DYLIB_EXT))
+# regardless of distribution, but its contents differ between community and enterprise:
+# the enterprise dylib exports extra Prolog FFI.
+#
+# Without tracking, switching DIST between builds leaves the previous dylib in place
+# (it is newer than its cargo prerequisites, so the copy step is skipped) and tests
+# fail with "Unknown procedure" errors for missing FFI predicates. The traditional
+# workaround is `make clean && make && make test`, which is obtrusive.
+#
+# Instead we record the last DIST used to produce $(TARGET) in a stamp file. If the
+# current DIST does not match, we remove $(TARGET) at parse time so the normal copy
+# rule fires and refreshes it from the correct cargo build directory. When DIST is
+# unchanged this is a no-op.
+LAST_DIST_FILE := $(COMMUNITY_SRC_DIR)/.last-dist
+LAST_DIST := $(shell cat $(LAST_DIST_FILE) 2>/dev/null)
+ifneq ($(LAST_DIST),$(DIST))
+  $(shell rm -f $(TARGET))
+  $(shell printf '%s' '$(DIST)' > $(LAST_DIST_FILE))
+endif
 
 ################################################################################
 
@@ -51,3 +76,38 @@ $(TARGET): $(CARGO_BUILD_TARGET)
 
 $(CARGO_BUILD_TARGET): $(shell find $(COMMUNITY_SRC_DIR) $(BUILD_DIR) -type f \( -name '*.rs' -o -name 'Cargo.*' \))
 	cd $(BUILD_DIR) && cargo build $(FEATURES) --profile $(PROFILE)
+
+################################################################################
+
+# Rust plugin crates.
+#
+# Each subdirectory of plugins/ that contains a Cargo.toml is built as a
+# standalone cdylib. The resulting shared object is copied to the plugins/
+# directory so that load_foreign_plugins/2 can discover and load it at
+# runtime.
+PLUGINS_DIR := plugins
+
+# Find all Cargo.toml files under plugins/ (excluding nested target dirs
+# and the bridge API crate, which is a library for C/Go plugins, not a
+# standalone plugin itself)
+PLUGIN_CRATES := $(patsubst %/Cargo.toml,%,$(filter-out %/target/%,$(filter-out $(PLUGINS_DIR)/terminusdb_plugin_api/Cargo.toml,$(wildcard $(PLUGINS_DIR)/*/Cargo.toml))))
+
+.PHONY: plugins-rust
+plugins-rust:
+	@for crate in $(PLUGIN_CRATES); do \
+		echo "Building Rust plugin: $$crate"; \
+		(cd $$crate && cargo build --profile $(PROFILE) 2>&1) || exit 1; \
+		libname=$$(cd $$crate && cargo metadata --no-deps --format-version 1 2>/dev/null \
+			| python3 -c "import sys,json; print(json.load(sys.stdin)['packages'][0]['name'].replace('-','_'))"); \
+		src="$$crate/target/$(PROFILE)/lib$${libname}.$(DYLIB_EXT)"; \
+		dest="$(PLUGINS_DIR)/lib$${libname}.$(DYLIB_EXT)"; \
+		if [ -f "$$src" ]; then cp "$$src" "$$dest"; echo "  → $$dest"; fi; \
+	done
+
+.PHONY: plugins-rust-clean
+plugins-rust-clean:
+	@for crate in $(PLUGIN_CRATES); do \
+		echo "Cleaning Rust plugin: $$crate"; \
+		(cd $$crate && cargo clean 2>/dev/null) || true; \
+	done
+	@rm -f $(PLUGINS_DIR)/lib*.$(DYLIB_EXT)

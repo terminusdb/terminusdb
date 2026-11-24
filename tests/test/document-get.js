@@ -1,4 +1,4 @@
-const JsonlParser = require('stream-json/jsonl/Parser')
+const { parser: JsonlParser } = require('stream-json/jsonl/parser.js')
 const { expect } = require('chai')
 const { Agent, api, db, document, Params, util } = require('../lib')
 
@@ -94,7 +94,7 @@ describe('document-get', function () {
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document.get(agent, option).unverified().pipe(new JsonlParser())
+        const r = await document.get(agent, option).unverified().pipe(JsonlParser.asStream())
         expectSchemaJsonl(r)
       })
     }
@@ -159,7 +159,7 @@ describe('document-get', function () {
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document.get(agent, option).unverified().pipe(new JsonlParser())
+        const r = await document.get(agent, option).unverified().pipe(JsonlParser.asStream())
         const objects = []
         r.on('data', (data) => {
           objects.push(data.value)
@@ -214,6 +214,54 @@ describe('document-get', function () {
         expectInstances(r.body, instancesExpected, params)
       })
     }
+  })
+
+  describe('returns document counts for counted=true', function () {
+    const options = [
+      [{ query: { counted: true, type: 'Person' } }, 3],
+      [{ body: { counted: true, type: 'Person' } }, 3],
+      [{ query: { counted: true } }, 3],
+      [{ body: { counted: true } }, 3],
+      [{ query: { counted: true, graph_type: 'schema' } }, 2],
+      [{ query: { counted: true, graph_type: 'schema', type: 'sys:Class' } }, 1],
+      // counted ignores skip and count pagination
+      [{ query: { counted: true, skip: 2, count: 1 } }, 3],
+    ]
+    for (const [option, expectedCount] of options) {
+      it(JSON.stringify(option), async function () {
+        const r = await document.get(agent, option)
+        expect(r.body).to.deep.equal({
+          '@type': 'api:DocumentCountResponse',
+          'api:count': expectedCount,
+        })
+      })
+    }
+  })
+
+  describe('fails counted combined with document selectors', function () {
+    it('with id as query parameter', async function () {
+      await document
+        .get(agent, { query: { counted: true, id: personId(plato) } })
+        .fails({ '@type': 'api:CountedNotSupportedForSelector' })
+    })
+
+    it('with id in body', async function () {
+      await document
+        .get(agent, { body: { counted: true, id: personId(plato) } })
+        .fails({ '@type': 'api:CountedNotSupportedForSelector' })
+    })
+
+    it('with query selector in body', async function () {
+      await document
+        .get(agent, { query: { counted: true }, body: { query: { '@type': 'Person', name: 'Plato' } } })
+        .fails({ '@type': 'api:CountedNotSupportedForSelector' })
+    })
+
+    it('with counted and query in body', async function () {
+      await document
+        .get(agent, { body: { counted: true, query: { '@type': 'Person', name: 'Plato' } } })
+        .fails({ '@type': 'api:CountedNotSupportedForSelector' })
+    })
   })
 
   describe('returns expected for prefixed=false ("prefixed" is not supported yet)', function () {
@@ -427,6 +475,51 @@ describe('document-get', function () {
     it(JSON.stringify(q2), async function () {
       const r = await document.get(agent, { body: { query: q2, as_list: true } })
       expectInstances(r.body, [socratesExpected, gödelExpected])
+    })
+  })
+
+  describe('Content-Type header on GET with empty body', function () {
+    // Regression test for Rust webserver: GET /api/document with
+    // Content-Type: application/json and an empty body returned 400
+    // "Submitted object was not valid JSON" because the Prolog handler
+    // attempted to JSON-parse the empty body. The fix is in
+    // http_read_json_semidet: fail semidet when content_length is 0
+    // rather than attempting to parse an empty stream.
+    it('returns 200 with Content-Type: application/json and empty body', async function () {
+      const r = await agent.get(`/api/document/${agent.orgName}/${agent.dbName}`)
+        .set('Content-Type', 'application/json')
+        .query({ graph_type: 'instance', as_list: true })
+      expect(r.status).to.equal(200)
+      expect(r.body).to.have.length(instancesExpected.length)
+    })
+
+    it('returns 200 without Content-Type header', async function () {
+      const r = await agent.get(`/api/document/${agent.orgName}/${agent.dbName}`)
+        .query({ graph_type: 'instance', as_list: true })
+      expect(r.status).to.equal(200)
+      expect(r.body).to.have.length(instancesExpected.length)
+    })
+  })
+
+  describe('streaming formats surface real error status', function () {
+    // Streaming formats (markdown, embedding) committed 200 + chunked
+    // headers before resolving documents, so errors landed in the body
+    // as an embedded "Status: NNN" block instead of a real HTTP status.
+    for (const format of ['markdown', 'embedding']) {
+      it(`${format} returns 404 JSON for a missing document`, async function () {
+        const r = await agent.get(`/api/document/${agent.orgName}/${agent.dbName}`)
+          .query({ graph_type: 'instance', id: 'Person/Missing', format })
+        expect(r.status).to.equal(404)
+        expect(r.body['api:status']).to.equal('api:not_found')
+      })
+    }
+
+    it('markdown still streams a matching document', async function () {
+      const r = await agent.get(`/api/document/${agent.orgName}/${agent.dbName}`)
+        .query({ graph_type: 'instance', id: personId(aristotleExpected), format: 'markdown' })
+      expect(r.status).to.equal(200)
+      expect(r.headers['content-type']).to.match(/^text\/markdown/)
+      expect(r.text).to.include('Aristotle')
     })
   })
 })

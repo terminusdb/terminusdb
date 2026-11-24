@@ -1,7 +1,9 @@
 :- module('document/patch',
           [   simple_patch/4,
+              diff_with_subdocument_ids/3,
               diff_op/2,
-              get_dict_or_null/3
+              get_dict_or_null/3,
+              strip_wire_hints/2
           ]).
 
 :- use_module(core(util)).
@@ -15,6 +17,8 @@
 :- use_module(library(plunit)).
 
 :- use_module(library(option)).
+
+:- use_module(core(query/jsonld)).
 
 %
 % simple_patch(+Diff,+JSON,-Success_or_Conflict,+Options) is det.
@@ -42,17 +46,115 @@ simple_patch(Diff,Before,After,Options) :-
 simple_patch(Diff,Before,After,Options) :-
     diff_op(Diff,Op),
     !,
-    simple_op_diff_value(Op, Diff, Before, After, Options).
+    (   simple_op_diff_value(Op, Diff, Before, After, Options)
+    ->  true
+    ;   unaligned_patch_conflict(Diff, Before, After)
+    ).
 simple_patch(Before,Original,Final,Options) :-
     check_before_after(Original,Before,Original,Final,Options).
 
 simple_patch_list(Diff,List_In,Result,Options) :-
     is_list(List_In),
+    subdocument_ids(Diff),
+    subdocument_ids(List_In),
+    !,
+    simple_patch_list_by_id(Diff,List_In,Result,Options).
+simple_patch_list(Diff,List_In,Result,Options) :-
+    is_list(List_In),
+    same_length(Diff,List_In),
     !,
     maplist({Options}/[Patch,Elt,Patched]>>
             simple_patch(Patch,Elt,Patched,Options),
             Diff,List_In,List_Out),
     promote_list_conflict(List_Out,Result).
+simple_patch_list(Diff,List_In,Result,_Options) :-
+    unaligned_patch_conflict(Diff,List_In,Result).
+
+% A positional patch that does not fit the value it meets would apply
+% changes to the wrong elements, so it is a conflict, never a failure.
+unaligned_patch_conflict(Diff, Found, conflict(json{'@op' : 'Conflict',
+                                                    '@expected' : Diff,
+                                                    '@found' : Found})).
+
+subdocument_ids(List) :-
+    List \= [],
+    forall(member(Element, List),
+           (   is_dict(Element),
+               \+ diff_op(Element, _),
+               get_dict('@id', Element, _))).
+
+% Elements are matched by @id, so changes on either side that add, remove
+% or reorder other subdocuments do not move a patch onto the wrong element.
+simple_patch_list_by_id(Diff,List_In,Result,Options) :-
+    maplist({Diff,Options}/[Element,Patched]>>
+            (   get_dict('@id', Element, Id),
+                member(Patch, Diff),
+                get_dict('@id', Patch, Id)
+            ->  simple_patch(Patch,Element,Patched,Options)
+            ;   Patched = success(Element)
+            ),
+            List_In,List_Out),
+    promote_list_conflict(List_Out,Patched_Result),
+    findall(json{'@op' : 'DeleteEditConflict',
+                 '@id' : Id,
+                 '@deleted_by' : "ours"},
+            (   member(Patch, Diff),
+                get_dict('@id', Patch, Id),
+                \+ (   member(Element, List_In),
+                       get_dict('@id', Element, Id)),
+                \+ no_op_patch(Patch)
+            ),
+            Deleted_Edits),
+    (   Deleted_Edits = []
+    ->  Result = Patched_Result
+    ;   append_results(Patched_Result, conflict(Deleted_Edits), Result)
+    ).
+
+no_op_patch(Patch) :-
+    is_list(Patch),
+    !,
+    maplist(no_op_patch, Patch).
+no_op_patch(Patch) :-
+    is_dict(Patch),
+    \+ diff_op(Patch, _),
+    forall(get_dict(Key, Patch, Value),
+           (   Key = '@id'
+           ;   no_op_patch(Value))).
+
+%% diff_with_subdocument_ids(+Diff, +Before, -Diff_With_Ids) is det.
+%
+%  Copies the @id of each subdocument in Before into the element patch at
+%  the same position, so simple_patch_list aligns subdocuments by @id.
+diff_with_subdocument_ids(Diff, Before, Diff_With_Ids) :-
+    is_list(Diff),
+    is_list(Before),
+    same_length(Diff, Before),
+    !,
+    maplist(element_diff_with_subdocument_id, Diff, Before, Diff_With_Ids).
+diff_with_subdocument_ids(Diff, Before, Diff_With_Ids) :-
+    is_dict(Diff),
+    \+ diff_op(Diff, _),
+    is_dict(Before),
+    !,
+    dict_pairs(Diff, Tag, Pairs),
+    maplist({Before}/[Key-Value, Key-Value_With_Ids]>>
+            (   get_dict(Key, Before, Before_Value)
+            ->  diff_with_subdocument_ids(Value, Before_Value, Value_With_Ids)
+            ;   Value_With_Ids = Value
+            ),
+            Pairs, Pairs_With_Ids),
+    dict_pairs(Diff_With_Ids, Tag, Pairs_With_Ids).
+diff_with_subdocument_ids(Diff, _Before, Diff).
+
+element_diff_with_subdocument_id(Diff, Before, Diff_With_Id) :-
+    diff_with_subdocument_ids(Diff, Before, Diff_With_Ids),
+    (   is_dict(Diff_With_Ids),
+        \+ diff_op(Diff_With_Ids, _),
+        is_dict(Before),
+        get_dict('@id', Before, Id)
+    ->  put_dict('@id', Diff_With_Ids, Id, Diff_With_Id)
+    ;   Diff_With_Id = Diff_With_Ids
+    ).
 
 promote_list_conflict(List_In,Result) :-
     (   maplist([Pre,Patch]>>
@@ -111,12 +213,122 @@ pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff,
 % In Prolog, atoms and strings don't unify even with identical characters,
 % so we convert both to atoms before comparison.
 %
+% Numbers are compared by numeric equality so that representations such
+% as a stored xsd:decimal rational (e.g. 11r10) and a JSON float (e.g. 1.1)
+% are treated as equal.  Dicts and lists are compared structurally.
+%
+% Typed wire literals carry ^^ as a type hint, not as part of the value.
+strip_typed_literal(V, Bare) :-
+    (   nonvar(V), V = Bare^^_
+    ->  true
+    ;   Bare = V
+    ).
+
+%
+% strip_wire_hints(+Term, -Stripped) is det.
+%
+% Recursively strip ^^ type tags from a patch result.  The tags are parse
+% metadata for storage typing — a patch response is plain JSON, and the
+% response serializer cannot write the compound.  Only used on results
+% that are rendered back to the caller; storage paths keep the tags.
+strip_wire_hints(X, Y) :-
+    (   nonvar(X), X = Bare^^_
+    ->  Y = Bare
+    ;   is_dict(X)
+    ->  dict_pairs(X, Tag, Pairs),
+        maplist([K-V,K-W]>>strip_wire_hints(V,W), Pairs, Pairs1),
+        dict_pairs(Y, Tag, Pairs1)
+    ;   is_list(X)
+    ->  maplist(strip_wire_hints, X, Y)
+    ;   compound(X)   % success(After) / conflict(...) result wrappers
+    ->  X =.. [F|Args],
+        maplist(strip_wire_hints, Args, Args1),
+        Y =.. [F|Args1]
+    ;   Y = X
+    ).
+
 values_equal(V1, V2) :-
+    strip_typed_literal(V1, W1),
+    strip_typed_literal(V2, W2),
+    values_equal_(W1, W2).
+
+values_equal_(V1, V2) :-
+    number(V1),
+    number(V2),
+    !,
+    V1 =:= V2.
+values_equal_(V1, V2) :-
+    (   is_dict(V1)
+    ;   is_dict(V2)
+    ;   is_list(V1)
+    ;   is_list(V2)
+    ),
+    !,
+    V1 = V2.
+values_equal_(V1, V2) :-
     % Convert both to atoms for comparison
     (   atom(V1) -> A1 = V1 ; atom_string(A1, V1)),
     (   atom(V2) -> A2 = V2 ; atom_string(A2, V2)),
     A1 = A2.
 
+%
+% values_equal(+Value1, +Value2, +Prefixes) is semidet.
+%
+% Compare two values using canonical IRI expansion. Both string/atom
+% values are expanded via prefix_expand/3 using the provided Prefixes
+% context before comparison. Non-string values delegate to
+% values_equal/2.
+%
+values_equal(V1, V2, Prefixes) :-
+    strip_typed_literal(V1, W1),
+    strip_typed_literal(V2, W2),
+    values_equal_(W1, W2, Prefixes).
+
+values_equal_(V1, V2, _Prefixes) :-
+    (   number(V1)
+    ;   number(V2)
+    ;   is_dict(V1)
+    ;   is_dict(V2)
+    ;   is_list(V1)
+    ;   is_list(V2)
+    ),
+    !,
+    values_equal(V1, V2).
+values_equal_(V1, V2, Prefixes) :-
+    (   atom(V1) -> A1 = V1 ; atom_string(A1, V1)),
+    (   atom(V2) -> A2 = V2 ; atom_string(A2, V2)),
+    (   A1 = A2
+    ->  true
+    %   Empty strings are values, not keys — prefix_expand would throw
+    %   empty_key, so only expand when both sides are non-empty.
+    ;   A1 \= '',
+        A2 \= '',
+        prefix_expand(A1, Prefixes, E1),
+        prefix_expand(A2, Prefixes, E2),
+        atom_string(E1, E1_String),
+        atom_string(E2, E2_String),
+        E1_String = E2_String
+    ).
+
+check_before_after(Original, Before, After, Final, Options) :-
+    option(match_final_state(true), Options),
+    option(prefixes(Prefixes), Options),
+    !,
+    (   values_equal(Original, After, Prefixes)
+    ->  Final = success(After)
+    ;   values_equal(Original, Before, Prefixes)
+    ->  Final = success(After)
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
+    ).
+check_before_after(Original, Before, After, Final, Options) :-
+    option(prefixes(Prefixes), Options),
+    !,
+    (   values_equal(Original, Before, Prefixes)
+    ->  Final = success(After)
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
+    ).
 check_before_after(Original, Before, After, Final, Options) :-
     option(match_final_state(true), Options),
     !,
@@ -124,17 +336,30 @@ check_before_after(Original, Before, After, Final, Options) :-
     ->  Final = success(After)
     ;   values_equal(Original, Before)
     ->  Final = success(After)
-    ;   Final = conflict(json{ '@op' : 'Conflict',
-                               '@expected' : Before,
-                               '@found' : Original })
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
     ).
-check_before_after(Original, Before, After, Final, _Options) :-
+check_before_after(Original, Before, After, Final, Options) :-
     (   values_equal(Original, Before)
     ->  Final = success(After)
-    ;   Final = conflict(json{ '@op' : 'Conflict',
-                               '@expected' : Before,
-                               '@found' : Original })
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
     ).
+
+% conflict_json(+Before, +Original, +After, +Options, -Conflict) is det.
+%
+%  '@incoming' names the value the diff was carrying (the source side of
+%  a merge). Opt-in via conflict_incoming(true) — bare callers get the
+%  historical two-value witness.
+conflict_json(Before, Original, After, Options, Conflict) :-
+    (   option(conflict_incoming(true), Options)
+    ->  Conflict = json{ '@op' : 'Conflict',
+                         '@expected' : Before,
+                         '@found' : Original,
+                         '@incoming' : After }
+    ;   Conflict = json{ '@op' : 'Conflict',
+                         '@expected' : Before,
+                         '@found' : Original }).
 
 non_conflict_list(List, Conflict) :-
     maplist([_,null]>>true, List, Conflict).
@@ -775,7 +1000,7 @@ test(deep_list_patch_conflict, []) :-
 		                       ]
                    }.
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 test(read_state, []) :-
 
@@ -959,5 +1184,314 @@ test(star_wars_films_patch, []) :-
 	                   url:"http://swapi.co/api/starships/12/"
 	                 }).
 
+% ------------------------------------------------------------------
+% Tests for values_equal/2 with dicts, lists, and numbers
+% (Regression: atom_string/2 crashes on dict arguments)
+% ------------------------------------------------------------------
+
+test(swap_null_to_subdocument, []) :-
+    %% SwapValue from null to a subdocument dict — the original crash case.
+    Before = _{ '@id' : "Entity/e1",
+                '@type' : "Entity",
+                quantity : null
+              },
+    SubDoc = json{ '@id' : "Entity/e1/quantity/Quantity/1",
+                   '@type' : "Quantity",
+                   value : 42
+                 },
+    Patch = _{ quantity : _{ '@op' : "SwapValue",
+                             '@before' : null,
+                             '@after' : SubDoc }
+             },
+    After = _{ '@id' : "Entity/e1",
+               '@type' : "Entity",
+               quantity : SubDoc
+             },
+    simple_patch(Patch, Before, success(After), []).
+
+test(swap_subdocument_to_null, []) :-
+    %% SwapValue from a subdocument dict back to null.
+    SubDoc = json{ '@id' : "Entity/e1/quantity/Quantity/1",
+                   '@type' : "Quantity",
+                   value : 42
+                 },
+    Before = _{ '@id' : "Entity/e1",
+                '@type' : "Entity",
+                quantity : SubDoc
+              },
+    Patch = _{ quantity : _{ '@op' : "SwapValue",
+                             '@before' : SubDoc,
+                             '@after' : null }
+             },
+    After = _{ '@id' : "Entity/e1",
+               '@type' : "Entity",
+               quantity : null
+             },
+    simple_patch(Patch, Before, success(After), []).
+
+test(swap_between_subdocuments, []) :-
+    %% SwapValue between two different subdocument dicts.
+    SubDoc1 = json{ '@id' : "Entity/e1/quantity/Quantity/1",
+                    '@type' : "Quantity",
+                    value : 42
+                  },
+    SubDoc2 = json{ '@id' : "Entity/e1/quantity/Quantity/2",
+                    '@type' : "Quantity",
+                    value : 99
+                  },
+    Before = _{ '@id' : "Entity/e1",
+                '@type' : "Entity",
+                quantity : SubDoc1
+              },
+    Patch = _{ quantity : _{ '@op' : "SwapValue",
+                             '@before' : SubDoc1,
+                             '@after' : SubDoc2 }
+             },
+    After = _{ '@id' : "Entity/e1",
+               '@type' : "Entity",
+               quantity : SubDoc2
+             },
+    simple_patch(Patch, Before, success(After), []).
+
+test(swap_string_value_regression, []) :-
+    %% Regression: normal string SwapValue must still work.
+    Before = _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "alice"
+              },
+    Patch = _{ name : _{ '@op' : "SwapValue",
+                         '@before' : "alice",
+                         '@after' : "bob" }
+             },
+    After = _{ '@id' : "Person/1",
+               '@type' : "Person",
+               name : "bob"
+             },
+    simple_patch(Patch, Before, success(After), []).
+
+test(values_equal_dict_identity, []) :-
+    %% Direct unit test: equal dicts should unify.
+    D = json{ '@type' : "Quantity", value : 1 },
+    values_equal(D, D).
+
+test(values_equal_dict_not_equal, [fail]) :-
+    %% Direct unit test: different dicts must fail.
+    D1 = json{ '@type' : "Quantity", value : 1 },
+    D2 = json{ '@type' : "Quantity", value : 2 },
+    values_equal(D1, D2).
+
+test(values_equal_null_vs_dict, [fail]) :-
+    %% Direct unit test: null (atom) vs dict must fail, NOT throw.
+    D = json{ '@type' : "Quantity", value : 1 },
+    values_equal(null, D).
+
+test(values_equal_rational_and_float, []) :-
+    %% xsd:decimal is stored as a rational, but JSON supplies a float.
+    values_equal(11r10, 1.1).
+
+test(values_equal_float_and_integer, []) :-
+    values_equal(1.0, 1).
+
+test(values_equal_integer_and_decimal, []) :-
+    values_equal(1, 1r1).
+
+test(strip_wire_hints_deep, []) :-
+    %% Every arm: ^^ literals (incl. high-precision rational), dicts,
+    %% lists, result wrappers, plain scalars.
+    In = success(_{ a : 11r10^^'xsd:decimal',
+                    b : [ 987654321098765432109r100000000000000000000^^'xsd:decimal',
+                          "s", 3 ],
+                    c : conflict(_{ d : 1r3^^'xsd:decimal' }) }),
+    strip_wire_hints(In, Out),
+    Out = success(_{ a : 11r10,
+                     b : [ R, "s", 3 ],
+                     c : conflict(_{ d : 1r3 }) }),
+    %% High-precision rational survives stripping unchanged.
+    R =:= 9.87654321098765432109.
+
+test(swap_decimal_value, []) :-
+    %% Regression: patching a decimal property with a float SwapValue
+    %% must not produce a conflict when the stored value is equal.
+    Before = _{ '@id' : "Test/1",
+                '@type' : "Test",
+                weight : 11r10 },
+    Patch = _{ weight : _{ '@op' : "SwapValue",
+                           '@before' : 1.1,
+                           '@after' : 1.2 } },
+    After =  _{ '@id' : "Test/1",
+                '@type' : "Test",
+                weight : 1.2 },
+    simple_patch(Patch, Before, success(After), []).
+
+test(swap_decimal_value_json_preserve, []) :-
+    %% Verify the Rust parser path: wire decimals become rationals, so
+    %% a patch parsed from JSON matches the stored rational exactly.
+    JSON = '{ "patch": { "weight": { "@op": "SwapValue",
+                                      "@before": 1.1,
+                                      "@after": 1.2 } } }',
+    json_preserve:json_read_dict(JSON, Document, []),
+    Patch = Document.patch,
+    Before = _{ '@id' : "Test/1",
+                '@type' : "Test",
+                weight : 11r10 },
+    simple_patch(Patch, Before, success(_{ '@id' : "Test/1",
+                                             '@type' : "Test",
+                                             weight : 6r5^^'http://www.w3.org/2001/XMLSchema#decimal' }), []).
+
+test(swapvalue_empty_before_against_empty, []) :-
+    Before = _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : ""
+              },
+    Patch = _{ notes : _{ '@op' : "SwapValue",
+                          '@before' : "",
+                          '@after' : "first note" }
+             },
+    After =  _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : "first note"
+              },
+    simple_patch(Patch, Before, success(After),
+                 _{ prefixes : _{ '@base' : "http://somewhere.for.now/document/" } }).
+
+test(swapvalue_empty_before_against_nonempty_conflicts, []) :-
+    Before = _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : "existing"
+              },
+    Patch = _{ notes : _{ '@op' : "SwapValue",
+                          '@before' : "",
+                          '@after' : "overwrite" }
+             },
+    simple_patch(Patch, Before, conflict(Conflict),
+                 _{ prefixes : _{ '@base' : "http://somewhere.for.now/document/" } }),
+    Conflict = json{ notes : json{ '@expected' : "",
+                                   '@found' : "existing",
+                                   '@op' : 'Conflict' } }.
+
+test(force_value_flips_unconditionally, []) :-
+    Before = _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : "anything"
+              },
+    Patch = _{ notes : _{ '@op' : "ForceValue",
+                          '@after' : "flipped" }
+             },
+    After =  _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : "flipped"
+              },
+    simple_patch(Patch, Before, success(After), []).
+
+test(force_value_sets_missing_key, []) :-
+    Before = _{ '@id' : "Task/1",
+                '@type' : "Task"
+              },
+    Patch = _{ notes : _{ '@op' : "ForceValue",
+                          '@after' : "set" }
+             },
+    After =  _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : "set"
+              },
+    simple_patch(Patch, Before, success(After), []).
+
+test(patch_list_length_mismatch_is_conflict, []) :-
+    Patch = _{ variants : [ _{ price : _{ '@op' : "SwapValue",
+                                          '@before' : 20,
+                                          '@after' : 21 } },
+                            _{} ] },
+    Before = _{ variants : [ _{ price : 20 } ] },
+    simple_patch(Patch, Before, conflict(Conflict), []),
+    Conflict = json{ variants : json{ '@op' : 'Conflict',
+                                      '@expected' : _,
+                                      '@found' : [ _{ price : 20 } ] } }.
+
+test(diff_with_subdocument_ids_copies_before_ids, []) :-
+    Diff = _{ '@id' : "Product/tee",
+              variants : [ _{ price : _{ '@op' : "SwapValue",
+                                         '@before' : 20,
+                                         '@after' : 21 } },
+                           _{} ] },
+    Before = _{ '@id' : "Product/tee",
+                variants : [ _{ '@id' : "Product/tee/variants/Variant/B", price : 20 },
+                             _{ '@id' : "Product/tee/variants/Variant/R", price : 20 } ] },
+    diff_with_subdocument_ids(Diff, Before, Diff_With_Ids),
+    Diff_With_Ids.variants = [ B, R ],
+    B.'@id' == "Product/tee/variants/Variant/B",
+    dict_pairs(R, _, ['@id'-"Product/tee/variants/Variant/R"]).
+
+test(patch_subdocuments_by_id_keeps_added_and_removed_elements, []) :-
+    Patch = _{ variants : [ _{ '@id' : "V/B",
+                               price : _{ '@op' : "SwapValue",
+                                          '@before' : 20,
+                                          '@after' : 21 } },
+                            _{ '@id' : "V/R" } ] },
+    Before = _{ variants : [ _{ '@id' : "V/A", price : 18 },
+                             _{ '@id' : "V/B", price : 20 } ] },
+    simple_patch(Patch, Before, success(After), []),
+    After = json{ variants : [ _{ '@id' : "V/A", price : 18 },
+                               json{ '@id' : "V/B", price : 21 } ] }.
+
+test(patch_subdocuments_by_id_edit_of_removed_element_is_conflict, []) :-
+    Patch = _{ variants : [ _{ '@id' : "V/B",
+                               price : _{ '@op' : "SwapValue",
+                                          '@before' : 20,
+                                          '@after' : 21 } } ] },
+    Before = _{ variants : [ _{ '@id' : "V/A", price : 18 } ] },
+    simple_patch(Patch, Before, conflict(Conflict), []),
+    Conflict = json{ variants : [ null,
+                                  json{ '@op' : 'DeleteEditConflict',
+                                        '@id' : "V/B",
+                                        '@deleted_by' : "ours" } ] }.
+
 :- end_tests(simple_patch).
+
+:- begin_tests(values_equal_canonical).
+
+test(same_compressed_id, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    values_equal("Person/Bob", "Person/Bob", Prefixes).
+
+test(compressed_vs_expanded, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    values_equal("Person/Bob", "http://somewhere.for.now/document/Person/Bob", Prefixes).
+
+test(expanded_vs_compressed, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    values_equal("http://somewhere.for.now/document/Person/Bob", "Person/Bob", Prefixes).
+
+test(both_expanded, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    values_equal("http://somewhere.for.now/document/Person/Bob",
+                 "http://somewhere.for.now/document/Person/Bob", Prefixes).
+
+test(different_ids_not_equal, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    \+ values_equal("Person/Bob", "Person/Alice", Prefixes).
+
+test(no_prefixes_fallback, []) :-
+    values_equal("Person/Bob", "Person/Bob", _{}).
+
+test(number_comparison_with_prefixes, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    values_equal(1.1, 11r10, Prefixes).
+
+test(dict_comparison_with_prefixes, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    values_equal(json{x:1}, json{x:1}, Prefixes).
+
+test(empty_string_equal, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    values_equal("", "", Prefixes).
+
+test(empty_atom_vs_empty_string, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    values_equal('', "", Prefixes).
+
+test(empty_vs_nonempty_not_equal, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    \+ values_equal("", "x", Prefixes).
+
+:- end_tests(values_equal_canonical).
 

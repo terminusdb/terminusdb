@@ -86,6 +86,236 @@ describe('patch', function () {
       expect(res.body[0].enum).to.equal('D')
     })
 
+    it('move property on class that inherits another class', async function () {
+      const baseClass = util.randomString()
+      const childClass = util.randomString()
+
+      // Add an abstract base and a child that inherits it
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': baseClass,
+          '@abstract': [],
+        },
+        {
+          '@type': 'Class',
+          '@id': childClass,
+          '@inherits': [baseClass],
+          b: 'xsd:string',
+        },
+      ]
+      await document.insert(agent, { schema })
+
+      // Insert an instance of the child class
+      const instance = { '@type': childClass, b: 'hello' }
+      await document.insert(agent, { instance })
+
+      // MoveClassProperty: rename "b" to "z" on the child class
+      const migrationResult = await agent.post(`/api/migration/admin/${agent.dbName}`)
+        .send({
+          author: 'me',
+          message: 'move property on inheriting class',
+          verbose: true,
+          operations: [{
+            '@type': 'MoveClassProperty',
+            class: childClass,
+            from: 'b',
+            to: 'z',
+          }],
+        })
+
+      expect(migrationResult.status).to.equal(200)
+
+      // Verify the schema was updated: childClass should now have "z" instead of "b"
+      let updatedChild
+      for (const cls of migrationResult.body.schema) {
+        if (cls['@id'] === childClass) {
+          updatedChild = cls
+        }
+      }
+      expect(updatedChild).to.have.property('z', 'xsd:string')
+      expect(updatedChild).to.not.have.property('b')
+
+      // Verify instance data was migrated
+      const docs = await document.get(agent, { query: { type: childClass, as_list: true } })
+      expect(docs.body).to.have.length(1)
+      expect(docs.body[0]).to.have.property('z', 'hello')
+      expect(docs.body[0]).to.not.have.property('b')
+    })
+
+    it('create property on class that inherits another class', async function () {
+      const baseClass = util.randomString()
+      const childClass = util.randomString()
+
+      // Add an abstract base and a child that inherits it
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': baseClass,
+          '@abstract': [],
+        },
+        {
+          '@type': 'Class',
+          '@id': childClass,
+          '@inherits': [baseClass],
+          b: 'xsd:string',
+        },
+      ]
+      await document.insert(agent, { schema })
+
+      // CreateClassProperty: add optional property "c" on the child class
+      const migrationResult = await agent.post(`/api/migration/admin/${agent.dbName}`)
+        .send({
+          author: 'me',
+          message: 'create property on inheriting class',
+          verbose: true,
+          operations: [{
+            '@type': 'CreateClassProperty',
+            class: childClass,
+            property: 'c',
+            type: { '@type': 'Optional', '@class': 'xsd:string' },
+          }],
+        })
+
+      expect(migrationResult.status).to.equal(200)
+
+      // Verify the schema was updated: childClass should now have "c"
+      let updatedChild
+      for (const cls of migrationResult.body.schema) {
+        if (cls['@id'] === childClass) {
+          updatedChild = cls
+        }
+      }
+      expect(updatedChild).to.have.property('b', 'xsd:string')
+      expect(updatedChild).to.have.property('c')
+    })
+
+    it('change_key random to random preserves top-level id and subdoc ids', async function () {
+      const parentClass = util.randomString()
+      const childClass = util.randomString()
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': parentClass,
+          name: 'xsd:string',
+          child: childClass,
+        },
+        {
+          '@type': 'Class',
+          '@id': childClass,
+          '@subdocument': [],
+          '@key': { '@type': 'Random' },
+          value: 'xsd:string',
+        },
+      ]
+      await document.insert(agent, { schema })
+
+      const instance = {
+        '@type': parentClass,
+        name: 'alice',
+        child: { '@type': childClass, value: 'hello' },
+      }
+      const insertResult = await document.insert(agent, { instance }).unverified()
+      const [parentId] = insertResult.body
+
+      // Get the document before migration to capture IDs
+      const beforeDocs = await document.get(agent, { query: { id: parentId, as_list: true } })
+      const beforeDoc = beforeDocs.body[0]
+      const beforeChildId = beforeDoc.child['@id']
+
+      // Run ChangeKey with same strategy (Random -> Random)
+      const migrationResult = await agent.post(`/api/migration/admin/${agent.dbName}`)
+        .send({
+          author: 'me',
+          message: 'random to random migration',
+          operations: [{
+            '@type': 'ChangeKey',
+            class: parentClass,
+            key: 'Random',
+          }],
+        })
+
+      expect(migrationResult.status).to.equal(200)
+
+      // Get the document after migration
+      const afterDocs = await document.get(agent, { query: { type: parentClass, as_list: true } })
+      expect(afterDocs.body).to.have.length(1)
+      const afterDoc = afterDocs.body[0]
+
+      // Top-level ID must be preserved
+      expect(afterDoc['@id']).to.equal(beforeDoc['@id'])
+
+      // Subdocument ID must be preserved (was conforming)
+      expect(afterDoc.child['@id']).to.equal(beforeChildId)
+
+      // Data must be intact
+      expect(afterDoc.name).to.equal('alice')
+      expect(afterDoc.child.value).to.equal('hello')
+    })
+
+    it('change_key random to lexical regenerates all ids', async function () {
+      const parentClass = util.randomString()
+      const childClass = util.randomString()
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': parentClass,
+          name: 'xsd:string',
+          child: childClass,
+        },
+        {
+          '@type': 'Class',
+          '@id': childClass,
+          '@subdocument': [],
+          '@key': { '@type': 'Random' },
+          value: 'xsd:string',
+        },
+      ]
+      await document.insert(agent, { schema })
+
+      const instance = {
+        '@type': parentClass,
+        name: 'bob',
+        child: { '@type': childClass, value: 'world' },
+      }
+      const insertResult = await document.insert(agent, { instance }).unverified()
+      const [parentId] = insertResult.body
+
+      // Get the document before migration
+      const beforeDocs = await document.get(agent, { query: { id: parentId, as_list: true } })
+      const beforeDoc = beforeDocs.body[0]
+
+      // Run ChangeKey with different strategy (Random -> Lexical)
+      const migrationResult = await agent.post(`/api/migration/admin/${agent.dbName}`)
+        .send({
+          author: 'me',
+          message: 'random to lexical migration',
+          operations: [{
+            '@type': 'ChangeKey',
+            class: parentClass,
+            key: 'Lexical',
+            fields: ['name'],
+          }],
+        })
+
+      expect(migrationResult.status).to.equal(200)
+
+      // Get the document after migration
+      const afterDocs = await document.get(agent, { query: { type: parentClass, as_list: true } })
+      expect(afterDocs.body).to.have.length(1)
+      const afterDoc = afterDocs.body[0]
+
+      // Top-level ID must change (different strategy)
+      expect(afterDoc['@id']).to.not.equal(beforeDoc['@id'])
+      expect(afterDoc['@id']).to.equal(`${parentClass}/bob`)
+
+      // Data must be intact
+      expect(afterDoc.name).to.equal('bob')
+      expect(afterDoc.child.value).to.equal('world')
+    })
+
     it('infer destructive migration', async function () {
       const id = util.randomString()
       const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }

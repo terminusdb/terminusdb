@@ -3,109 +3,667 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TerminusDB Dashboard - Discontinued</title>
-    <link rel="stylesheet" href="/assets/output.css">
+    <title>TerminusDB</title>
+    <meta name="description" content="TerminusDB dashboard — open the data explorer and admin console, and see what this server reports about itself.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'nonce---TDB--CSP--DYNAMIC--CSP--NONCE--'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+    <meta name="csp-nonce" content="--TDB--CSP--DYNAMIC--CSP--NONCE--">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2306b6d4' stroke-width='2'%3E%3Cpath d='M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4'/%3E%3C/svg%3E">
+    <style>
+        :root {
+            --bg: #0a0e1a;
+            --surface: rgba(255, 255, 255, 0.04);
+            --surface-hover: rgba(255, 255, 255, 0.08);
+            --border: rgba(255, 255, 255, 0.09);
+            --text: #e7edf7;
+            --muted: #94a3c4;
+            --accent: #22d3ee;
+            --accent-deep: #0891b2;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(60rem 30rem at 15% -10%, rgba(34, 211, 238, 0.14), transparent 60%),
+                radial-gradient(50rem 30rem at 85% 0%, rgba(99, 102, 241, 0.16), transparent 60%),
+                radial-gradient(40rem 30rem at 50% 110%, rgba(8, 145, 178, 0.12), transparent 60%),
+                var(--bg);
+        }
+        .wrap {
+            max-width: 62rem;
+            margin: 0 auto;
+            padding: 4rem 1.5rem 3rem;
+        }
+        header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 3rem;
+        }
+        .logo {
+            width: 3rem;
+            height: 3rem;
+            display: grid;
+            place-items: center;
+            border-radius: 0.9rem;
+            background: linear-gradient(145deg, rgba(34, 211, 238, 0.2), rgba(99, 102, 241, 0.2));
+            border: 1px solid var(--border);
+        }
+        .logo svg { width: 1.8rem; height: 1.8rem; color: var(--accent); }
+        h1 {
+            margin: 0;
+            font-size: 1.9rem;
+            letter-spacing: -0.02em;
+        }
+        .tagline {
+            margin: 0.15rem 0 0;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        .chips {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .chip {
+            padding: 0.3rem 0.75rem;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--accent);
+            text-decoration: none;
+            transition: border-color 0.15s ease;
+        }
+        a.chip:hover {
+            border-color: rgba(34, 211, 238, 0.5);
+        }
+        .apps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 3rem;
+        }
+        .app-card {
+            display: flex;
+            align-items: center;
+            gap: 1.1rem;
+            padding: 1.5rem;
+            border-radius: 1rem;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            text-decoration: none;
+            color: inherit;
+            transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+        }
+        .app-card:hover {
+            background: var(--surface-hover);
+            border-color: rgba(34, 211, 238, 0.4);
+            transform: translateY(-2px);
+        }
+        .app-icon {
+            flex-shrink: 0;
+            width: 3rem;
+            height: 3rem;
+            display: grid;
+            place-items: center;
+            border-radius: 0.8rem;
+            background: linear-gradient(145deg, rgba(34, 211, 238, 0.15), rgba(34, 211, 238, 0.05));
+            color: var(--accent);
+        }
+        .app-icon svg { width: 1.5rem; height: 1.5rem; }
+        .app-card h2 {
+            margin: 0 0 0.25rem;
+            font-size: 1.05rem;
+            font-weight: 600;
+        }
+        .app-card p {
+            margin: 0;
+            font-size: 0.85rem;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+        .arrow {
+            margin-left: auto;
+            color: var(--muted);
+            flex-shrink: 0;
+            transition: color 0.15s ease, transform 0.15s ease;
+        }
+        .app-card:hover .arrow {
+            color: var(--accent);
+            transform: translateX(3px);
+        }
+        h3.section {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--muted);
+            margin: 0 0 1rem;
+        }
+        .info {
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            background: var(--surface);
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 3rem;
+        }
+        .info dl {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+            gap: 0.9rem 2rem;
+            margin: 0;
+        }
+        .info dt {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+        }
+        .info dd {
+            margin: 0.15rem 0 0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.85rem;
+            word-break: break-all;
+        }
+        .info .loading, .info .load-error {
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        .info .load-error { color: #fca5a5; }
+        .dot {
+            display: inline-block;
+            width: 0.5rem;
+            height: 0.5rem;
+            border-radius: 50%;
+            margin-right: 0.4rem;
+            vertical-align: baseline;
+        }
+        .dot.on { background: #34d399; }
+        .dot.off { background: #f87171; }
+        footer .links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem 1.75rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        footer a {
+            color: var(--muted);
+            font-size: 0.85rem;
+            text-decoration: none;
+            transition: color 0.15s ease;
+        }
+        footer a:hover { color: var(--accent); }
+        .auth-link {
+            color: inherit;
+            text-decoration: underline;
+            text-underline-offset: 0.2em;
+        }
+        .auth-link:hover { color: var(--accent); }
+        .logout-link {
+            color: var(--muted);
+            font-family: inherit;
+            font-size: 0.75rem;
+            text-decoration: none;
+            margin-left: 0.5rem;
+        }
+        .logout-link:hover { color: var(--accent); }
+        .login-link {
+            font-family: inherit;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--accent);
+            text-decoration: none;
+            margin-left: 0.5rem;
+        }
+        .login-link:hover { text-decoration: underline; }
+        .browse {
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            background: var(--surface);
+            padding: 0.75rem;
+            margin-bottom: 3rem;
+        }
+        .browse-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.8rem 0.9rem;
+            border-radius: 0.7rem;
+            color: inherit;
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: background 0.15s ease;
+        }
+        .browse-row:hover { background: var(--surface-hover); }
+        .browse-row .count {
+            margin-left: auto;
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+        .browse-row svg { flex-shrink: 0; color: var(--accent); }
+        .browse-back {
+            display: inline-block;
+            margin: 0.25rem 0 0.5rem;
+            color: var(--muted);
+            font-size: 0.85rem;
+            text-decoration: none;
+        }
+        .browse-back:hover { color: var(--accent); }
+        .browse .empty { color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0.9rem; }
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 8, 16, 0.55);
+            backdrop-filter: blur(10px) saturate(1.15);
+            -webkit-backdrop-filter: blur(10px) saturate(1.15);
+            display: grid;
+            place-items: center;
+            z-index: 10;
+        }
+        .modal-overlay[hidden] { display: none; }
+        .modal {
+            width: min(24rem, calc(100vw - 2rem));
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            background: #101527;
+            padding: 1.75rem;
+        }
+        .modal h2 { margin: 0 0 0.4rem; font-size: 1.2rem; }
+        .modal-sub { margin: 0 0 1.25rem; color: var(--muted); font-size: 0.85rem; }
+        .modal label {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            margin-bottom: 0.9rem;
+        }
+        .modal input {
+            display: block;
+            width: 100%;
+            margin-top: 0.35rem;
+            padding: 0.6rem 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text);
+            font-size: 0.95rem;
+            text-transform: none;
+            letter-spacing: normal;
+        }
+        .modal input:focus { outline: none; border-color: var(--accent); }
+        .modal-error { color: #fca5a5; font-size: 0.85rem; margin: 0 0 0.9rem; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+        .modal button {
+            padding: 0.55rem 1.1rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .modal button[type="submit"] {
+            background: linear-gradient(145deg, rgba(34, 211, 238, 0.25), rgba(34, 211, 238, 0.1));
+            border-color: rgba(34, 211, 238, 0.4);
+        }
+        .modal button:hover { border-color: var(--accent); }
+    </style>
 </head>
-<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen flex items-center justify-center p-4">
-    <div class="max-w-2xl w-full">
-        <!-- Card Container -->
-        <div class="bg-white/5 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/10 p-8 md:p-12">
-            <!-- Logo/Icon Area -->
-            <div class="flex justify-center mb-8">
-                <div class="w-20 h-20 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/50">
-                    <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+<body>
+    <div class="wrap">
+        <header>
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                    <path d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+                </svg>
+            </div>
+            <div>
+                <h1>TerminusDB</h1>
+                <p class="tagline">Knowledge Graph Database with Version Control</p>
+            </div>
+            <div class="chips">
+                <a class="chip" href="/dashboard/api.html">API</a>
+                <a class="chip" id="edition" href="https://terminusdb.org/docs/enterprise" hidden></a>
+            </div>
+        </header>
+
+        <h3 class="section">Applications</h3>
+        <div class="apps">
+            <a class="app-card" href="/app/data">
+                <div class="app-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"/>
                     </svg>
                 </div>
-            </div>
-
-            <!-- Title -->
-            <h1 class="text-3xl md:text-4xl font-bold text-white text-center mb-4">
-                TerminusDB Dashboard
-            </h1>
-
-            <!-- Status Badge -->
-            <div class="flex justify-center mb-6">
-                <span class="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/10 text-amber-400 rounded-full border border-amber-500/20 text-sm font-medium">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-                    </svg>
-                    Discontinued
-                </span>
-            </div>
-
-            <!-- Main Message -->
-            <div class="space-y-4 mb-8">
-                <p class="text-lg text-slate-300 text-center leading-relaxed">
-                    The TerminusDB Dashboard component has been discontinued and is no longer maintained.
-                </p>
-                <p class="text-slate-400 text-center">
-                    For information about alternative solutions, migration options, and instructions on how to continue using the legacy dashboard if needed, please visit our comprehensive documentation.
-                </p>
-            </div>
-
-            <!-- CTA Button -->
-            <div class="flex justify-center">
-                <a 
-                    href="https://terminusdb.org/docs/dashboard" 
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="group inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 transition-all duration-200 transform hover:scale-105"
-                >
-                    <span>View Documentation</span>
-                    <svg class="w-5 h-5 group-hover:translate-x-1 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
-                    </svg>
-                </a>
-            </div>
-
-            <!-- Footer Info -->
-            <div class="mt-12 pt-8 border-t border-white/10">
-                <p class="text-sm text-slate-500 text-center">
-                    Need help? Visit 
-                    <a href="https://terminusdb.org" class="text-cyan-400 hover:text-cyan-300 underline decoration-dotted transition-colors">
-                        terminusdb.org
-                    </a>
-                    or reach out to our community.
-                </p>
-            </div>
-        </div>
-
-        <!-- Additional Info Card -->
-        <div class="mt-6 bg-white/5 backdrop-blur-lg rounded-xl border border-white/10 p-6">
-            <h2 class="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                <svg class="w-5 h-5 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                <div>
+                    <h2>Data Explorer</h2>
+                    <p>Browse documents, run GraphQL and search across your data products.</p>
+                </div>
+                <svg class="arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
                 </svg>
-                Quick Links
-            </h2>
-            <ul class="space-y-2 text-slate-400 text-sm">
-                <li>
-                    <a href="https://terminusdb.org/docs" class="hover:text-cyan-400 transition-colors flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                        Full Documentation
-                    </a>
-                </li>
-                <li>
-                    <a href="https://github.com/terminusdb/terminusdb" class="hover:text-cyan-400 transition-colors flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path>
-                        </svg>
-                        GitHub Repository
-                    </a>
-                </li>
-                <li>
-                    <a href="https://discord.gg/terminusdb" class="hover:text-cyan-400 transition-colors flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"></path>
-                        </svg>
-                        Community Discord
-                    </a>
-                </li>
-            </ul>
+            </a>
+            <a class="app-card" href="/app/admin">
+                <div class="app-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Admin Console</h2>
+                    <p>Manage teams, data products, branches, roles and grants.</p>
+                </div>
+                <svg class="arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                </svg>
+            </a>
         </div>
+
+        <h3 class="section">Server</h3>
+        <div class="info" id="info">
+            <p class="loading">Reading /api/info…</p>
+        </div>
+
+        <h3 class="section" id="browse-title" hidden>Teams</h3>
+        <div class="browse" id="browse" hidden></div>
+
+        <footer>
+            <h3 class="section">Resources</h3>
+            <div class="links">
+                <a href="https://terminusdb.org">Homepage</a>
+                <a href="https://terminusdb.org/docs">Documentation</a>
+                <a href="https://github.com/terminusdb/terminusdb">GitHub</a>
+                <a href="/llms.txt">llms.txt — MCP onboarding</a>
+            </div>
+        </footer>
     </div>
+
+    <div class="modal-overlay" id="login-overlay" hidden>
+        <form class="modal" id="login-form" autocomplete="off">
+            <h2>Sign in</h2>
+            <p class="modal-sub">Your TerminusDB credentials — the same login the Data Explorer uses.</p>
+            <label>Username
+                <input id="login-user" name="username" autocomplete="username" required>
+            </label>
+            <label>Password
+                <input id="login-pass" name="password" type="password" autocomplete="current-password" required>
+            </label>
+            <p class="modal-error" id="login-error" hidden></p>
+            <div class="modal-actions">
+                <button type="button" id="login-cancel">Cancel</button>
+                <button type="submit">Sign in</button>
+            </div>
+        </form>
+    </div>
+
+    <script nonce="--TDB--CSP--DYNAMIC--CSP--NONCE--">
+        (function () {
+            var LABELS = {
+                "authority": "Authority",
+                "edition": "Edition",
+                "http_engine": "HTTP engine",
+                "storage.version": "Storage version",
+                "indexer.backend": "Indexer backend",
+                "indexer.available": "Indexer",
+                "indexer.configured": "Indexer configured",
+                "indexer.endpoint_available": "Indexer endpoint",
+                "indexer.tokenizer_available": "Indexer tokenizer"
+            };
+            var AUTH_KEY = "terminusdb_data_auth"; // same key the Data Explorer persists
+
+            var auth = (function () {
+                try {
+                    var a = JSON.parse(window.localStorage.getItem(AUTH_KEY));
+                    if (a && a.isAuthenticated && a.credentials && a.username) return a;
+                } catch (e) { /* ignore storage errors */ }
+                return null;
+            })();
+            var databases = null;
+
+            function el(tag, cls, text) {
+                var n = document.createElement(tag);
+                if (cls) n.className = cls;
+                if (text !== undefined) n.textContent = text;
+                return n;
+            }
+
+            function flatten(obj, prefix, out) {
+                Object.keys(obj || {}).forEach(function (k) {
+                    var v = obj[k];
+                    var key = prefix ? prefix + "." + k : k;
+                    if (v && typeof v === "object") flatten(v, key, out);
+                    else out.push([key, v]);
+                });
+                return out;
+            }
+
+            function api(path) {
+                var headers = {};
+                if (auth) headers["Authorization"] = "Basic " + auth.credentials;
+                return fetch(path, { headers: headers });
+            }
+
+            function currentTeam() {
+                var m = /^#team=(.+)$/.exec(window.location.hash || "");
+                return m ? decodeURIComponent(m[1]) : null;
+            }
+
+            function loadInfo() {
+                api("/api/info")
+                    .then(function (r) { return r.json(); })
+                    .then(function (res) {
+                        var info = res && res["api:info"];
+                        var host = document.getElementById("info");
+                        host.innerHTML = "";
+                        if (!info) {
+                            host.appendChild(el("p", "load-error", "Unexpected /api/info response."));
+                            return;
+                        }
+                        if (info.edition) {
+                            var chip = document.getElementById("edition");
+                            chip.textContent = info.edition;
+                            chip.hidden = false;
+                        }
+                        var dl = el("dl");
+                        flatten(info, "", []).forEach(function (pair) {
+                            var key = pair[0], value = pair[1];
+                            var dt = el("dt", "", LABELS[key] || key);
+                            var dd = el("dd");
+                            if (key === "authority") {
+                                var shown = String(value).replace(/^terminusdb:\/\/system\/data\//, "");
+                                var a = el("a", "auth-link", shown);
+                                a.href = "#";
+                                a.title = "Sign in";
+                                a.addEventListener("click", function (e) {
+                                    e.preventDefault();
+                                    openLogin();
+                                });
+                                dd.appendChild(a);
+                                if (auth) {
+                                    var lo = el("a", "logout-link", "(logout)");
+                                    lo.href = "#";
+                                    lo.addEventListener("click", function (e) {
+                                        e.preventDefault();
+                                        logout();
+                                    });
+                                    dd.appendChild(lo);
+                                } else {
+                                    var li = el("a", "login-link", "(login)");
+                                    li.href = "#";
+                                    li.addEventListener("click", function (e) {
+                                        e.preventDefault();
+                                        openLogin();
+                                    });
+                                    dd.appendChild(li);
+                                }
+                            } else if (typeof value === "boolean") {
+                                var dot = el("span", "dot " + (value ? "on" : "off"));
+                                dd.appendChild(dot);
+                                dd.appendChild(document.createTextNode(value ? "available" : "unavailable"));
+                            } else {
+                                dd.textContent = String(value);
+                            }
+                            var cell = el("div");
+                            cell.appendChild(dt);
+                            cell.appendChild(dd);
+                            dl.appendChild(cell);
+                        });
+                        host.appendChild(dl);
+                    })
+                    .catch(function () {
+                        document.getElementById("info").innerHTML =
+                            '<p class="load-error">Could not read /api/info — the server may still be starting.</p>';
+                    });
+            }
+
+            function groupedTeams() {
+                var teams = {};
+                var order = [];
+                (databases || []).forEach(function (d) {
+                    var p = d && d.path;
+                    var i = typeof p === "string" ? p.indexOf("/") : -1;
+                    if (i < 1) return;
+                    var org = p.slice(0, i);
+                    var db = p.slice(i + 1);
+                    if (!teams[org]) { teams[org] = []; order.push(org); }
+                    teams[org].push(db);
+                });
+                return { map: teams, order: order };
+            }
+
+            function renderBrowse() {
+                var box = document.getElementById("browse");
+                var title = document.getElementById("browse-title");
+                box.innerHTML = "";
+                if (!auth) {
+                    box.hidden = true;
+                    title.hidden = true;
+                    return;
+                }
+                box.hidden = false;
+                if (!databases) {
+                    title.textContent = "Teams";
+                    title.hidden = false;
+                    box.appendChild(el("p", "empty", "Loading…"));
+                    api("/api/db")
+                        .then(function (r) {
+                            if (!r.ok) throw new Error("db list failed: " + r.status);
+                            return r.json();
+                        })
+                        .then(function (list) {
+                            databases = Array.isArray(list) ? list : [];
+                            renderBrowse();
+                        })
+                        .catch(function (err) {
+                            box.innerHTML = "";
+                            box.appendChild(el("p", "empty", "Could not list data products: " + err.message));
+                        });
+                    return;
+                }
+                var teams = groupedTeams();
+                var team = currentTeam();
+                if (team && teams.map[team]) {
+                    title.textContent = team;
+                    var back = el("a", "browse-back", "← All teams");
+                    back.href = "#";
+                    box.appendChild(back);
+                    teams.map[team].forEach(function (db) {
+                        var row = el("a", "browse-row", db);
+                        row.href = "/app/data/" + encodeURIComponent(team) + "/" +
+                            encodeURIComponent(db) + "/local/branch/main";
+                        var arrow = el("span", "count", "→");
+                        row.appendChild(arrow);
+                        box.appendChild(row);
+                    });
+                    return;
+                }
+                title.textContent = "Teams";
+                title.hidden = false;
+                if (!teams.order.length) {
+                    box.appendChild(el("p", "empty", "No data products visible to this account."));
+                    return;
+                }
+                teams.order.forEach(function (org) {
+                    var row = el("a", "browse-row", org);
+                    row.href = "#team=" + encodeURIComponent(org);
+                    var n = teams.map[org].length;
+                    row.appendChild(el("span", "count", n + (n === 1 ? " data product" : " data products")));
+                    box.appendChild(row);
+                });
+            }
+
+            var overlay = document.getElementById("login-overlay");
+            var form = document.getElementById("login-form");
+            var errBox = document.getElementById("login-error");
+
+            function openLogin() {
+                errBox.hidden = true;
+                form.reset();
+                overlay.hidden = false;
+                document.getElementById("login-user").focus();
+            }
+            function closeLogin() { overlay.hidden = true; }
+
+            document.getElementById("login-cancel").addEventListener("click", closeLogin);
+            overlay.addEventListener("click", function (e) {
+                if (e.target === overlay) closeLogin();
+            });
+            document.addEventListener("keydown", function (e) {
+                if (e.key === "Escape" && !overlay.hidden) closeLogin();
+            });
+
+            form.addEventListener("submit", function (e) {
+                e.preventDefault();
+                var username = document.getElementById("login-user").value.trim();
+                var password = document.getElementById("login-pass").value;
+                var credentials = btoa(username + ":" + password);
+                fetch("/api/info", { headers: { "Authorization": "Basic " + credentials } })
+                    .then(function (r) {
+                        if (!r.ok) throw new Error("rejected");
+                        return r.json();
+                    })
+                    .then(function (res) {
+                        var authority = res && res["api:info"] && res["api:info"].authority;
+                        if (!authority || /\/User\/anonymous$/.test(authority)) {
+                            throw new Error("anonymous");
+                        }
+                        auth = { credentials: credentials, username: username, isAuthenticated: true };
+                        try {
+                            window.localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
+                        } catch (e2) { /* ignore storage errors */ }
+                        databases = null;
+                        closeLogin();
+                        loadInfo();
+                        renderBrowse();
+                    })
+                    .catch(function () {
+                        errBox.textContent = "Sign-in failed — check the username and password.";
+                        errBox.hidden = false;
+                    });
+            });
+
+            function logout() {
+                auth = null;
+                databases = null;
+                try { window.localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
+                if (currentTeam()) window.location.hash = "";
+                loadInfo();
+                renderBrowse();
+            }
+
+            window.addEventListener("hashchange", renderBrowse);
+
+            loadInfo();
+            renderBrowse();
+        })();
+    </script>
 </body>
 </html>

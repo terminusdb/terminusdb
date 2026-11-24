@@ -370,7 +370,7 @@ describe('sys:JSON decimal type verification', function () {
       }`
 
       // Use fetch API to send raw JSON string (like successful test-server approach)
-      const response = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=precision_verify`, {
+      const response = await fetch(`${agent.baseUrl}/api/document/${agent.orgName}/${agent.dbName}?author=test&message=precision_verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -398,7 +398,7 @@ describe('sys:JSON decimal type verification', function () {
       }`
 
       // Use fetch API to send raw JSON string (preserves decimal point)
-      const insertResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=decimal_format_test`, {
+      const insertResponse = await fetch(`${agent.baseUrl}/api/document/${agent.orgName}/${agent.dbName}?author=test&message=decimal_format_test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -456,7 +456,7 @@ describe('sys:JSON decimal type verification', function () {
       }`
 
       // Use fetch API to send raw JSON string (preserves decimal point)
-      const insertResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=zero_format_test`, {
+      const insertResponse = await fetch(`${agent.baseUrl}/api/document/${agent.orgName}/${agent.dbName}?author=test&message=zero_format_test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -505,7 +505,7 @@ describe('sys:JSON decimal type verification', function () {
       }`
 
       // Use fetch API to send raw JSON string (preserves full precision)
-      const insertResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=50_digit_decimal_test`, {
+      const insertResponse = await fetch(`${agent.baseUrl}/api/document/${agent.orgName}/${agent.dbName}?author=test&message=50_digit_decimal_test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -520,7 +520,7 @@ describe('sys:JSON decimal type verification', function () {
       const docId = insertResult[0]
 
       // Retrieve and verify the value is stored correctly
-      const getResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?id=${encodeURIComponent(docId)}`, {
+      const getResponse = await fetch(`${agent.baseUrl}/api/document/${agent.orgName}/${agent.dbName}?id=${encodeURIComponent(docId)}`, {
         method: 'GET',
         headers: {
           Authorization: `Basic ${Buffer.from('admin:root').toString('base64')}`,
@@ -570,7 +570,7 @@ describe('sys:JSON decimal type verification', function () {
       }`
 
       // Use fetch API to send raw JSON string (preserves full precision)
-      const insertResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=50_digit_integer_test`, {
+      const insertResponse = await fetch(`${agent.baseUrl}/api/document/${agent.orgName}/${agent.dbName}?author=test&message=50_digit_integer_test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -585,7 +585,7 @@ describe('sys:JSON decimal type verification', function () {
       const docId = insertResult[0]
 
       // Retrieve and verify the value is stored correctly
-      const getResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?id=${encodeURIComponent(docId)}`, {
+      const getResponse = await fetch(`${agent.baseUrl}/api/document/${agent.orgName}/${agent.dbName}?id=${encodeURIComponent(docId)}`, {
         method: 'GET',
         headers: {
           Authorization: `Basic ${Buffer.from('admin:root').toString('base64')}`,
@@ -641,7 +641,7 @@ describe('sys:JSON decimal type verification', function () {
           }
         }`
 
-        const insertResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=decimal_${size}_test`, {
+        const insertResponse = await fetch(`${agent.baseUrl}/api/document/${agent.orgName}/${agent.dbName}?author=test&message=decimal_${size}_test`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -685,7 +685,7 @@ describe('sys:JSON decimal type verification', function () {
           }
         }`
 
-        const insertResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=integer_${size}_test`, {
+        const insertResponse = await fetch(`${agent.baseUrl}/api/document/${agent.orgName}/${agent.dbName}?author=test&message=integer_${size}_test`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

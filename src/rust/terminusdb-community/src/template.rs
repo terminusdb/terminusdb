@@ -9,6 +9,10 @@ pub fn handlebars_from_term<'a, C: QueryableContextType>(
     template_list_term: &Term,
 ) -> Result<Handlebars<'static>, PrologError> {
     let mut handlebars = Handlebars::new();
+    // Embedding renders feed vector indexes and markdown output, not HTML —
+    // the default escape would turn `=`/`'`/`"` into entities in the text
+    // that gets embedded.
+    handlebars.register_escape_fn(handlebars::no_escape);
 
     for template_pair_term in context.term_list_iter(template_list_term) {
         let [type_name_term, template_term] = context.compound_terms(&template_pair_term)?;

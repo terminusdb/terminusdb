@@ -4,7 +4,9 @@
               pack/5,
               pack_from_context/3,
               unpack/1,
-              layer_layerids/2
+              layer_layerids/2,
+              layerids_and_parents_fringe/2,
+              layer_exists/1
           ]).
 
 :- use_module(library(terminus_store)).
@@ -128,21 +130,20 @@ layerids_and_parents_fringe_([_-some(Parent_ID)|Remainder], Layerids_Parents, [P
 layerids_and_parents_fringe_([_-none|Remainder], Layerids_Parents, Fringe) :-
     layerids_and_parents_fringe_(Remainder,Layerids_Parents,Fringe).
 
-layerids_unknown(Layer_Ids,Unknown_Layer_Ids) :-
-    exclude(layer_exists,Layer_Ids,Unknown_Layer_Ids).
-
 unpack(Pack) :-
    pack_layerids_and_parents(Pack,Layer_Parents),
    % all layers and their parents [Layer_ID-Parent_ID,....]
    % Are these valid? Parent is a Layer in the list or we have the parent.
    layerids_and_parents_fringe(Layer_Parents,Fringe),
    assert_fringe_is_known(Fringe),
-   % Filter this list to layers we don't know about
    findall(L, member(L-_,Layer_Parents), Layer_Ids),
-   layerids_unknown(Layer_Ids, Unknown_Layer_Ids),
-   % Extract only these layers.
+   % Layers that are already in the store are not re-imported, but
+   % their contents have to be identical to what the pack contains,
+   % as layer ids are just names and not content hashes.
    storage(Store),
-   pack_import(Store,Unknown_Layer_Ids,Pack).
+   pack_import(Store,Layer_Ids,Pack,Mismatched_Layer_Ids),
+   do_or_die(Mismatched_Layer_Ids = [],
+             error(pack_layer_mismatch(Mismatched_Layer_Ids),_)).
 
 
 :- begin_tests(pack).

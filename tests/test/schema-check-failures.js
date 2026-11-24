@@ -39,6 +39,7 @@ describe('schema-check-failures', function () {
     const witness = {
       '@type': 'not_a_class_or_base_type',
       class: `terminusdb:///schema#${schema.field}`,
+      property: 'terminusdb:///schema#field',
     }
     await document.insert(agent, { schema }).fails((api.error.schemaCheckFailure([witness])))
   })
@@ -73,6 +74,7 @@ describe('schema-check-failures', function () {
         const witness = {
           '@type': 'not_a_class_or_base_type',
           class: `terminusdb:///schema#${schema.field['@class']}`,
+          property: 'terminusdb:///schema#field',
         }
         await document.insert(agent, { schema }).fails((api.error.schemaCheckFailure([witness])))
       })

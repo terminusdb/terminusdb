@@ -20,6 +20,8 @@
 :- set_test_options([run(manual), load(always), concurrent(true)]).
 
 :- use_module(server(routes)).
+:- use_module(core(plugin_api)).
+:- use_module(core(plugin_raw_api)).
 :- use_module(server(main)).
 :- use_module(cli(main)).
 :- use_module(core(query)).
@@ -35,8 +37,13 @@ main :-
     initialize_flags,
     bootstrap_files,
     bootstrap_config_files,
+    % no_save: librust loads from a known on-disk path instead of being
+    % extracted from the state on every launch (~2s saved per invocation on
+    % Linux, plus AMFI kills on macOS for the unsigned extracted copy).
+    % file_search_path(foreign) carries a candidate for every install
+    % location this Makefile produces (see load_paths:add_rust_path/0).
     qsave_program(terminusdb, [
-                      foreign(save),
+                      foreign(no_save),
                       undefined(error),
                       toplevel(cli_toplevel),
                       autoload(true),  % Include all autoloaded modules for snap compatibility

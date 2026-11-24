@@ -41,9 +41,11 @@
 :- use_module(library(plunit)).
 
 :- use_module(library(terminus_store)).
+:- use_module(core(plugins), [enrich_commit_info/3]).
 
 /*
- * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool }
+ * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool,
+ *                        layer_changes: AddedIRIs-RemovedIRIs }
  *
  * validation_object{ descriptor: collection_descriptor,
  *                    <parent>: transaction_obj % we still keep it a transaction obj and transform it later
@@ -66,19 +68,24 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
                                                  read: New_Layer,
                                                  triple_update: Triple_Update,
                                                  backlinks: BL,
-                                                 changed: Changed },
+                                                 changed: Changed,
+                                                 layer_changes: Layer_Changes },
 
     (   var(Layer_Builder)
     ->  New_Layer = Layer,
+        Layer_Changes = []-[],
         (   Force_Write = true
         ->  Changed = true
         ;   Changed = false)
     %   NOTE: This seems wasteful - we should ignore this layer not commit it if it is empty.
     ;   nb_commit(Layer_Builder, New_Layer),
+        '$change_window':layer_changes(New_Layer, Added, Removed),
+        Layer_Changes = Added-Removed,
         graph_inserts_deletes(Graph_Validation_Obj, N, M),
         \+ (N = 0, M = 0)
     ->  Changed = true
     ;   Changed = false,
+        Layer_Changes = []-[],
         New_Layer = Layer ).
 
 graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map, Map) :-
@@ -89,7 +96,8 @@ graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map
                                                  read: Layer,
                                                  triple_update: Triple_Update,
                                                  backlinks: BL,
-                                                 changed: _Changed },
+                                                 changed: _Changed,
+                                                 layer_changes: _Layer_Changes },
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
                                      triple_update: Triple_Update,
@@ -194,7 +202,12 @@ commit_validation_object(Validation_Object, []) :-
     storage(Store),
     (   validation_object_changed(Instance_Object)
     ->  safe_open_named_graph(Store, Instance_Label, Instance_Graph),
-        nb_set_head(Instance_Graph, Instance_Object.read)
+        (   expected_label_version(Instance_Label, Expected_Version, Guard_Desc, Guard_Req)
+        ->  retractall(data_version:expected_label_version(Instance_Label, _, _, _)),
+            (   nb_force_set_head(Instance_Graph, Instance_Object.read, Expected_Version)
+            ->  true
+            ;   throw_data_version_cas_lost(Guard_Desc, Guard_Req))
+        ;   nb_set_head(Instance_Graph, Instance_Object.read))
     ;   true),
     (   validation_object_changed(Schema_Object)
     ->  safe_open_named_graph(Store, Schema_Label, Schema_Graph),
@@ -232,7 +245,12 @@ commit_validation_object(Validation_Object, []) :-
     (   validation_object_changed(Instance_Object)
     ->  storage(Store),
         safe_open_named_graph(Store, Instance_Label, Instance_Graph),
-        nb_set_head(Instance_Graph, Instance_Object.read)
+        (   expected_label_version(Instance_Label, Expected_Version, Guard_Desc, Guard_Req)
+        ->  retractall(data_version:expected_label_version(Instance_Label, _, _, _)),
+            (   nb_force_set_head(Instance_Graph, Instance_Object.read, Expected_Version)
+            ->  true
+            ;   throw_data_version_cas_lost(Guard_Desc, Guard_Req))
+        ;   nb_set_head(Instance_Graph, Instance_Object.read))
     ;   true),
     (   validation_object_changed(Schema_Object)
     ->  storage(Store),
@@ -257,7 +275,12 @@ commit_validation_object(Validation_Object, []) :-
     (   validation_object_changed(Instance_Object)
     ->  storage(Store),
         safe_open_named_graph(Store, Instance_Label, Instance_Graph),
-        nb_set_head(Instance_Graph, Instance_Object.read)
+        (   expected_label_version(Instance_Label, Expected_Version, Guard_Desc, Guard_Req)
+        ->  retractall(data_version:expected_label_version(Instance_Label, _, _, _)),
+            (   nb_force_set_head(Instance_Graph, Instance_Object.read, Expected_Version)
+            ->  true
+            ;   throw_data_version_cas_lost(Guard_Desc, Guard_Req))
+        ;   nb_set_head(Instance_Graph, Instance_Object.read))
     ;   true).
 commit_validation_object(Validation_Object, []) :-
     validation_object{
@@ -277,7 +300,12 @@ commit_validation_object(Validation_Object, []) :-
         % therefore we can just open it
         organization_database_name(Organization_Name, Database_Name, Composite),
         safe_open_named_graph(Store, Composite, Graph),
-        nb_set_head(Graph, Instance_Object.read)
+        (   expected_label_version(Composite, Expected_Version, Guard_Desc, Guard_Req)
+        ->  retractall(data_version:expected_label_version(Composite, _, _, _)),
+            (   nb_force_set_head(Graph, Instance_Object.read, Expected_Version)
+            ->  true
+            ;   throw_data_version_cas_lost(Guard_Desc, Guard_Req))
+        ;   nb_set_head(Graph, Instance_Object.read))
     ;   true).
 commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     validation_object{
@@ -304,17 +332,27 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
 
     branch_descriptor{branch_name : Branch_Name} :< Descriptor,
     !,
-
     (   exists(validation_object_changed, [Instance_Object, Schema_Object])
-    ->  (   branch_head_commit(Parent_Transaction, Branch_Name, Old_Commit_Uri),
-            commit_type(Parent_Transaction, Old_Commit_Uri, Commit_Type),
+    ->  Commit_Info0 = (Validation_Object.commit_info),
+        (   enrich_commit_info(Validation_Object, Commit_Info0, Commit_Info)
+        ->  true
+        ;   Commit_Info = Commit_Info0
+        ),
+        create_context(Parent_Transaction, Parent_Context),
+        (   branch_head_commit(Parent_Context, Branch_Name, Old_Commit_Uri),
+            commit_type(Parent_Context, Old_Commit_Uri, Commit_Type),
             Commit_Type = 'http://terminusdb.com/schema/ref#InitialCommit'
         ->  replace_initial_commit_on_branch(Parent_Transaction,
-                                             (Validation_Object.commit_info),
+                                             Commit_Info,
                                              Branch_Name,
                                              Instance_Object,
-                                             Schema_Object)
-        ;   insert_rwo_layer(Parent_Transaction,
+                                             Schema_Object,
+                                             Commit_Id),
+            ParentCommitId = none
+        ;   (   branch_head_commit(Parent_Context, Branch_Name, Old_Commit_Uri)
+            ->  commit_id_uri(Parent_Context, ParentCommitId, Old_Commit_Uri)
+            ;   ParentCommitId = none),
+            insert_rwo_layer(Parent_Transaction,
                              Schema_Object,
                              Schema_Layer_Uri),
             insert_rwo_layer(Parent_Transaction,
@@ -323,10 +361,13 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
             insert_commit_object_on_branch(Parent_Transaction,
                                            Schema_Layer_Uri,
                                            Instance_Layer_Uri,
-                                           (Validation_Object.commit_info),
+                                           Commit_Info,
                                            Branch_Name,
-                                           _Commit_Id,
-                                           _Commit_Uri))
+                                           Commit_Id,
+                                           _Commit_Uri)
+        ),
+        register_commit_in_change_window(Descriptor, ParentCommitId, Commit_Id,
+                                         Instance_Object, Schema_Object)
     ;   true).
 
 insert_rwo_layer(Transaction, RWO, Layer_Uri) :-
@@ -335,7 +376,7 @@ insert_rwo_layer(Transaction, RWO, Layer_Uri) :-
     ;   layer_to_id(RWO.read, Layer_Id),
         insert_layer_object(Transaction, Layer_Id, Layer_Uri)).
 
-replace_initial_commit_on_branch(Parent_Transaction, Commit_Info, Branch_Name, Instance_Object, Schema_Object) :-
+replace_initial_commit_on_branch(Parent_Transaction, Commit_Info, Branch_Name, Instance_Object, Schema_Object, New_Commit_Id) :-
     % delete_document(Parent_Transaction, Commit_Uri),
     Schema_Layer = (Schema_Object.read),
     (   parent(Schema_Layer, _)
@@ -345,10 +386,40 @@ replace_initial_commit_on_branch(Parent_Transaction, Commit_Info, Branch_Name, I
 
     insert_rwo_layer(Parent_Transaction, Final_Schema_Object, Schema_Layer_Uri),
     insert_rwo_layer(Parent_Transaction, Instance_Object, Instance_Layer_Uri),
-    insert_base_commit_object(Parent_Transaction, Schema_Layer_Uri, Instance_Layer_Uri, Commit_Info, _, New_Commit_Uri),
+    insert_base_commit_object(Parent_Transaction, Schema_Layer_Uri, Instance_Layer_Uri, Commit_Info, New_Commit_Id, New_Commit_Uri),
 
     branch_name_uri(Parent_Transaction, Branch_Name, Branch_Uri),
     reset_branch_head(Parent_Transaction, Branch_Uri, New_Commit_Uri).
+
+register_commit_in_change_window(_Descriptor, _ParentCommitId, none, _Instance_Object, _Schema_Object) :-
+    !.
+register_commit_in_change_window(Descriptor, ParentCommitId, CommitId, Instance_Object, Schema_Object) :-
+    branch_descriptor{} :< Descriptor,
+    !,
+    get_dict(layer_changes, Instance_Object, InstanceAdded-InstanceRemoved),
+    (   ParentCommitId = none
+    ->  ParentCommitIdArg = none
+    ;   atom_string(ParentCommitIdArg, ParentCommitId)
+    ),
+    (   var(Schema_Object.read)
+    ->  SchemaLayerId = none
+    ;   layer_to_id(Schema_Object.read, SchemaLayerIdString),
+        atom_string(SchemaLayerId, SchemaLayerIdString)
+    ),
+    (   var(Instance_Object.read)
+    ->  InstanceLayerId = none
+    ;   layer_to_id(Instance_Object.read, InstanceLayerIdString),
+        atom_string(InstanceLayerId, InstanceLayerIdString)
+    ),
+    branch_key_from_descriptor(Descriptor, BranchKey),
+    (   atom(CommitId)
+    ->  CommitIdAtom = CommitId
+    ;   atom_string(CommitIdAtom, CommitId)
+    ),
+    '$change_window':register_commit(BranchKey, CommitIdAtom, ParentCommitIdArg, SchemaLayerId, InstanceLayerId,
+                                     InstanceAdded, InstanceRemoved).
+register_commit_in_change_window(Descriptor, _ParentCommitId, _CommitId, _Instance_Object, _Schema_Object) :-
+    throw(error(unknown_validation_descriptor_for_branch_key(Descriptor), _)).
 
 commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], New_Commit_Id, New_Commit_Uri) :-
     validation_object{
@@ -534,6 +605,7 @@ validation_objects_to_transaction_objects(Validation_Objects, Transaction_Object
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
 :- use_module(core(transaction)).
+:- use_module(core(document)).
 :- use_module(library(terminus_store)).
 
 test(commit_two_transactions_on_empty, [
@@ -712,6 +784,51 @@ test(double_insert, [
     ID1 = ID2.
 
 
+test(commit_with_user_field, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_db_without_schema("admin", 'UserTest'),
+    resolve_absolute_string_descriptor("admin/UserTest", Branch_Descriptor),
+    Repo_Descriptor = (Branch_Descriptor.repository_descriptor),
+
+    User_IRI = "terminusdb://system/data/User/admin",
+    create_context(Branch_Descriptor,
+                   commit_info{ author: "test_author",
+                                message: "test with user",
+                                user: User_IRI },
+                   Context),
+    with_transaction(Context,
+                     ask(Context, insert(a, b, c)),
+                     _),
+
+    branch_head_commit(Repo_Descriptor, "main", Commit_Uri),
+    once(ask(Repo_Descriptor,
+             t(Commit_Uri, user, User_Value^^xsd:anyURI))),
+    User_Value = User_IRI.
+
+test(commit_without_user_field, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_db_without_schema("admin", 'NoUserTest'),
+    resolve_absolute_string_descriptor("admin/NoUserTest", Branch_Descriptor),
+    Repo_Descriptor = (Branch_Descriptor.repository_descriptor),
+
+    create_context(Branch_Descriptor,
+                   commit_info{ author: "test_author",
+                                message: "test without user" },
+                   Context),
+    with_transaction(Context,
+                     ask(Context, insert(a, b, c)),
+                     _),
+
+    branch_head_commit(Repo_Descriptor, "main", Commit_Uri),
+    \+ ask(Repo_Descriptor,
+           t(Commit_Uri, user, _)).
+
 :- end_tests(inserts).
 
 :- begin_tests(instance_validation).
@@ -815,3 +932,59 @@ test(query_empty_database,
                      _).
 
 :- end_tests(query_without_commit).
+
+:- begin_tests(change_window_parent_capture).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
+:- use_module(core(account)).
+:- use_module(core(document)).
+
+test(parent_commit_is_captured_before_new_head,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('admin','test'))),
+      cleanup((teardown_temp_store(State),
+               '$change_window':change_window_assert_empty))]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Repo_Descriptor = Descriptor.repository_descriptor,
+
+    % First commit: insert a Person.
+    create_context(Descriptor, commit_info{author:"test",message:"commit a"}, Context1),
+    with_transaction(Context1,
+                     insert_document(Context1,
+                                     _{'@type':"Person",
+                                       '@id':"Person/Duke",
+                                       'name':"Duke",
+                                       'address':"Here"},
+                                     _),
+                     _),
+    branch_head_commit(Repo_Descriptor, "main", CommitA_Uri),
+    commit_id_uri(Repo_Descriptor, CommitA, CommitA_Uri),
+
+    % Second commit: insert another Person.
+    create_context(Descriptor, commit_info{author:"test",message:"commit b"}, Context2),
+    with_transaction(Context2,
+                     insert_document(Context2,
+                                     _{'@type':"Person",
+                                       '@id':"Person/Earl",
+                                       'name':"Earl",
+                                       'address':"There"},
+                                     _),
+                     _),
+    branch_head_commit(Repo_Descriptor, "main", CommitB_Uri),
+    commit_id_uri(Repo_Descriptor, CommitB, CommitB_Uri),
+
+    % If validate.pl captured the new head as the parent, the change window
+    % would register B as its own parent and intersects could not walk back to
+    % A. With the fix, asking for an IRI that A added returns A.
+    branch_key_from_descriptor(Descriptor, BranchKey),
+    atom_string(CommitB_Atom, CommitB),
+    atom_string(CommitA_Atom, CommitA),
+    '$change_window':intersects(BranchKey, none, CommitB_Atom, [],
+                                ['http://example.com/data/world/Person/Duke'],
+                                IntersectingCommit),
+    IntersectingCommit = CommitA_Atom.
+
+:- end_tests(change_window_parent_capture).
+

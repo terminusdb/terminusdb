@@ -1,17 +1,23 @@
-use std::{collections::HashMap, io::Write, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, io::Write, num::NonZeroUsize, rc::Rc, sync::Arc};
 
 use crate::{
     graphql::{
-        schema::TerminusTypeCollectionInfo, type_collection_from_term, GraphQLExecutionContext,
+        mutation::TerminusMutationRoot,
+        post_process_graphql_numbers,
+        schema::{TerminusContext, TerminusTypeCollectionFor, TerminusTypeCollectionInfo},
+        subscription::TerminusSubscriptionRoot,
+        type_collection_from_term,
     },
     template::handlebars_from_term,
 };
 use handlebars::Handlebars;
 use juniper::{
+    executor::{execute_validated_query, get_operation},
     parser::parse_document_source,
     validation::{visit_all_rules, ValidatorContext},
-    DefaultScalarValue, Definition, InputValue, Value,
+    DefaultScalarValue, Definition, InputValue, RootNode, Value,
 };
+use lru::LruCache;
 use serde::Serialize;
 use swipl::prelude::*;
 
@@ -109,6 +115,48 @@ impl IntoPrologException for LimitedEmbeddingError {
     }
 }
 
+/// The context lifetime in the root types exists only through PhantomData —
+/// a node holds owned schema metadata and no term or context borrows.
+/// RootNode is invariant over its root types via the TypeInfo fields, so a
+/// 'static build cannot covariantly reborrow to a call's lifetime even though
+/// the erase is sound; the transmute below shrinks 'static to the caller's 'a,
+/// always safe, and the returned node is dropped within the call.
+type EmbeddingRootNodeFor<'a> = RootNode<
+    'a,
+    TerminusTypeCollectionFor<'a>,
+    TerminusMutationRoot<'a>,
+    TerminusSubscriptionRoot<TerminusContext<'a>>,
+>;
+
+thread_local! {
+    static EMBEDDING_ROOT_NODES: RefCell<LruCache<u64, Rc<EmbeddingRootNodeFor<'static>>>> =
+        RefCell::new(LruCache::new(NonZeroUsize::new(10).unwrap()));
+}
+
+fn cached_root_node<'a>(types: &TerminusTypeCollectionInfo) -> Rc<EmbeddingRootNodeFor<'a>> {
+    let key = types.allframes.cache_key();
+    let node = EMBEDDING_ROOT_NODES.with(|nodes| {
+        let mut nodes = nodes.borrow_mut();
+        if let Some(node) = nodes.get(&key) {
+            node.clone()
+        } else {
+            let node = Rc::new(RootNode::new_with_info(
+                TerminusTypeCollectionFor::default(),
+                TerminusMutationRoot::default(),
+                TerminusSubscriptionRoot::new(),
+                types.clone(),
+                (),
+                types.clone(),
+            ));
+            nodes.put(key, node.clone());
+            node
+        }
+    });
+    unsafe {
+        std::mem::transmute::<Rc<EmbeddingRootNodeFor<'static>>, Rc<EmbeddingRootNodeFor<'a>>>(node)
+    }
+}
+
 #[arc_blob("embedding_context", defaults)]
 struct EmbeddingContext {
     templates: Handlebars<'static>,
@@ -119,8 +167,8 @@ struct EmbeddingContext {
 impl EmbeddingContext {
     pub fn new<'a, C: QueryableContextType>(
         context: &Context<'a, C>,
-        system_term: &Term,
-        transaction_term: &Term,
+        _system_term: &Term,
+        _transaction_term: &Term,
         templates_term: &Term,
         queries_term: &Term,
         frames_term: &Term,
@@ -129,28 +177,14 @@ impl EmbeddingContext {
         let types = type_collection_from_term(context, frames_term)?;
 
         let mut queries = HashMap::new();
-        let none_term = context.new_term_ref();
-        none_term.unify(atom!("none"))?;
-        let execution_context = unsafe {
-            GraphQLExecutionContext::new_from_context_terms(
-                types.clone(),
-                context,
-                &none_term,
-                &system_term,
-                &none_term,
-                &none_term,
-                &transaction_term,
-                &none_term,
-                &none_term,
-            )?
-        };
-        let inner_context = execution_context.prolog_context();
+        let inner_context = context.into_generic();
+        let root_node = cached_root_node(&types);
 
         for type_tuple_term in inner_context.term_list_iter(queries_term) {
             let [type_name_term, query_term] = inner_context.compound_terms(&type_tuple_term)?;
             let type_name: PrologText = type_name_term.get_ex()?;
             let source: Box<String> = Box::new(query_term.get_ex()?);
-            let document = parse_document_source(&source, &execution_context.root_node.schema);
+            let document = parse_document_source(&source, &root_node.schema);
             if document.is_err() {
                 let error_string = document.err().unwrap().to_string();
                 return Err(LimitedEmbeddingError::QueryParseFailed {
@@ -159,7 +193,7 @@ impl EmbeddingContext {
                 })?;
             }
             let document = document.unwrap();
-            let mut ctx = ValidatorContext::new(&execution_context.root_node.schema, &document);
+            let mut ctx = ValidatorContext::new(&root_node.schema, &document);
             visit_all_rules(&mut ctx, &document);
 
             let errors = ctx.into_errors();
@@ -204,19 +238,18 @@ impl EmbeddingContext {
     ) -> Result<Value<DefaultScalarValue>, EmbeddingError> {
         let none_term = context.new_term_ref();
         none_term.unify(atom!("none"))?;
-        let execution_context = unsafe {
-            GraphQLExecutionContext::new_from_context_terms(
-                self.types.clone(),
-                context,
-                &none_term,
-                system_term,
-                &none_term,
-                &none_term,
-                transaction_term,
-                &none_term,
-                &none_term,
-            )?
-        };
+        let graphql_context = TerminusContext::new(
+            context.into_generic(),
+            &none_term,
+            system_term,
+            &none_term,
+            &none_term,
+            transaction_term,
+            &none_term,
+            &none_term,
+            self.types.clone(),
+            true,
+        )?;
         let document = self.get_query_document(&type_name);
         if document.is_none() {
             return Err(LimitedEmbeddingError::NoQueryForType {
@@ -228,7 +261,15 @@ impl EmbeddingContext {
         let mut parameters = HashMap::with_capacity(1);
         parameters.insert("id".to_string(), id_value);
 
-        let result = execution_context.execute_query_document(document, &parameters);
+        let root_node = cached_root_node(&self.types);
+        let operation = get_operation(document, None).unwrap();
+        let result = execute_validated_query(
+            document,
+            operation,
+            &*root_node,
+            &parameters,
+            &graphql_context,
+        );
         if result.is_err() {
             let error = result.err().unwrap().to_string();
             return Err(LimitedEmbeddingError::GraphQLError {
@@ -279,24 +320,25 @@ impl EmbeddingContext {
 
         if self.templates.has_template(&type_name) {
             match self.templates.render(&*type_name, &doc) {
-                Ok(result) => Ok(result),
+                Ok(result) => Ok(post_process_graphql_numbers(result)),
                 Err(e) => {
                     let msg = e.to_string();
                     let line = e.line_no.unwrap_or(0) as u64;
                     let col = e.column_no.unwrap_or(0) as u64;
-                    return Err(LimitedEmbeddingError::HandlebarsRenderError {
+                    Err(LimitedEmbeddingError::HandlebarsRenderError {
                         type_name: type_name.to_string(),
                         iri: iri.to_string(),
                         msg,
                         line,
                         col,
-                    })?;
+                    }
+                    .into())
                 }
             }
         } else {
             let result = serde_json::to_string(&doc)
                 .expect("Couldn't turn a graphql result document into a json string");
-            Ok(result)
+            Ok(post_process_graphql_numbers(result))
         }
     }
 }
@@ -408,4 +450,39 @@ pub fn register() {
     register_embedding_context();
     register_embedding_string_for();
     register_write_op_for();
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+    use crate::graphql::frame::{OneOrMore, Prefixes, UncleanAllFrames};
+
+    fn empty_types() -> TerminusTypeCollectionInfo {
+        TerminusTypeCollectionInfo {
+            allframes: Arc::new(
+                UncleanAllFrames {
+                    context: Prefixes {
+                        kind: "@context".to_string(),
+                        base: "http://example.com/data/".to_string(),
+                        schema: "http://example.com/schema#".to_string(),
+                        documentation: OneOrMore::More(vec![]),
+                        metadata: None,
+                        extra_prefixes: BTreeMap::new(),
+                    },
+                    frames: BTreeMap::new(),
+                }
+                .finalize(),
+            ),
+        }
+    }
+
+    #[test]
+    fn root_node_is_reused_for_the_same_schema() {
+        let types = empty_types();
+        let a = cached_root_node(&types);
+        let b = cached_root_node(&types);
+        assert!(Rc::ptr_eq(&a, &b));
+    }
 }

@@ -1,6 +1,16 @@
 const { expect } = require('chai')
 const { Agent, api, branch, db, document, util } = require('../lib')
 
+function rawParse (res, cb) {
+  let data = ''
+  res.on('data', chunk => { data += chunk })
+  res.on('end', () => {
+    const jsonStart = data.indexOf('{')
+    if (jsonStart > 0) data = data.substring(jsonStart)
+    try { cb(null, JSON.parse(data)) } catch (e) { cb(null, data) }
+  })
+}
+
 describe('diff-id', function () {
   let agent
 
@@ -256,6 +266,75 @@ describe('diff-id', function () {
       expect(r3.body[0].b.c).to.deep.equal({ '@after': 4, '@before': 3, '@op': 'SwapValue' })
     })
 
+    it('diff a single document with explicit unfold', async function () {
+      const class1 = util.randomString()
+      const class2 = util.randomString()
+      await document
+        .insert(agent, {
+          schema: [{ '@type': 'Class', '@id': class1, a: 'xsd:string', b: class2 },
+            {
+              '@type': 'Class',
+              '@id': class2,
+              c: 'xsd:integer',
+              '@subdocument': [],
+              '@key': { '@type': 'Lexical', '@fields': ['c'] },
+            },
+          ],
+        })
+      const r1 = await document
+        .insert(agent, {
+          instance: {
+            '@type': class1,
+            a: 'pickles and eggs',
+            b: {
+              '@type': class2,
+              c: 3,
+            },
+          },
+        })
+      const dv1 = r1.header['terminusdb-data-version']
+      const [docIdLong] = r1.body
+      const r2 = await document
+        .replace(agent, {
+          instance: {
+            '@type': class1,
+            a: 'pickles and eggs',
+            '@id': docIdLong,
+            b: {
+              '@type': class2,
+              c: 4,
+            },
+          },
+        })
+      const dv2 = r2.header['terminusdb-data-version']
+      const path = api.path.versionDiff(agent)
+
+      const unfolded = await agent.post(path).send(
+        {
+          before_data_version: dv1,
+          after_data_version: dv2,
+          document_id: docIdLong,
+          unfold: true,
+        })
+      expect(unfolded.status).to.equal(200)
+      expect(unfolded.body.b).to.deep.equal({
+        c: { '@after': 4, '@before': 3, '@op': 'SwapValue' },
+      })
+
+      const folded = await agent.post(path).send(
+        {
+          before_data_version: dv1,
+          after_data_version: dv2,
+          document_id: docIdLong,
+          unfold: false,
+        })
+      expect(folded.status).to.equal(200)
+      expect(folded.body.b['@op']).to.equal('SwapValue')
+      expect(folded.body.b['@before']).to.be.a('string')
+      expect(folded.body.b['@after']).to.be.a('string')
+      expect(folded.body.b).to.not.have.property('c')
+    })
+
     it('diff inserted object', async function () {
       const class1 = util.randomString()
       const class2 = util.randomString()
@@ -335,33 +414,37 @@ describe('diff-id', function () {
           after_data_version: dv3,
         })
       expect(diff03.status).to.equal(200)
-      expect(diff03.body).to.deep.equal(
-        [
-          {
-            '@insert': {
-              '@id': docId1,
-              '@type': class1,
-              a: 'pickles and eggs',
-            },
-            '@op': 'Insert',
+      // Pages slice the changed-document enumeration, which yields document
+      // ids in sorted order — a stable order is what makes paging safe.
+      const byInsertId = (x, y) => (x['@insert']['@id'] < y['@insert']['@id'] ? -1 : 1)
+      const expected = [
+        {
+          '@insert': {
+            '@id': docId1,
+            '@type': class1,
+            a: 'pickles and eggs',
           },
-          {
-            '@insert': {
-              '@id': docId2,
-              '@type': class2,
-              b: 'frog legs',
-            },
-            '@op': 'Insert',
+          '@op': 'Insert',
+        },
+        {
+          '@insert': {
+            '@id': docId2,
+            '@type': class2,
+            b: 'frog legs',
           },
-          {
-            '@insert': {
-              '@id': docId3,
-              '@type': class2,
-              b: 'duck soup',
-            },
-            '@op': 'Insert',
+          '@op': 'Insert',
+        },
+        {
+          '@insert': {
+            '@id': docId3,
+            '@type': class2,
+            b: 'duck soup',
           },
-        ])
+          '@op': 'Insert',
+        },
+      ]
+      expected.sort(byInsertId)
+      expect(diff03.body.slice().sort(byInsertId)).to.deep.equal(expected)
 
       const diff03Start0Count1 = await agent.post(path).send(
         {
@@ -371,17 +454,7 @@ describe('diff-id', function () {
           count: 1,
         })
       expect(diff03Start0Count1.status).to.equal(200)
-      expect(diff03Start0Count1.body).to.deep.equal(
-        [
-          {
-            '@insert': {
-              '@id': docId1,
-              '@type': class1,
-              a: 'pickles and eggs',
-            },
-            '@op': 'Insert',
-          },
-        ])
+      expect(diff03Start0Count1.body).to.deep.equal(expected.slice(0, 1))
 
       const diff03Start1Count1 = await agent.post(path).send(
         {
@@ -391,17 +464,7 @@ describe('diff-id', function () {
           count: 1,
         })
       expect(diff03Start1Count1.status).to.equal(200)
-      expect(diff03Start1Count1.body).to.deep.equal(
-        [
-          {
-            '@insert': {
-              '@id': docId2,
-              '@type': class2,
-              b: 'frog legs',
-            },
-            '@op': 'Insert',
-          },
-        ])
+      expect(diff03Start1Count1.body).to.deep.equal(expected.slice(1, 2))
 
       const diff03Start1Count3 = await agent.post(path).send(
         {
@@ -411,25 +474,7 @@ describe('diff-id', function () {
           count: 3,
         })
       expect(diff03Start1Count3.status).to.equal(200)
-      expect(diff03Start1Count3.body).to.deep.equal(
-        [
-          {
-            '@insert': {
-              '@id': docId2,
-              '@type': class2,
-              b: 'frog legs',
-            },
-            '@op': 'Insert',
-          },
-          {
-            '@insert': {
-              '@id': docId3,
-              '@type': class2,
-              b: 'duck soup',
-            },
-            '@op': 'Insert',
-          },
-        ])
+      expect(diff03Start1Count3.body).to.deep.equal(expected.slice(1, 3))
     })
 
     it('apply squash commit', async function () {
@@ -485,6 +530,89 @@ describe('diff-id', function () {
         }])
     })
 
+    it('apply patch with insert, delete, and swap', async function () {
+      const class1 = util.randomString()
+      const class2 = util.randomString()
+      await document
+        .insert(agent, {
+          schema: [
+            { '@type': 'Class', '@id': class1, a: 'xsd:string' },
+            { '@type': 'Class', '@id': class2, b: 'xsd:string' },
+          ],
+        })
+      const r1 = await document
+        .insert(agent, {
+          instance: { '@type': class1, a: 'pickles and eggs' },
+        })
+
+      const [docId1Long] = r1.body
+      const docId1 = docId1Long.split('terminusdb:///data/')[1]
+
+      const r2 = await document
+        .insert(agent, {
+          instance: { '@type': class2, b: 'frog legs' },
+        })
+
+      const [docId2Long] = r2.body
+      const docId2 = docId2Long.split('terminusdb:///data/')[1]
+
+      const path = api.path.patchDb(agent)
+
+      const docId3 = class1 + '/' + util.randomString()
+
+      const r3 = await agent.post(path)
+        .send({
+          patch: [
+            {
+              '@op': 'Insert',
+              '@insert': {
+                '@id': docId3,
+                '@type': class1,
+                a: 'soup',
+              },
+            },
+            {
+              '@op': 'Delete',
+              '@delete': {
+                '@id': docId1,
+              },
+            },
+            {
+              '@id': docId2,
+              '@type': class2,
+              b: {
+                '@op': 'SwapValue',
+                '@before': 'frog legs',
+                '@after': 'vegan frog legs',
+              },
+            },
+          ],
+          author: 'gavin',
+          message: 'something',
+          match_final_state: true,
+        })
+
+      expect(r3.status).to.equal(200)
+
+      const r4 = await document.get(agent, { query: { type: class1, as_list: true } })
+
+      expect(r4.body).to.deep.equal([
+        {
+          '@id': docId3,
+          '@type': class1,
+          a: 'soup',
+        }])
+
+      const r5 = await document.get(agent, { query: { type: class2, as_list: true } })
+
+      expect(r5.body).to.deep.equal([
+        {
+          '@id': docId2,
+          '@type': class2,
+          b: 'vegan frog legs',
+        }])
+    })
+
     it('apply squash commit to obtain conflict', async function () {
       const class1 = util.randomString()
       const class2 = util.randomString()
@@ -528,7 +656,7 @@ describe('diff-id', function () {
 
       expect(r4.status).to.equal(409)
       expect(r4.body['api:witnesses'][0]['@op']).to.equal('InsertConflict')
-      expect(r4.body['api:witnesses'][0]['@id_already_exists']).to.equal(docId2Long)
+      expect(r4.body['api:witnesses'][0]['@id_already_exists']).to.equal(docId2)
     })
 
     it('apply squash commit to obtain a read conflict', async function () {
@@ -659,6 +787,243 @@ describe('diff-id', function () {
       expect(r5.body).to.have.length(3)
     })
 
+    it('apply squash commit on raw json modification and delete', async function () {
+      const modId = 'item/' + util.randomString()
+      const delId = 'item/' + util.randomString()
+      await document
+        .insert(agent, {
+          instance: [
+            { '@id': modId, name: 'Socrates', n: 1 },
+            { '@id': delId, name: 'Delete me', n: 0 },
+          ],
+          raw_json: true,
+        })
+
+      const branchName = util.randomString()
+      const origin = api.path.branchOrigin(agent)
+      await branch.create(agent, branchName, { origin })
+      const newDocPath = api.path.document(agent) + '/local/branch/' + branchName
+
+      await document
+        .replace(agent, {
+          path: newDocPath,
+          instance: { '@id': modId, name: 'Socrates', n: 2 },
+          raw_json: true,
+        })
+
+      await document
+        .delete(agent, {
+          path: newDocPath,
+          query: { id: delId },
+        })
+
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: 'main',
+          after_commit: branchName,
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+          match_final_state: false,
+        })
+
+      expect(r4.status).to.equal(200)
+      expect(r4.body).to.deep.equal({ '@type': 'api:ApplyResponse', 'api:status': 'api:success' })
+
+      const r5 = await document.get(agent, { query: { id: modId } })
+      expect(r5.body.n).to.equal(2)
+
+      const r6 = await agent.get(api.path.document(agent)).query({ id: delId }).buffer(true).parse(rawParse)
+      expect(r6.body['api:status']).to.equal('api:not_found')
+    })
+
+    it('apply squash commit reports a delete-edit conflict', async function () {
+      const docId = 'item/' + util.randomString()
+      const r1 = await document
+        .insert(agent, {
+          instance: { '@id': docId, name: 'Socrates', n: 1 },
+          raw_json: true,
+        })
+      const dv1 = r1.header['terminusdb-data-version']
+
+      const branchName = util.randomString()
+      const origin = api.path.branchOrigin(agent)
+      await branch.create(agent, branchName, { origin })
+      const branchDocPath = api.path.document(agent) + '/local/branch/' + branchName
+
+      // theirs: the branch deletes the document
+      await document
+        .delete(agent, {
+          path: branchDocPath,
+          query: { id: docId },
+        })
+
+      // ours: main edits the document after the fork
+      await document
+        .replace(agent, {
+          instance: { '@id': docId, name: 'Socrates', n: 2 },
+          raw_json: true,
+        })
+
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: dv1,
+          after_commit: branchName,
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+        })
+
+      expect(r4.status).to.equal(409)
+      expect(r4.body['api:witnesses']).to.have.length(1)
+      const witness = r4.body['api:witnesses'][0]
+      expect(witness['@op']).to.equal('DeleteEditConflict')
+      expect(witness['@id']).to.equal(docId)
+      expect(witness['@deleted_by']).to.equal('theirs')
+
+      // the apply wrote nothing: ours' edit survives
+      const r5 = await document.get(agent, { query: { id: docId } })
+      expect(r5.body.n).to.equal(2)
+    })
+
+    it('apply squash commit dry_run reports witnesses without committing', async function () {
+      const docId = 'item/' + util.randomString()
+      const r1 = await document
+        .insert(agent, {
+          instance: { '@id': docId, name: 'Socrates', n: 1 },
+          raw_json: true,
+        })
+      const dv1 = r1.header['terminusdb-data-version']
+
+      const branchName = util.randomString()
+      const origin = api.path.branchOrigin(agent)
+      await branch.create(agent, branchName, { origin })
+      const branchDocPath = api.path.document(agent) + '/local/branch/' + branchName
+
+      // theirs: the branch deletes the document
+      await document
+        .delete(agent, {
+          path: branchDocPath,
+          query: { id: docId },
+        })
+
+      // ours: main edits the document after the fork
+      await document
+        .replace(agent, {
+          instance: { '@id': docId, name: 'Socrates', n: 2 },
+          raw_json: true,
+        })
+
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: dv1,
+          after_commit: branchName,
+          commit_info: { author: 'gavin', message: 'preview' },
+          type: 'squash',
+          dry_run: true,
+        })
+
+      expect(r4.status).to.equal(200)
+      expect(r4.body['@type']).to.equal('api:CheckResponse')
+      expect(r4.body['api:valid']).to.equal(false)
+      const witness = r4.body['api:witnesses'][0]
+      expect(witness['@op']).to.equal('DeleteEditConflict')
+      expect(witness['@id']).to.equal(docId)
+      expect(witness['@deleted_by']).to.equal('theirs')
+      expect(witness['@expected'].n).to.equal(1)
+      expect(witness['@found'].n).to.equal(2)
+
+      // a preview commits nothing, so commit_info is not required
+      const r4b = await agent.post(path)
+        .send({
+          before_commit: dv1,
+          after_commit: branchName,
+          type: 'squash',
+          dry_run: true,
+        })
+      expect(r4b.status).to.equal(200)
+      expect(r4b.body['@type']).to.equal('api:CheckResponse')
+      expect(r4b.body['api:valid']).to.equal(false)
+
+      // the dry run wrote nothing: the real apply still reports the conflict
+      const r5 = await agent.post(path)
+        .send({
+          before_commit: dv1,
+          after_commit: branchName,
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+        })
+      expect(r5.status).to.equal(409)
+      expect(r5.body['api:witnesses'][0]['@expected']).to.not.exist
+
+      const r6 = await document.get(agent, { query: { id: docId } })
+      expect(r6.body.n).to.equal(2)
+    })
+
+    it('apply squash commit resolves a delete-edit conflict with the recipe', async function () {
+      const docId = 'item/' + util.randomString()
+      const r1 = await document
+        .insert(agent, {
+          instance: { '@id': docId, name: 'Socrates', n: 1 },
+          raw_json: true,
+        })
+      const dv1 = r1.header['terminusdb-data-version']
+
+      const branchName = util.randomString()
+      const origin = api.path.branchOrigin(agent)
+      await branch.create(agent, branchName, { origin })
+      const branchDocPath = api.path.document(agent) + '/local/branch/' + branchName
+
+      // theirs: the branch edits the document
+      await document
+        .replace(agent, {
+          path: branchDocPath,
+          instance: { '@id': docId, name: 'Socrates', n: 3 },
+          raw_json: true,
+        })
+
+      // ours: main deletes the document after the fork
+      await document
+        .delete(agent, {
+          query: { id: docId },
+        })
+
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: dv1,
+          after_commit: branchName,
+          commit_info: { author: 'gavin', message: 'something' },
+          conflict_resolution: { default: 'ours', documents: { theirs: [docId] } },
+        })
+
+      expect(r4.status).to.equal(200)
+
+      // theirs wins for this document: it is resurrected at n=3
+      const r5 = await document.get(agent, { query: { id: docId } })
+      expect(r5.body.n).to.equal(3)
+    })
+
+    it('apply squash commit rejects an unknown type', async function () {
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: 'main',
+          after_commit: 'main',
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'rebase',
+        })
+
+      expect(r4.status).to.equal(400)
+      expect(r4.body['api:error']['@type']).to.equal('api:BadApplyType')
+    })
+
     it('gets an error on apply', async function () {
       const id = util.randomString()
       agent.db = id
@@ -673,6 +1038,212 @@ describe('diff-id', function () {
         },
       )
       expect(result.body['api:error']['@type']).to.equal('api:NotValidRefError')
+    })
+  })
+
+  describe('apply onto a changed subdocument collection', function () {
+    let agent
+
+    before(async function () {
+      agent = new Agent().auth()
+      await db.create(agent)
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    const variant = (sku, price) => ({ '@type': 'Variant', sku, price })
+    const ourCollections = {
+      add: [variant('A', 18), variant('B', 20), variant('R', 20)],
+      remove: [variant('B', 20)],
+      replace: [variant('A', 18), variant('B', 20)],
+    }
+    const merged = {
+      add: { A: 18, B: 21, R: 20 },
+      remove: { B: 21 },
+      replace: { A: 18, B: 21 },
+    }
+
+    // Theirs edits the title and variant B; ours changes the collection.
+    async function forkProduct (collection, change) {
+      const suffix = util.randomString()
+      const productType = 'Product' + suffix
+      const variantType = 'Variant' + suffix
+      await document.insert(agent, {
+        schema: [
+          { '@id': variantType, '@type': 'Class', '@subdocument': [], '@key': { '@type': 'Lexical', '@fields': ['sku'] }, sku: 'xsd:string', price: 'xsd:decimal' },
+          { '@id': productType, '@type': 'Class', '@key': { '@type': 'Lexical', '@fields': ['handle'] }, handle: 'xsd:string', title: 'xsd:string', variants: { '@type': collection, '@class': variantType } },
+        ],
+      })
+      const product = (title, variants) => ({
+        '@type': productType,
+        handle: 'tee',
+        title,
+        variants: variants.map((v) => ({ ...v, '@type': variantType })),
+      })
+      const r1 = await document.insert(agent, { instance: product('Tee', [variant('B', 20), variant('R', 20)]) })
+      const base = r1.header['terminusdb-data-version']
+      const theirs = util.randomString()
+      await branch.create(agent, theirs, { origin: api.path.branchOrigin(agent) })
+      await document.replace(agent, {
+        path: api.path.document(agent) + '/local/branch/' + theirs,
+        instance: product('Tee v2', [variant('B', 21), variant('R', 20)]),
+      })
+      await document.replace(agent, { instance: product('Tee', ourCollections[change]) })
+      return { base, theirs, docId: productType + '/tee' }
+    }
+
+    async function prices (docId) {
+      const r = await document.get(agent, { query: { id: docId } })
+      const byKey = Object.fromEntries(r.body.variants.map((v) => [v.sku, Number(v.price)]))
+      return { title: r.body.title, variants: byKey }
+    }
+
+    function apply (fork, extra = {}) {
+      return agent.post(api.path.apply(agent)).send({
+        before_commit: fork.base,
+        after_commit: fork.theirs,
+        commit_info: { author: 'test', message: 'apply' },
+        type: 'squash',
+        ...extra,
+      })
+    }
+
+    for (const change of ['add', 'remove', 'replace']) {
+      it(`merges Set subdocuments by @id when ours ${change}s a variant`, async function () {
+        const fork = await forkProduct('Set', change)
+        const r = await apply(fork)
+        expect(r.status).to.equal(200)
+        expect(await prices(fork.docId)).to.deep.equal({ title: 'Tee v2', variants: merged[change] })
+      })
+    }
+
+    for (const collection of ['List', 'Array']) {
+      it(`merges ${collection} subdocuments when ours removed an untouched trailing variant`, async function () {
+        const fork = await forkProduct(collection, 'remove')
+        const r = await apply(fork)
+        expect(r.status).to.equal(200)
+        expect(await prices(fork.docId)).to.deep.equal({ title: 'Tee v2', variants: merged.remove })
+      })
+
+      for (const change of ['add', 'replace']) {
+        it(`reports a conflict for ${collection} subdocuments that moved when ours ${change}s a variant`, async function () {
+          const fork = await forkProduct(collection, change)
+          const before = await prices(fork.docId)
+
+          const dryRun = await apply(fork, { dry_run: true })
+          expect(dryRun.status).to.equal(200)
+          expect(dryRun.body['api:valid']).to.equal(false)
+          expect(dryRun.body['api:witnesses']).to.have.length(1)
+
+          const r = await apply(fork)
+          expect(r.status).to.equal(409)
+          expect(r.body['api:witnesses']).to.have.length(1)
+          expect(await prices(fork.docId)).to.deep.equal(before)
+        })
+      }
+
+      it(`reports a conflict when a positional ${collection} patch does not fit`, async function () {
+        const fork = await forkProduct(collection, 'add')
+        const before = await prices(fork.docId)
+        const diff = await agent.post(api.path.versionDiff(agent)).send({
+          before_data_version: fork.base,
+          after_data_version: fork.theirs,
+        })
+        expect(diff.status).to.equal(200)
+        const r = await agent.post(api.path.patchDb(agent)).send({
+          patch: diff.body,
+          author: 'test',
+          message: 'patch',
+        })
+        expect(r.status).to.equal(409)
+        expect(r.body['api:error']['@type']).to.equal('api:PatchConflict')
+        expect(await prices(fork.docId)).to.deep.equal(before)
+      })
+    }
+
+    describe('theirs changes the collection', function () {
+      const oursEdit = [variant('B', 21), variant('R', 20)]
+      const cases = [
+        {
+          name: 'theirs adds a variant',
+          theirs: [variant('A', 18), variant('B', 20), variant('R', 20)],
+          set: { A: 18, B: 21, R: 20 },
+          list: null,
+        },
+        {
+          name: 'theirs removes a variant',
+          theirs: [variant('B', 20)],
+          set: { B: 21 },
+          list: { B: 21 },
+        },
+        {
+          name: 'theirs adds and edits a variant',
+          theirs: [variant('A', 18), variant('B', 22), variant('R', 20)],
+          set: null,
+          list: null,
+        },
+        {
+          name: 'both sides add a variant',
+          theirs: [variant('A', 18), variant('B', 20), variant('R', 20)],
+          ours: [variant('C', 30), variant('B', 21), variant('R', 20)],
+          set: { A: 18, B: 21, C: 30, R: 20 },
+          list: null,
+        },
+      ]
+
+      async function forkWith (collection, theirsVs, oursVs = oursEdit) {
+        const suffix = util.randomString()
+        const productType = 'Product' + suffix
+        const variantType = 'Variant' + suffix
+        await document.insert(agent, {
+          schema: [
+            { '@id': variantType, '@type': 'Class', '@subdocument': [], '@key': { '@type': 'Lexical', '@fields': ['sku'] }, sku: 'xsd:string', price: 'xsd:decimal' },
+            { '@id': productType, '@type': 'Class', '@key': { '@type': 'Lexical', '@fields': ['handle'] }, handle: 'xsd:string', title: 'xsd:string', variants: { '@type': collection, '@class': variantType } },
+          ],
+        })
+        const product = (variants) => ({
+          '@type': productType,
+          handle: 'tee',
+          title: 'Tee',
+          variants: variants.map((v) => ({ ...v, '@type': variantType })),
+        })
+        const r1 = await document.insert(agent, { instance: product([variant('B', 20), variant('R', 20)]) })
+        const base = r1.header['terminusdb-data-version']
+        const theirs = util.randomString()
+        await branch.create(agent, theirs, { origin: api.path.branchOrigin(agent) })
+        await document.replace(agent, {
+          path: api.path.document(agent) + '/local/branch/' + theirs,
+          instance: product(theirsVs),
+        })
+        await document.replace(agent, { instance: product(oursVs) })
+        return { base, theirs, docId: productType + '/tee' }
+      }
+
+      for (const collection of ['Set', 'List', 'Array']) {
+        for (const c of cases) {
+          it(`apply ${collection}: ${c.name}`, async function () {
+            const fork = await forkWith(collection, c.theirs, c.ours || oursEdit)
+            const expected = collection === 'Set' ? c.set : c.list
+            const before = await prices(fork.docId)
+
+            const dryRun = await apply(fork, { dry_run: true })
+            expect(dryRun.status).to.equal(200)
+            expect(dryRun.body['api:valid']).to.equal(expected !== null)
+
+            const r = await apply(fork)
+            if (expected === null) {
+              expect(r.status).to.equal(409)
+              expect(r.body['api:witnesses']).to.have.length(1)
+              expect(await prices(fork.docId)).to.deep.equal(before)
+            } else {
+              expect(r.status).to.equal(200)
+              expect(await prices(fork.docId)).to.deep.equal({ title: 'Tee', variants: expected })
+            }
+          })
+        }
+      }
     })
   })
 })

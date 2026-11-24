@@ -1,0 +1,5 @@
+# Canonical format for the Rust workspace: stable rustfmt defaults.
+# Keep this file minimal — every override is a second style to maintain,
+# and style drift is what rustfmt is here to prevent. The edition pin only
+# guards the parser, matching the workspace Cargo.toml.
+edition = "2021"

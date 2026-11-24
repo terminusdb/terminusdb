@@ -12,33 +12,36 @@
 :- use_module(core(api)).
 :- use_module(core(util)).
 :- use_module(core(transaction)).
+:- use_module(core(document/schema)).
+:- use_module(core(triple/database_utils)).
 :- use_module(core(triple/literals)).
 
 :- use_module(library(apply)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 % Load document/json module to register json:json_write_hook/4 for rational precision
-% This must be loaded AFTER library(http/json) to ensure the multifile hook is registered
+% This must be loaded AFTER library(json) to ensure the multifile hook is registered
 :- use_module(core(document/json)).
 
-run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON) :-
+run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, Transaction_Meta_Data, Binding_JSON) :-
     Options = _{ optimize: true, all_witnesses: false, streaming: false},
-    run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON, Options).
+    run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, Transaction_Meta_Data, Binding_JSON, Options).
 
 /** <module> Query Response
  *
  * Code to generate bindings for query response in JSON-LD
  */
-run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON, Options) :-
+run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, Transaction_Meta_Data, Binding_JSON, Options) :-
     compile_query(AST,Prog,Context,Output_Context,Options),
     do_or_die(
         query_default_collection(Output_Context, Transaction),
         error(query_default_collection_failed_unexpectedly(Output_Context), _)),
     transaction_data_version(Transaction, Actual_Data_Version),
     compare_data_versions(Requested_Data_Version, Actual_Data_Version),
+    data_version_guarded_options(Transaction.descriptor, Requested_Data_Version, [], Transaction_Options),
     with_transaction(
         Output_Context,
         query_response:(
@@ -50,19 +53,20 @@ run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_V
                     Binding_Set),
             * json_log_info_formatted('~N[Binding Set] ~q~n', [Binding_Set])
         ),
-        Meta_Data
+        Meta_Data,
+        Transaction_Options
     ),
-    meta_data_version(Transaction, Meta_Data, New_Data_Version),
+    Transaction_Meta_Data = Meta_Data,
     context_variable_names(Output_Context, Names),
-    Binding_JSON = _{'@type' : 'api:WoqlResponse',
-                     'api:status' : 'api:success',
-                     'api:variable_names' : Names,
-                     'bindings' : Binding_Set,
-                     % These are whitelisted metadata fields for serialization.
-                     % Other fields (e.g. data_versions) cannot be serialized.
-                     inserts : Meta_Data.inserts,
-                     deletes : Meta_Data.deletes,
-                     transaction_retry_count : Meta_Data.transaction_retry_count }.
+    Binding_JSON = json{'@type' : 'api:WoqlResponse',
+                        'api:status' : 'api:success',
+                        'api:variable_names' : Names,
+                        'bindings' : Binding_Set,
+                        % These are whitelisted metadata fields for serialization.
+                        % Other fields (e.g. data_versions) cannot be serialized.
+                        inserts : Meta_Data.inserts,
+                        deletes : Meta_Data.deletes,
+                        transaction_retry_count : Meta_Data.transaction_retry_count }.
 
 
 run_context_ast_jsonld_streaming_response(Context, AST, Requested_Data_Version, Options) :-
@@ -73,6 +77,7 @@ run_context_ast_jsonld_streaming_response(Context, AST, Requested_Data_Version, 
     transaction_data_version(Transaction, Actual_Data_Version),
     compare_data_versions(Requested_Data_Version, Actual_Data_Version),
     write_preface_record(Output_Context),
+    data_version_guarded_options(Transaction.descriptor, Requested_Data_Version, [], Transaction_Options),
     with_transaction(
         Output_Context,
         forall(woql_compile:Prog,
@@ -82,7 +87,8 @@ run_context_ast_jsonld_streaming_response(Context, AST, Requested_Data_Version, 
                    write_woql_json_binding(JSON_Binding)
                )
               ),
-        Meta_Data
+        Meta_Data,
+        Transaction_Options
     ),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     Postscript_Record = _{'@type' : 'PostscriptRecord',
@@ -125,15 +131,41 @@ context_variable_names(Context, Header) :-
 json_transform_binding_set(Context, Binding, JSON) :-
     % TODO: We probably want to "compress" the URIs using the context
     Prefixes = (Context.prefixes),
-    maplist({Prefixes}/[Record,Var_Name=Term]>>(
+    enum_member_lexicals(Context, Enum_Members),
+    maplist({Enum_Members, Prefixes}/[Record,Var_Name=Term]>>(
                 get_dict(var_name, Record, Var_Name),
                 get_dict(woql_var, Record, Prolog_Var),
                 (   var(Prolog_Var)
                 ->  Term = null
-                ;   term_jsonld(Prolog_Var, Prefixes, Term))),
+                ;   binding_term_jsonld(Enum_Members, Prolog_Var, Prefixes, Term))),
             Binding,
             Data),
-    dict_create(JSON, _, Data).
+    dict_create(JSON, json, Data).
+
+/* A bound enum member renders as its lexical value — the member's
+ * surface form everywhere else — instead of the compressed schema
+ * node id it is stored as.
+ */
+binding_term_jsonld(Enum_Members, Term, Prefixes, JSON) :-
+    (   is_list(Term)
+    ->  maplist({Enum_Members, Prefixes}/[Elt,Json]>>
+                binding_term_jsonld(Enum_Members, Elt, Prefixes, Json),
+                Term, JSON)
+    ;   atom(Term),
+        memberchk(Term-Lexical, Enum_Members)
+    ->  JSON = Lexical
+    ;   term_jsonld(Term, Prefixes, JSON)
+    ).
+
+/* member IRIs paired with their lexical form, for every enum in the
+ * schema the query ran against. Empty when the context exposes no
+ * schema (e.g. system queries).
+ */
+enum_member_lexicals(Context, Members) :-
+    (   query_default_collection(Context, Transaction),
+        database_schema(Transaction, Schema)
+    ->  schema_enum_member_lexicals(Schema, Members)
+    ;   Members = []).
 
 field_separator(true,"",_Size).
 field_separator(false,Sep,Size) :-

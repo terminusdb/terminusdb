@@ -7,6 +7,7 @@ publish = false
 [features]
 default = []
 gmp = ["gmp-mpfr-sys"]
+use-system-gmp = ["gmp-mpfr-sys/use-system-libs"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,18 +15,22 @@ gmp = ["gmp-mpfr-sys"]
 lcs = "0.2.0"
 swipl = {version="0.3.16", features=["serde"]}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
+terminusdb-webserver = {path="../terminusdb-webserver"}
 itertools = "0.10.3"
 serde_json = {version="1", features=["preserve_order", "arbitrary_precision"]}
 lazy_static = "1.4"
 urlencoding = "2.1"
 rayon = "1.5"
 lazy-init = "0.5"
-rand = "0.8.5"
+rand = "0.9"
+uuid = { version = "1.10", features = ["v7", "fast-rng"] }
+sha1 = "0.10"
 #juniper = "0.15.11"
-juniper = {git="https://github.com/terminusdb-labs/juniper.git", tag = "juniper-v0.15.11-p1"}
+juniper = {git="https://github.com/terminusdb-labs/juniper.git", tag = "juniper-v0.15.11-p1", default-features = false, features = ["chrono", "schema-language", "url", "uuid"]}
 serde = {version="1.0", features=["derive"]}
 float-ord = "0.3"
 regex = "1"
+sha2 = "0.10"
 aho-corasick = "0.7"
 bimap = "0.6.2"
 ordered-float = "3.0"
@@ -34,15 +39,20 @@ nom = "7.1"
 chrono = { version="0.4", features=["serde"]}
 handlebars = "4.3"
 thiserror = "1.0"
-lru = "0.11"
-tdb-succinct = "0.1.2"
+lru = "0.16"
+smallvec = "1"
+tdb-succinct = "0.2"
 # Security fix: Force upgrade of transitive dependencies to fix CVE in idna 0.5.0
 # Punycode domain masking vulnerability - upgrade to idna 1.0.3+
 url = "2.5.4"
+gmp-mpfr-sys = { version = "~1.7", default-features = false, optional = true }
+jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["rt", "time"] }
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 rug = { version = "1.17", default-features = false, features = [] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 rug = {version = "1.17", default-features = false, features=["integer","rational"]}
-gmp-mpfr-sys = { version = "~1.5", default-features = false, features = ["use-system-libs"], optional = true }

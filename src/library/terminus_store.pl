@@ -30,17 +30,36 @@
               node_and_value_count/2,
               predicate_count/2,
               subject_id/3,
+              subject_with_prefix/3,
               predicate_id/3,
               object_id/3,
 
               id_triple/4,
               triple/4,
 
+              id_triple_count/5,
+              triple_count/5,
+
               id_triple_addition/4,
               triple_addition/4,
 
               id_triple_removal/4,
               triple_removal/4,
+
+              id_triple_value_range/6,
+              id_triple_value_range_rev/6,
+              triple_value_range/6,
+              triple_value_range_rev/6,
+              id_triple_value_range_count/6,
+              triple_value_range_count/6,
+
+              id_triple_interval_relation/6,
+              triple_interval_relation/6,
+
+              id_triple_sp_value_next/5,
+              id_triple_sp_value_previous/5,
+              triple_value_next/5,
+              triple_value_previous/5,
 
               sp_card/4,
               op_card/4,
@@ -60,7 +79,9 @@
 
               pack_export/3,
               pack_layerids_and_parents/2,
-              pack_import/3,
+              pack_import/4,
+
+              create_empty_base_layer/2,
 
               count_layer_stack_size/2,
 
@@ -69,7 +90,15 @@
               imprecise_rollup_upto/2,
 
               layer_stack_names/2,
-              layer_equals/2
+              layer_stored_size/2,
+              layer_equals/2,
+
+              layer_cache_stats/4,
+              layer_cache_memory_bytes/4,
+              lru_cache_used_bytes/2,
+              cleanup_layer_cache/2,
+              invalidate_layer_cache_entry/2,
+              process_rss_bytes/1
             ]).
 
 terminus_store_version('0.19.8').
@@ -447,6 +476,22 @@ subject_id(Layer, Subject, Id) :-
 
 
 /*
+ * subject_with_prefix(+Layer, +Prefix, -Subject) is nondet
+ *
+ * Enumerate subject names that start with Prefix. Node names are stored in
+ * a sorted front-coded dictionary per layer band, so a prefix is a
+ * contiguous dictionary range which the store seeks with id() and streams
+ * until the prefix no longer matches — the wavelet-mapped subject ids are
+ * not steppable, so seeking has to happen per band in Rust.
+ *
+ * A name present in several bands is yielded once (sorted, deduplicated).
+ */
+subject_with_prefix(Layer, Prefix, Subject) :-
+    atom_string(Prefix, Prefix_String),
+    subject_with_prefix(Layer, Prefix_String, _Id, Subject).
+
+
+/*
  * predicate_id(+Layer, +Predicate, -Id) is semidet
  *
  * Get the ID from a predicate
@@ -562,6 +607,38 @@ triple(Layer, Subject, Predicate, Object) :-
     ->  true
     ;   object_id(Layer,Object, O_Id)).
 
+/**
+ * triple_count(+Layer, ?Subject, ?Predicate, ?Object, -Count) is det.
+ *
+ * Count the triples matching a partially bound pattern without
+ * enumerating them. Bound components resolve through the dictionaries;
+ * a bound component that does not resolve yields a count of 0.
+ */
+triple_count(Layer, Subject, Predicate, Object, Count) :-
+    (   (   nonvar(Subject)
+        ->  (   Subject = id(S_Id)
+            ->  true
+            ;   subject_id(Layer, Subject, S_Id)
+            )
+        ;   true),
+
+        (   nonvar(Predicate)
+        ->  (   Predicate = id(P_Id)
+            ->  true
+            ;   predicate_id(Layer, Predicate, P_Id)
+            )
+        ;   true),
+
+        (   nonvar(Object),
+            Object = id(O_Id)
+        ->  true
+        ;   ground(Object)
+        ->  object_id(Layer, Object, O_Id)
+        ;   true)
+    ->  id_triple_count(Layer, S_Id, P_Id, O_Id, Count)
+    ;   Count = 0
+    ).
+
 triple_addition(Layer, Subject, Predicate, Object) :-
     (   ground(Subject)
     ->  subject_id(Layer, Subject, S_Id)
@@ -619,6 +696,124 @@ triple_removal(Layer, Subject, Predicate, Object) :-
     (   ground(Object)
     ->  true
     ;   object_id(Layer,Object, O_Id)).
+
+triple_value_range(Layer, Low, High, Subject, Predicate, Object) :-
+    id_triple_value_range(Layer, Low, High, S_Id, P_Id, O_Id),
+
+    (   ground(Subject)
+    ->  true
+    ;   subject_id(Layer, Subject, S_Id)),
+
+    (   ground(Predicate)
+    ->  true
+    ;   predicate_id(Layer, Predicate, P_Id)),
+
+    (   ground(Object)
+    ->  true
+    ;   object_id(Layer, Object, O_Id)).
+
+triple_value_range_rev(Layer, Low, High, Subject, Predicate, Object) :-
+    id_triple_value_range_rev(Layer, Low, High, S_Id, P_Id, O_Id),
+
+    (   ground(Subject)
+    ->  true
+    ;   subject_id(Layer, Subject, S_Id)),
+
+    (   ground(Predicate)
+    ->  true
+    ;   predicate_id(Layer, Predicate, P_Id)),
+
+    (   ground(Object)
+    ->  true
+    ;   object_id(Layer, Object, O_Id)).
+
+/**
+ * triple_interval_relation(+Layer, +Rel, +Reference, ?Subject, ?Predicate, ?Object) is nondet.
+ *
+ * Triples whose object value can satisfy the Allen relation Rel against
+ * Reference. The object ids come from the interval indexes and are a
+ * superset of the true hits — callers verify each object semantically.
+ */
+triple_interval_relation(Layer, Rel, Reference, Subject, Predicate, Object) :-
+    (   nonvar(Subject)
+    ->  (   Subject = id(S_Id)
+        ->  true
+        ;   subject_id(Layer, Subject, S_Id)
+        )
+    ;   true),
+
+    (   nonvar(Predicate)
+    ->  (   Predicate = id(P_Id)
+        ->  true
+        ;   predicate_id(Layer, Predicate, P_Id)
+        )
+    ;   true),
+
+    (   nonvar(Object),
+        Object = id(O_Id)
+    ->  true
+    ;   ground(Object)
+    ->  object_id(Layer, Object, O_Id)
+    ;   true),
+
+    id_triple_interval_relation(Layer, Rel, Reference, S_Id, P_Id, O_Id),
+
+    (   ground(Subject)
+    ->  true
+    ;   subject_id(Layer, Subject, S_Id)),
+
+    (   ground(Predicate)
+    ->  true
+    ;   predicate_id(Layer, Predicate, P_Id)),
+
+    (   ground(Object)
+    ->  true
+    ;   object_id(Layer, Object, O_Id)).
+
+/**
+ * triple_value_range_count(+Layer, +Low, +High, ?Subject, ?Predicate, -Count) is det.
+ *
+ * Count the triples whose object value falls in the half-open range
+ * [Low, High), optionally restricted by a subject and/or predicate,
+ * without enumerating them.
+ */
+triple_value_range_count(Layer, Low, High, Subject, Predicate, Count) :-
+    (   (   nonvar(Subject)
+        ->  (   Subject = id(S_Id)
+            ->  true
+            ;   subject_id(Layer, Subject, S_Id)
+            )
+        ;   true),
+
+        (   nonvar(Predicate)
+        ->  (   Predicate = id(P_Id)
+            ->  true
+            ;   predicate_id(Layer, Predicate, P_Id)
+            )
+        ;   true)
+    ->  id_triple_value_range_count(Layer, Low, High, S_Id, P_Id, Count)
+    ;   Count = 0
+    ).
+
+triple_value_next(Layer, Subject, Predicate, Reference, NextObject) :-
+    (   Subject = id(S_Id) -> true
+    ;   subject_id(Layer, Subject, S_Id)
+    ),
+    (   Predicate = id(P_Id) -> true
+    ;   predicate_id(Layer, Predicate, P_Id)
+    ),
+    id_triple_sp_value_next(Layer, S_Id, P_Id, Reference, O_Id),
+    object_id(Layer, NextObject, O_Id).
+
+triple_value_previous(Layer, Subject, Predicate, Reference, PrevObject) :-
+    (   Subject = id(S_Id) -> true
+    ;   subject_id(Layer, Subject, S_Id)
+    ),
+    (   Predicate = id(P_Id) -> true
+    ;   predicate_id(Layer, Predicate, P_Id)
+    ),
+    id_triple_sp_value_previous(Layer, S_Id, P_Id, Reference, O_Id),
+    object_id(Layer, PrevObject, O_Id).
 
 count_layer_stack_size(Layer, Acc, Count) :-
     parent(Layer, Parent),
@@ -946,6 +1141,46 @@ test(query_builder_for_committed, [cleanup(clean(TestDir)),setup(createng(TestDi
     nb_commit(Builder, _Layer),
 
     builder_committed(Builder).
+
+test(subject_with_prefix,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    forall(member(S, ["col/3","aaa/1","col/1","zzz/9","col/2","aab/1"]),
+           nb_add_triple(Builder, S, "Predicate", node("obj"))),
+    nb_add_triple(Builder, "col/4", "Predicate", value("x",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    findall(N, subject_with_prefix(Layer, "col/", N), Names),
+    Names == ["col/1","col/2","col/3","col/4"].
+
+test(subject_with_prefix_no_match,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "aaa/1", "Predicate", node("obj")),
+    nb_commit(Builder, Layer),
+    \+ subject_with_prefix(Layer, "nope/", _).
+
+test(subject_with_prefix_shorter_than_first,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "abc/1", "Predicate", node("obj")),
+    nb_add_triple(Builder, "abd/2", "Predicate", node("obj")),
+    nb_commit(Builder, Layer),
+    findall(N, subject_with_prefix(Layer, "ab", N), Names),
+    Names == ["abc/1","abd/2"].
+
+test(subject_with_prefix_across_layers,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "col/2", "Predicate", node("obj")),
+    nb_add_triple(Builder, "zzz/1", "Predicate", node("obj")),
+    nb_commit(Builder, Layer),
+    open_write(Layer, Builder2),
+    nb_add_triple(Builder2, "col/1", "Predicate", node("obj")),
+    nb_add_triple(Builder2, "aaa/1", "Predicate", node("obj")),
+    nb_commit(Builder2, Layer2),
+    findall(N, subject_with_prefix(Layer2, "col/", N), Names),
+    sort(Names, Sorted),
+    Sorted == ["col/1","col/2"].
 
 test(squash_a_tower,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     open_archive_store(TestDir, Store),
@@ -1299,6 +1534,79 @@ test(op_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     op_card(Layer, C_Id, B_Id, Count),
     Count = 2.
 
+test(triple_count,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "A", "B", node("C")),
+    nb_add_triple(Builder, "A", "B", node("D")),
+    nb_add_triple(Builder, "A", "E", node("F")),
+    nb_commit(Builder, Layer),
+    triple_count(Layer, "A", "B", node("C"), 1),
+    triple_count(Layer, "A", "B", node("G"), 0),
+    triple_count(Layer, "A", "B", _, 2),
+    triple_count(Layer, "A", _, _, 3),
+    triple_count(Layer, _, "B", _, 2),
+    triple_count(Layer, _, _, node("C"), 1),
+    triple_count(Layer, _, _, _, 3),
+    triple_count(Layer, "A", "no_such_predicate", _, 0),
+    triple_count(Layer, "no_such_subject", _, _, 0),
+    triple_count(Layer, "A", "B", node("no_such_object"), 0).
+
+test(triple_count_child_layer,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "A", "B", node("C")),
+    nb_add_triple(Builder, "A", "B", node("D")),
+    nb_add_triple(Builder, "A", "E", node("F")),
+    nb_commit(Builder, Layer),
+
+    open_write(Layer, Builder2),
+    nb_remove_triple(Builder2, "A", "B", node("C")),
+    nb_add_triple(Builder2, "G", "B", node("H")),
+    nb_commit(Builder2, Layer2),
+
+    triple_count(Layer2, "A", "B", _, 1),
+    triple_count(Layer2, "A", "B", node("C"), 0),
+    triple_count(Layer2, "A", _, _, 2),
+    triple_count(Layer2, _, "B", _, 2),
+    triple_count(Layer2, _, _, _, 3),
+
+    % removal then re-addition restores the count
+    open_write(Layer2, Builder3),
+    nb_add_triple(Builder3, "A", "B", node("C")),
+    nb_commit(Builder3, Layer3),
+    triple_count(Layer3, "A", "B", node("C"), 1),
+    triple_count(Layer3, _, _, _, 4).
+
+test(triple_value_range_count,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc4", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "num", value(1,'http://www.w3.org/2001/XMLSchema#integer')),
+    nb_commit(Builder, Layer),
+
+    Low = value("beta",'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("gamma",'http://www.w3.org/2001/XMLSchema#string'),
+
+    % [beta, gamma) covers beta and delta
+    triple_value_range_count(Layer, Low, High, _, _, 2),
+    triple_value_range_count(Layer, Low, High, "doc2", _, 1),
+    triple_value_range_count(Layer, Low, High, _, "label", 2),
+    triple_value_range_count(Layer, Low, High, "doc4", "label", 1),
+    triple_value_range_count(Layer, Low, High, "doc1", "label", 0),
+
+    % empty range
+    triple_value_range_count(Layer, Low, Low, _, _, 0),
+
+    % different datatype segment is unaffected
+    LowNum = value(0,'http://www.w3.org/2001/XMLSchema#integer'),
+    HighNum = value(10,'http://www.w3.org/2001/XMLSchema#integer'),
+    triple_value_range_count(Layer, LowNum, HighNum, _, _, 1),
+    triple_value_range_count(Layer, LowNum, HighNum, "doc1", "num", 1).
+
 setup_object_id_test_layer(TestDir, Layer) :-
     open_archive_store(TestDir, Store),
     open_write(Store, Builder),
@@ -1459,5 +1767,237 @@ test(merge_two_base_layers,
                ],
 
     Expected = Triples.
+
+test(id_triple_value_range_string_range) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc4", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("beta", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("gamma", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(S-P-O, id_triple_value_range(Layer, Low, High, S, P, O), Triples),
+    length(Triples, 2).
+
+test(id_triple_value_range_empty_when_no_match) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("x", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("z", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(S-P-O, id_triple_value_range(Layer, Low, High, S, P, O), Triples),
+    Triples == [].
+
+test(id_triple_value_range_type_mismatch_empty) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value(1, 'http://www.w3.org/2001/XMLSchema#int'),
+    High = value(100, 'http://www.w3.org/2001/XMLSchema#int'),
+    findall(S-P-O, id_triple_value_range(Layer, Low, High, S, P, O), Triples),
+    Triples == [].
+
+test(triple_value_range_resolves_names) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc4", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("beta", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("gamma", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(S, triple_value_range(Layer, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = ["doc2", "doc4"].
+
+test(triple_value_range_numeric_int_range) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "sensor1", "reading", value(10,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "sensor2", "reading", value(20,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "sensor3", "reading", value(30,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "sensor4", "reading", value(40,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder, Layer),
+    Low = value(15, 'http://www.w3.org/2001/XMLSchema#int'),
+    High = value(35, 'http://www.w3.org/2001/XMLSchema#int'),
+    findall(S, triple_value_range(Layer, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = ["sensor2", "sensor3"].
+
+test(triple_value_range_child_layer_removal) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    open_write(Layer, Builder2),
+    nb_remove_triple(Builder2, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder2, ChildLayer),
+    Low = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("gamma", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(S, triple_value_range(ChildLayer, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = ["doc1"].
+
+test(triple_value_range_empty_range_same_bounds, [fail]) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("beta", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("beta", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_range(Layer, Low, High, _, _, _).
+
+test(triple_value_range_half_open_excludes_high) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("gamma", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(S, triple_value_range(Layer, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = ["doc1", "doc2"].
+
+test(triple_value_next_finds_next_string) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Ref = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_next(Layer, "doc1", "label", Ref, Next),
+    Next = value("beta", 'http://www.w3.org/2001/XMLSchema#string').
+
+test(triple_value_next_skips_to_correct_value) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "score", value(10,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "doc1", "score", value(20,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "doc1", "score", value(30,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder, Layer),
+    Ref = value(10, 'http://www.w3.org/2001/XMLSchema#int'),
+    triple_value_next(Layer, "doc1", "score", Ref, Next),
+    Next = value(20, 'http://www.w3.org/2001/XMLSchema#int').
+
+test(triple_value_next_fails_at_last, [fail]) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Ref = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_next(Layer, "doc1", "label", Ref, _).
+
+test(triple_value_next_only_matches_same_sp) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Ref = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    \+ triple_value_next(Layer, "doc1", "label", Ref, _).
+
+test(triple_value_previous_finds_previous_string) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Ref = value("gamma", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_previous(Layer, "doc1", "label", Ref, Prev),
+    Prev = value("beta", 'http://www.w3.org/2001/XMLSchema#string').
+
+test(triple_value_previous_fails_at_first, [fail]) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Ref = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_previous(Layer, "doc1", "label", Ref, _).
+
+test(triple_value_previous_numeric_int) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "s1", "val", value(10,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s1", "val", value(20,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s1", "val", value(30,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder, Layer),
+    Ref = value(30, 'http://www.w3.org/2001/XMLSchema#int'),
+    triple_value_previous(Layer, "s1", "val", Ref, Prev),
+    Prev = value(20, 'http://www.w3.org/2001/XMLSchema#int').
+
+test(triple_value_next_child_layer) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    open_write(Layer, Builder2),
+    nb_remove_triple(Builder2, "doc1", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder2, ChildLayer),
+    Ref = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_next(ChildLayer, "doc1", "label", Ref, Next),
+    Next = value("gamma", 'http://www.w3.org/2001/XMLSchema#string').
+
+test(triple_value_range_rev_descending_order) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc4", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("zeta", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(O, triple_value_range_rev(Layer, Low, High, _, _, O), Objects),
+    maplist([value(V,_),V]>>true, Objects, Values),
+    Values = ["gamma", "delta", "beta", "alpha"].
+
+test(triple_value_range_rev_numeric) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "s1", "score", value(10,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s2", "score", value(20,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s3", "score", value(30,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s4", "score", value(40,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder, Layer),
+    Low = value(15, 'http://www.w3.org/2001/XMLSchema#int'),
+    High = value(35, 'http://www.w3.org/2001/XMLSchema#int'),
+    findall(V, triple_value_range_rev(Layer, Low, High, _, _, value(V, _)), Values),
+    Values = [30, 20].
+
+test(triple_value_range_rev_same_count_as_forward) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("a", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("z", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(_, triple_value_range(Layer, Low, High, _, _, _), Fwd),
+    findall(_, triple_value_range_rev(Layer, Low, High, _, _, _), Rev),
+    length(Fwd, N),
+    length(Rev, N).
+
+test(triple_value_range_rev_empty_range, [fail]) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("zzz", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("zzzz", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_range_rev(Layer, Low, High, _, _, _).
 
 :- end_tests(terminus_store).

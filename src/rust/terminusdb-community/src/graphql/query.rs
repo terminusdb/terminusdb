@@ -2,8 +2,12 @@
 use itertools::Itertools;
 use juniper::{self, FromInputValue, InputValue, ID};
 use ordered_float::OrderedFloat;
-use regex::{Regex, RegexSet};
+use regex::{Regex, RegexBuilder, RegexSet};
 use rug::Integer;
+use tdb_succinct::tfc::lexical_interval::{
+    cmp_interval_bounds, decode_lexical_entry, interval_relation, literal_as_interval,
+    AllenRelation,
+};
 use tdb_succinct::{Decimal, TdbDataType, TypedDictEntry};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
@@ -26,8 +30,8 @@ use super::frame::{
     Prefixes, TypeDefinition,
 };
 use super::schema::{
-    id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue,
-    TerminusContext, TerminusOrderBy, TerminusOrdering,
+    BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue, TerminusOrderBy, TerminusOrdering,
+    TerminusResolveContext,
 };
 
 use crate::path::compile::{compile_path, path_to_class};
@@ -107,8 +111,20 @@ enum FilterValue {
     BigFloat(GenericOperation, BigFloat, String),
     DateTime(GenericOperation, DateTime, String),
     String(GenericOperation, String, String),
+    // typed relation: rel atom + interval-or-instant literal
+    Relation(String, String),
     Enum { op: EnumOperation, value: IriName },
     Foreign(IdOperation, String),
+    // several operators on one property conjoin
+    AllOf(Vec<FilterValue>),
+}
+
+fn conjoin(mut filters: Vec<FilterValue>) -> FilterValue {
+    match filters.len() {
+        0 => panic!("Unable to compile input value to a filter"),
+        1 => filters.pop().unwrap(),
+        _ => FilterValue::AllOf(filters),
+    }
 }
 
 fn ordering_matches_op(ord: Ordering, op: GenericOperation) -> bool {
@@ -135,137 +151,362 @@ FilterObject{ edges:
 }
 */
 
+/// Maximum compiled regex program size (bytes). Prevents ReDoS by
+/// rejecting regexes with enormous NFA/dfa state machines.
+const REGEX_SIZE_LIMIT: usize = 256 * 1024; // 256 KiB
+/// Maximum DFA cache size (bytes). Caps memory used by the DFA during matching.
+const REGEX_DFA_SIZE_LIMIT: usize = 512 * 1024; // 512 KiB
+
+/// Compile a user-supplied regex pattern with resource limits to prevent
+/// ReDoS (Regular Expression Denial of Service).
+///
+/// The `size_limit` caps the compiled NFA size, rejecting pathological
+/// patterns with exponential state expansion. The `dfa_size_limit` caps
+/// the DFA cache used during matching, bounding memory consumption.
+fn compile_safe_regex(pattern: &str) -> Result<Regex, regex::Error> {
+    RegexBuilder::new(pattern)
+        .size_limit(REGEX_SIZE_LIMIT)
+        .dfa_size_limit(REGEX_DFA_SIZE_LIMIT)
+        .build()
+}
+
 fn compile_string_input_value(string_type: &str, value: StringFilterInputObject) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::String(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::String(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::String(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::String(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::String(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::String(GenericOperation::Ge, val, string_type.to_string())
-    } else if let Some(val) = value.regex {
-        let regex = Regex::new(&val).expect("Could not compile regex");
-        FilterValue::Text(TextOperation::Regex(regex), string_type.to_string())
-    } else if let Some(val) = value.startsWith {
-        FilterValue::Text(TextOperation::StartsWith(val), string_type.to_string())
-    } else if let Some(val) = value.allOfTerms {
-        FilterValue::Text(TextOperation::AllOfTerms(val), string_type.to_string())
-    } else if let Some(val) = value.anyOfTerms {
-        FilterValue::Text(TextOperation::AnyOfTerms(val), string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::String(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::String(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::String(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::String(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::String(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::String(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.relationship {
+        filters.push(FilterValue::Relation(val.rel, val.value))
+    }
+    if let Some(val) = value.regex {
+        let regex = compile_safe_regex(&val)
+            .expect("Could not compile regex (pattern rejected by size limit or invalid syntax)");
+        filters.push(FilterValue::Text(
+            TextOperation::Regex(regex),
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.startsWith {
+        filters.push(FilterValue::Text(
+            TextOperation::StartsWith(val),
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.allOfTerms {
+        filters.push(FilterValue::Text(
+            TextOperation::AllOfTerms(val),
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.anyOfTerms {
+        filters.push(FilterValue::Text(
+            TextOperation::AnyOfTerms(val),
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_big_int_input_value(string_type: &str, value: BigIntFilterInputObject) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::BigInt(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::BigInt(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::BigInt(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::BigInt(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::BigInt(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::BigInt(GenericOperation::Ge, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::BigInt(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_datetime_input_value(
     string_type: &str,
     value: DateTimeFilterInputObject,
 ) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::DateTime(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::DateTime(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::DateTime(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::DateTime(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::DateTime(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::DateTime(GenericOperation::Ge, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::DateTime(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.relationship {
+        filters.push(FilterValue::Relation(val.rel, val.value))
+    }
+    conjoin(filters)
 }
 
 fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::Float(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::Float(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::Float(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::Float(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::Float(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::Float(GenericOperation::Ge, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::Float(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::Float(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::Float(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::Float(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::Float(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::Float(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_decimal_input_value(string_type: &str, value: BigFloatFilterInputObject) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::BigFloat(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::BigFloat(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::BigFloat(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::BigFloat(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::BigFloat(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::BigFloat(GenericOperation::Ge, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::BigFloat(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_small_integer_input_value(
     string_type: &str,
     value: IntFilterInputObject,
 ) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::SmallInt(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::SmallInt(GenericOperation::Ne, val, string_type.to_string())
-    } else if let Some(val) = value.lt {
-        FilterValue::SmallInt(GenericOperation::Lt, val, string_type.to_string())
-    } else if let Some(val) = value.le {
-        FilterValue::SmallInt(GenericOperation::Le, val, string_type.to_string())
-    } else if let Some(val) = value.gt {
-        FilterValue::SmallInt(GenericOperation::Gt, val, string_type.to_string())
-    } else if let Some(val) = value.ge {
-        FilterValue::SmallInt(GenericOperation::Ge, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.lt {
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Lt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.le {
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Le,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.gt {
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Gt,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    if let Some(val) = value.ge {
+        filters.push(FilterValue::SmallInt(
+            GenericOperation::Ge,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_boolean_input_value(string_type: &str, value: BooleanFilterInputObject) -> FilterValue {
+    let mut filters = Vec::new();
     if let Some(val) = value.eq {
-        FilterValue::Boolean(GenericOperation::Eq, val, string_type.to_string())
-    } else if let Some(val) = value.ne {
-        FilterValue::Boolean(GenericOperation::Ne, val, string_type.to_string())
-    } else {
-        panic!("Unable to compile string input value to a filter")
+        filters.push(FilterValue::Boolean(
+            GenericOperation::Eq,
+            val,
+            string_type.to_string(),
+        ))
     }
+    if let Some(val) = value.ne {
+        filters.push(FilterValue::Boolean(
+            GenericOperation::Ne,
+            val,
+            string_type.to_string(),
+        ))
+    }
+    conjoin(filters)
 }
 
 fn compile_typed_filter(
@@ -373,7 +614,7 @@ fn compile_edges_to_filter(
     class_name: &GraphQLName,
     all_frames: &AllFrames,
     class_definition: &ClassDefinition,
-    edges: &Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
+    edges: &[(juniper::Spanning<String>, juniper::Spanning<InputValue>)],
 ) -> FilterObject {
     let mut result: Vec<(String, FilterScope)> = Vec::with_capacity(edges.len());
     let mut restriction = None;
@@ -579,6 +820,9 @@ fn object_type_filter<'a>(
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
     match filter_type {
+        FilterValue::AllOf(filters) => filters
+            .iter()
+            .fold(iter, |iter, f| object_type_filter(g, f, iter)),
         FilterValue::Text(operation, _) => match operation {
             TextOperation::Regex(regex) => {
                 let regex = regex.clone();
@@ -634,12 +878,12 @@ fn object_type_filter<'a>(
         },
         FilterValue::SmallInt(op, i, _) => {
             let op = *op;
-            let i = *i;
+            let val = Integer::from(*i);
             let h = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = h.id_object_value(*object).expect("Object value must exist");
-                let object_int = object_value.as_i32().expect("not a numerical value");
-                let cmp = object_int.cmp(&i);
+                let object_int = value_to_bigint(&object_value);
+                let cmp = object_int.cmp(&val);
                 ordering_matches_op(cmp, op)
             }))
         }
@@ -649,7 +893,7 @@ fn object_type_filter<'a>(
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_float = object_value.as_val::<f64, f64>();
+                let object_float = object_value.as_f64().expect("not a numerical value");
                 let cmp = OrderedFloat(object_float).cmp(&OrderedFloat(f));
                 ordering_matches_op(cmp, op)
             }))
@@ -667,7 +911,9 @@ fn object_type_filter<'a>(
         }
         FilterValue::BigInt(op, BigInt(bigint), _) => {
             let op = *op;
-            let val = bigint.parse::<Integer>().unwrap();
+            let val = bigint
+                .parse::<Integer>()
+                .expect("BigInt scalar validates its input");
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
@@ -678,7 +924,9 @@ fn object_type_filter<'a>(
         }
         FilterValue::BigFloat(op, BigFloat(decimal), _) => {
             let op = *op;
-            let val = Decimal::make_entry(&Decimal::new(decimal.to_string()).unwrap());
+            let val = Decimal::make_entry(
+                &Decimal::new(decimal.to_string()).expect("BigFloat scalar validates its input"),
+            );
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
@@ -697,15 +945,54 @@ fn object_type_filter<'a>(
                 ordering_matches_op(cmp, op)
             }))
         }
-        FilterValue::String(op, val, _) => {
+        FilterValue::String(op, val, type_str) => {
             let op = *op;
             let val = val.clone();
             let g = g.clone();
+            // dateTimeInterval compares by interval bounds, not literal
+            // bytes: spellings denoting the same period (a date pair and its
+            // zoneless datetime twin, a point and the equal-bound pair) are
+            // the same value for eq/ne and order chronologically for
+            // lt/le/ge/gt
+            let reference = if type_str == "dateTimeInterval" {
+                literal_as_interval(&val).ok()
+            } else {
+                None
+            };
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_string = value_to_string(&object_value).to_string();
-                let cmp = object_string.cmp(&val);
+                let cmp = if let Some(ref iv) = reference {
+                    let object_iv = decode_lexical_entry(&object_value.to_bytes())
+                        .expect("object value must decode as a lexical interval");
+                    cmp_interval_bounds(&object_iv, iv)
+                } else {
+                    let object_string = value_to_string(&object_value).to_string();
+                    object_string.cmp(&val)
+                };
                 ordering_matches_op(cmp, op)
+            }))
+        }
+        FilterValue::Relation(rel, val) => {
+            let relation = rel
+                .parse::<AllenRelation>()
+                .expect("unknown relation name in relationship filter");
+            let reference = literal_as_interval(val)
+                .expect("relationship value must be an interval or instant literal");
+            // index candidates — a superset; the literal check below keeps
+            // the verdict exact on members only
+            let candidates: std::collections::HashSet<u64> = g
+                .interval_relation_object_ids(relation, &reference)
+                .into_iter()
+                .collect();
+            let g = g.clone();
+            ClonableIterator::new(iter.filter(move |object| {
+                candidates.contains(object) && {
+                    let object_value = g.id_object_value(*object).expect("Object value must exist");
+                    let object_string = value_to_string(&object_value);
+                    literal_as_interval(&object_string)
+                        .map(|iv| interval_relation(&iv, relation, &reference))
+                        .unwrap_or(false)
+                }
             }))
         }
         FilterValue::Enum { op, value } => {
@@ -743,8 +1030,8 @@ fn object_type_filter<'a>(
     }
 }
 
-fn compile_query<'a>(
-    context: &'a TerminusContext<'static>,
+fn compile_query<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     all_frames: &'a AllFrames,
     filter: Rc<FilterObject>,
@@ -758,7 +1045,8 @@ fn compile_query<'a>(
     if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
             let restriction_name = all_frames.graphql_to_short_name(&restriction_name);
-            id_matches_restriction(context, restriction_name, *id)
+            context
+                .id_matches_restriction(restriction_name, *id)
                 .unwrap()
                 .is_some()
         }));
@@ -911,7 +1199,7 @@ fn collection_kind_iterator(
     kind: CollectionKind,
     subject: u64,
     property_id: u64,
-) -> ClonableIterator<u64> {
+) -> ClonableIterator<'_, u64> {
     match kind {
         CollectionKind::Property => ClonableIterator::new(CachedClonableIterator::new(
             g.triples_sp(subject, property_id).map(|t| t.object),
@@ -1002,7 +1290,7 @@ fn generate_iterator_from_filter<'a>(
                     ) => {
                         let kind = e.1.kind().unwrap();
                         path.push(PathEdgeType::new(&e.0, kind));
-                        visit_next.push_back((path, &next_f))
+                        visit_next.push_back((path, next_f))
                     }
                     FilterScope::And(next_fs) => {
                         for next_f in next_fs.iter() {
@@ -1094,6 +1382,7 @@ fn filter_value_to_entry(value: &FilterValue) -> Option<TypedDictEntry> {
         FilterValue::BigFloat(GenericOperation::Eq, val, _) => Decimal::new(val.0.clone())
             .ok()
             .map(|parsed| Decimal::make_entry(&parsed)),
+        FilterValue::AllOf(filters) => filters.iter().find_map(filter_value_to_entry),
         _ => None,
     }
 }
@@ -1197,8 +1486,8 @@ fn generate_initial_iterator<'a>(
     }
 }
 
-fn lookup_by_filter<'a>(
-    context: &'a TerminusContext<'static>,
+fn lookup_by_filter<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     class_name: &'a GraphQLName<'a>,
     all_frames: &'a AllFrames,
@@ -1222,8 +1511,8 @@ fn lookup_by_filter<'a>(
     }
 }
 
-pub fn run_filter_query<'a>(
-    context: &'a TerminusContext<'static>,
+pub fn run_filter_query<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     arguments: &'a juniper::Arguments,
     class_name: &'a GraphQLName<'a>,
@@ -1338,6 +1627,49 @@ pub fn run_filter_query<'a>(
     }
 }
 
+/// Run a count query - returns count of matching documents without collecting them
+pub fn run_count_query<'a, C: TerminusResolveContext>(
+    context: &'a C,
+    g: &'a SyncStoreLayer,
+    filter_input: &FilterInputObject,
+    class_name: &'a GraphQLName<'a>,
+    all_frames: &'a AllFrames,
+) -> i32 {
+    // An empty filter reduces _count to summing rdf:type edge counts over
+    // the class and its subclasses, which the store computes from its
+    // indexes without enumerating documents.
+    if filter_input.edges.is_empty() {
+        if let Some(rdf_type_id) = g.predicate_id(RDF_TYPE) {
+            let count: usize = all_frames
+                .subsumed(class_name)
+                .into_iter()
+                .map(|sub_class| all_frames.graphql_to_iri_name(&sub_class))
+                .filter_map(|sub_class_iri| g.object_node_id(sub_class_iri.as_str()))
+                .map(|object_id| g.count_triples(None, Some(rdf_type_id), Some(object_id)))
+                .sum();
+            return count as i32;
+        }
+        return 0;
+    }
+
+    // Compile filter object from input
+    let filter = compile_filter_object(class_name, all_frames, filter_input);
+
+    // Use existing lookup logic but just count instead of collecting
+    let count = lookup_by_filter(
+        context,
+        g,
+        class_name,
+        all_frames,
+        Some(filter),
+        None, // no zero_iter
+        true, // include_children (matches default query behavior)
+    )
+    .count();
+
+    count as i32
+}
+
 fn include_children(arguments: &juniper::Arguments) -> bool {
     arguments.get("include_children").unwrap_or(true)
 }
@@ -1428,5 +1760,52 @@ impl Ord for QueryOrderKey {
 impl PartialOrd for QueryOrderKey {
     fn partial_cmp(&self, other: &QueryOrderKey) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+#[cfg(test)]
+mod regex_tests {
+    use super::*;
+
+    #[test]
+    fn valid_simple_regex_compiles() {
+        let re = compile_safe_regex(r"^abc.*xyz$");
+        assert!(re.is_ok());
+        assert!(re.unwrap().is_match("abc123xyz"));
+    }
+
+    #[test]
+    fn valid_regex_with_alternation_compiles() {
+        let re = compile_safe_regex(r"(foo|bar|baz)+");
+        assert!(re.is_ok());
+        assert!(re.unwrap().is_match("foobarbaz"));
+    }
+
+    #[test]
+    fn redos_nested_quantifier_rejected_by_size_limit() {
+        // The Rust regex crate uses Thompson NFA (linear-time, no backtracking),
+        // so classic ReDoS via catastrophic backtracking is not possible.
+        // However, size_limit protects against memory exhaustion from patterns
+        // that compile to huge NFAs. A pattern with many nested groups and
+        // alternations creates a large state machine — this should be rejected.
+        let evil = "a".repeat(10_000);
+        let pattern = format!("({})+", evil);
+        let re = compile_safe_regex(&pattern);
+        assert!(
+            re.is_err(),
+            "Huge NFA pattern should be rejected by size_limit"
+        );
+    }
+
+    #[test]
+    fn invalid_regex_returns_error() {
+        let re = compile_safe_regex(r"[unclosed");
+        assert!(re.is_err());
+    }
+
+    #[test]
+    fn empty_regex_compiles() {
+        let re = compile_safe_regex("");
+        assert!(re.is_ok());
     }
 }

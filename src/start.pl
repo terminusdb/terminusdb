@@ -13,20 +13,12 @@
 :- use_module(enterprise(init_enterprise)).
 :- endif.
 
-:- use_module(library(main)).
-:- initialization(main).
+% Run as toplevel goal (like the compiled binary's toplevel(cli_toplevel))
+% rather than inside initialization, which executes under sig_atomic and
+% would defer all signal handlers (e.g. Ctrl-C) for the whole session.
+:- set_prolog_flag(toplevel_goal, tdb_main).
 
 :- use_module(library(settings)).
-
-initialise_signals :-
-    (   current_prolog_flag(unix, true)
-    ->  on_signal(hup, _, shutdown_signal),
-        on_signal(term, _, shutdown_signal),
-        on_signal(int, _, shutdown_signal)
-    ;   true).
-
-:- initialise_signals.
-
 
 initialise_log_settings :-
     get_time(Time),
@@ -42,6 +34,10 @@ prolog:message(server_missing_config(BasePath)) -->
     'Run: ~s/utils/db_init first'-[BasePath],
     nl
     ].
+
+% Suppress the SWI-Prolog welcome banner; running cli_toplevel as the
+% toplevel goal counts as a default interactive run.
+user:message_hook(_, banner, _).
 
 % Catch HTTP-related warnings (e.g., malformed cookies) to prevent server crashes
 % These warnings are logged but don't halt execution.
@@ -92,10 +88,7 @@ user:message_hook(syntax_error(Term), warning, Lines) :-
 :- use_module(cli(main)).
 :- use_module(library(debug)).
 
-shutdown_signal(_Signal) :-
-    thread_send_message(main, stop).
-
-main(_Argv) :-
+tdb_main :-
     initialize_flags,
     initialise_log_settings,
     bootstrap_config_files,

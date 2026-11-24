@@ -1,7 +1,7 @@
 use bimap::BiMap;
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde::{self, Deserialize};
+use serde::{self, de::IgnoredAny, Deserialize};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
@@ -35,7 +35,8 @@ impl<'a> GraphQLName<'a> {
 
 impl<'a> PartialOrd<str> for GraphQLName<'a> {
     fn partial_cmp(&self, other: &str) -> Option<std::cmp::Ordering> {
-      self.0.partial_cmp(&<&str as Into<std::borrow::Cow<'_, str>>>::into(other))
+        self.0
+            .partial_cmp(&<&str as Into<std::borrow::Cow<'_, str>>>::into(other))
     }
 }
 
@@ -113,6 +114,42 @@ impl<T> OneOrMore<T> {
 
 fn empty<T>() -> OneOrMore<T> {
     OneOrMore::More(vec![])
+}
+
+// Prolog [] buffers as a unit value through serde's internally-tagged enum
+// path; treat it as the empty sequence it is so Vec fields accept [].
+fn unit_or_seq<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    struct UnitOrSeq<T>(std::marker::PhantomData<T>);
+    impl<'de, T> serde::de::Visitor<'de> for UnitOrSeq<T>
+    where
+        T: Deserialize<'de>,
+    {
+        type Value = Vec<T>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a sequence")
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E> {
+            Ok(vec![])
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut elements = vec![];
+            while let Some(element) = seq.next_element()? {
+                elements.push(element);
+            }
+            Ok(elements)
+        }
+    }
+    deserializer.deserialize_any(UnitOrSeq(std::marker::PhantomData))
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
@@ -368,36 +405,51 @@ fn default_dimensionality() -> usize {
     1
 }
 
+// '@unfold' arrives as the Prolog atom `true`, which untagged content
+// buffering reads as a string — Option<bool> cannot see it. IgnoredAny
+// accepts any representation; GraphQL discards the hint either way.
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(tag = "@type")]
 enum ComplexFieldDefinition {
     Optional {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
+        #[serde(rename = "@unfold")]
+        unfold: Option<IgnoredAny>,
     },
     Set {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
+        #[serde(rename = "@unfold")]
+        unfold: Option<IgnoredAny>,
     },
     Array {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
         #[serde(default = "default_dimensionality")]
         dimensions: usize,
+        #[serde(rename = "@unfold")]
+        unfold: Option<IgnoredAny>,
     },
     List {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
+        #[serde(rename = "@unfold")]
+        unfold: Option<IgnoredAny>,
     },
     Cardinality {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
         min: Option<usize>,
         max: Option<usize>,
+        #[serde(rename = "@unfold")]
+        unfold: Option<IgnoredAny>,
     },
     Foreign {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
+        #[serde(rename = "@unfold")]
+        unfold: Option<IgnoredAny>,
     },
 }
 
@@ -431,32 +483,52 @@ impl From<StructuralFieldDefinition> for UncleanFieldDefinition {
                 UncleanFieldDefinition::Required(base_or_derived(s))
             }
             StructuralFieldDefinition::ContainerField(c) => match c {
-                ComplexFieldDefinition::Optional { class } => {
+                ComplexFieldDefinition::Optional { class, unfold: _ } => {
                     UncleanFieldDefinition::Optional(class.name())
                 }
-                ComplexFieldDefinition::Set { class } => UncleanFieldDefinition::Set(class.name()),
-                ComplexFieldDefinition::List { class } => {
+                ComplexFieldDefinition::Set { class, unfold: _ } => {
+                    UncleanFieldDefinition::Set(class.name())
+                }
+                ComplexFieldDefinition::List { class, unfold: _ } => {
                     UncleanFieldDefinition::List(class.name())
                 }
-                ComplexFieldDefinition::Array { class, dimensions } => {
-                    UncleanFieldDefinition::Array {
-                        class: class.name(),
-                        dimensions,
-                    }
-                }
-                ComplexFieldDefinition::Cardinality { class, min, max } => {
-                    UncleanFieldDefinition::Cardinality {
-                        class: class.name(),
-                        min,
-                        max,
-                    }
-                }
-                ComplexFieldDefinition::Foreign { class } => {
+                ComplexFieldDefinition::Array {
+                    class,
+                    dimensions,
+                    unfold: _,
+                } => UncleanFieldDefinition::Array {
+                    class: class.name(),
+                    dimensions,
+                },
+                ComplexFieldDefinition::Cardinality {
+                    class,
+                    min,
+                    max,
+                    unfold: _,
+                } => UncleanFieldDefinition::Cardinality {
+                    class: class.name(),
+                    min,
+                    max,
+                },
+                ComplexFieldDefinition::Foreign { class, unfold: _ } => {
                     UncleanFieldDefinition::Required(class.name())
                 }
             },
+            StructuralFieldDefinition::SimpleAnnotatedField(f) => {
+                UncleanFieldDefinition::Required(f.class.name())
+            }
         }
     }
+}
+
+// A property spec that carries annotations but no '@type' family tag, such as
+// the schema frame's {'@class':X,'@unfold':true} rendering of a required field.
+#[derive(Deserialize, PartialEq, Debug)]
+struct SimpleAnnotatedFieldDefinition {
+    #[serde(rename = "@class")]
+    class: StructuralFieldInnerDefinition,
+    #[serde(rename = "@unfold")]
+    unfold: Option<IgnoredAny>,
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -464,6 +536,7 @@ impl From<StructuralFieldDefinition> for UncleanFieldDefinition {
 enum StructuralFieldDefinition {
     SimpleField(String),
     ContainerField(ComplexFieldDefinition),
+    SimpleAnnotatedField(SimpleAnnotatedFieldDefinition),
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
@@ -549,12 +622,18 @@ impl BaseOrDerived<ShortName> {
 
 pub fn is_base_type(s: &str) -> bool {
     // TODO this is not good enough
-    s.starts_with("xsd:") || s.starts_with("sys:")
+    s.starts_with("xsd:")
+        || s.starts_with("sys:")
+        || s.starts_with("xdd:")
+        || s.starts_with("xbrl:")
 }
 
 pub fn base_or_derived(c: String) -> BaseOrDerived<ShortName> {
     if is_base_type(&c) {
-        BaseOrDerived::Base(c[4..].to_string())
+        // strip the namespace prefix ("xbrl:" is five chars — a fixed [4..]
+        // slice would keep the colon)
+        let local = c.split(':').nth(1).unwrap();
+        BaseOrDerived::Base(local.to_string())
     } else {
         BaseOrDerived::Derived(ShortName(c))
     }
@@ -597,7 +676,7 @@ impl FieldDefinition {
         self.base_type().map(type_is_json).unwrap_or(false)
     }
 
-    pub fn range(&self) -> &BaseOrDerived<GraphQLName> {
+    pub fn range(&self) -> &BaseOrDerived<GraphQLName<'_>> {
         match self {
             Self::Required(c) => c,
             Self::Optional(c) => c,
@@ -608,7 +687,7 @@ impl FieldDefinition {
         }
     }
 
-    pub fn document_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&GraphQLName> {
+    pub fn document_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a GraphQLName<'a>> {
         let range = self.range();
         match range {
             BaseOrDerived::Base(_) => None,
@@ -616,7 +695,7 @@ impl FieldDefinition {
         }
     }
 
-    pub fn enum_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&GraphQLName> {
+    pub fn enum_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a GraphQLName<'a>> {
         let range = self.range();
         match range {
             BaseOrDerived::Base(_) => None,
@@ -649,12 +728,13 @@ impl FieldDefinition {
 #[serde(tag = "@type")]
 pub enum UncleanKeyDefinition {
     Random,
+    UuidV7,
     Lexical {
-        #[serde(rename = "@fields")]
+        #[serde(rename = "@fields", deserialize_with = "unit_or_seq")]
         fields: Vec<ShortName>,
     },
     Hash {
-        #[serde(rename = "@fields")]
+        #[serde(rename = "@fields", deserialize_with = "unit_or_seq")]
         fields: Vec<ShortName>,
     },
     ValueHash,
@@ -664,6 +744,7 @@ pub enum UncleanKeyDefinition {
 #[serde(tag = "@type")]
 pub enum KeyDefinition {
     Random,
+    UuidV7,
     Lexical {
         #[serde(rename = "@fields")]
         fields: Vec<GraphQLName<'static>>,
@@ -679,6 +760,7 @@ impl UncleanKeyDefinition {
     pub fn sanitize(self) -> KeyDefinition {
         match self {
             UncleanKeyDefinition::Random => KeyDefinition::Random,
+            UncleanKeyDefinition::UuidV7 => KeyDefinition::UuidV7,
             UncleanKeyDefinition::Lexical { fields } => {
                 let fields = fields.iter().map(|f| f.sanitize()).collect();
                 KeyDefinition::Lexical { fields }
@@ -716,12 +798,16 @@ pub struct UncleanClassDefinition {
     pub is_subdocument: Option<Vec<()>>,
     #[serde(rename = "@unfoldable")]
     pub is_unfoldable: Option<Vec<()>>,
+    #[serde(rename = "@shared")]
+    pub is_shared: Option<Vec<()>>,
     #[serde(rename = "@abstract")]
     pub is_abstract: Option<Vec<()>>,
     #[serde(rename = "@oneOf")]
     pub one_of: Option<Vec<UncleanOneOf>>,
     #[serde(rename = "@inherits")]
     pub inherits: Option<Vec<ShortName>>,
+    #[serde(rename = "@base")]
+    pub base: Option<String>,
     #[serde(flatten)]
     pub fields: BTreeMap<ShortName, UncleanFieldDefinition>,
 }
@@ -733,6 +819,7 @@ pub struct ClassDefinition {
     pub key: Option<KeyDefinition>,
     pub is_subdocument: Option<Vec<()>>,
     pub is_unfoldable: Option<Vec<()>>,
+    pub is_shared: Option<Vec<()>>,
     pub is_abstract: Option<Vec<()>>,
     pub one_of: Option<Vec<OneOf>>,
     pub inherits: Option<Vec<GraphQLName<'static>>>,
@@ -803,6 +890,7 @@ impl UncleanClassDefinition {
             key,
             is_subdocument: self.is_subdocument.clone(),
             is_unfoldable: self.is_unfoldable.clone(),
+            is_shared: self.is_shared,
             is_abstract: self.is_abstract,
             inherits,
             one_of,
@@ -829,7 +917,7 @@ impl ClassDefinition {
         }
     }
 
-    pub fn fields(&self) -> Vec<(&GraphQLName, &FieldDefinition)> {
+    pub fn fields(&self) -> Vec<(&GraphQLName<'_>, &FieldDefinition)> {
         let mut one_ofs: Vec<(&GraphQLName, &FieldDefinition)> = self
             .one_of
             .as_ref()
@@ -902,7 +990,9 @@ pub struct UncleanEnumDefinition {
     pub documentation: OneOrMore<UncleanEnumDocumentationDefinition>,
     #[serde(rename = "@metadata")]
     pub metadata: Option<serde_json::Value>,
-    #[serde(rename = "@values")]
+    #[serde(rename = "@base")]
+    pub base: Option<String>,
+    #[serde(rename = "@values", deserialize_with = "unit_or_seq")]
     pub values: Vec<ShortName>,
 }
 
@@ -910,6 +1000,7 @@ pub struct UncleanEnumDefinition {
 pub struct EnumDefinition {
     pub documentation: OneOrMore<EnumDocumentationDefinition>,
     pub metadata: Option<serde_json::Value>,
+    pub base: Option<String>,
     pub values: Vec<GraphQLName<'static>>,
     pub values_renaming: BiMap<GraphQLName<'static>, ShortName>,
 }
@@ -936,6 +1027,7 @@ impl UncleanEnumDefinition {
         EnumDefinition {
             documentation: OneOrMore::More(documentation),
             metadata: self.metadata,
+            base: self.base,
             values,
             values_renaming,
         }
@@ -952,7 +1044,7 @@ impl EnumDefinition {
         IriName(urlencoding::encode(res.as_str()).into_owned())
     }
 
-    pub fn name_value(&self, name: &IriName) -> &GraphQLName {
+    pub fn name_value(&self, name: &IriName) -> &GraphQLName<'_> {
         let decoded = &*urlencoding::decode(name.as_str())
             .expect("Somehow encoding went terribly wrong in saving");
         self.values_renaming
@@ -967,7 +1059,10 @@ impl EnumDefinition {
 #[serde(tag = "@type")]
 pub enum UncleanTypeDefinition {
     Class(UncleanClassDefinition),
+    TaggedUnion(UncleanClassDefinition),
     Enum(UncleanEnumDefinition),
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(PartialEq, Debug)]
@@ -1048,6 +1143,10 @@ impl UncleanAllFrames {
         let mut frames: BTreeMap<GraphQLName, TypeDefinition> = BTreeMap::new();
         let mut graphql_to_iri_renaming: BiMap<GraphQLName, IriName> = BiMap::new();
         for (class_name, typedef) in self.frames.into_iter() {
+            // e.g. sys:Foreign: present in frames but not a queryable type
+            if let UncleanTypeDefinition::Unknown = typedef {
+                continue;
+            }
             let class_name_ref = &class_name;
             let iri_name = self.context.expand_schema(&class_name_ref.into());
             let sanitized_class = class_name.sanitize();
@@ -1064,10 +1163,11 @@ impl UncleanAllFrames {
                 panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]' and which do not overlap with reserved type names. Please rename your classes to remove the following duplicate pair: ({left},{right}) == ({sanitized_class},{class_name})")
             }
             let new_typedef = match typedef {
-                UncleanTypeDefinition::Class(cd) => {
+                UncleanTypeDefinition::Class(cd) | UncleanTypeDefinition::TaggedUnion(cd) => {
                     TypeDefinition::Class(cd.sanitize(&self.context))
                 }
                 UncleanTypeDefinition::Enum(ed) => TypeDefinition::Enum(ed.sanitize()),
+                UncleanTypeDefinition::Unknown => unreachable!(),
             };
             frames.insert(sanitized_class.clone(), new_typedef);
         }
@@ -1140,13 +1240,23 @@ impl AllFrames {
         self.class_renaming.get_by_right(short_name).cloned()
     }
 
+    pub fn cache_key(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let debug_str = format!("{:?}", self);
+        let mut hasher = DefaultHasher::new();
+        debug_str.hash(&mut hasher);
+        hasher.finish()
+    }
+
     #[allow(dead_code)]
     pub fn short_name_to_graphql_name<'a>(&'a self, db_name: &ShortName) -> GraphQLName<'a> {
         self.short_to_graphql_name_opt(db_name)
             .unwrap_or_else(|| panic!("This class name {db_name} *should* exist"))
     }
 
-    pub fn iri_to_graphql_name_opt(&self, iri: &IriName) -> Option<GraphQLName> {
+    pub fn iri_to_graphql_name_opt(&self, iri: &IriName) -> Option<GraphQLName<'_>> {
         self.graphql_to_iri_renaming.get_by_right(iri).cloned()
     }
 
@@ -1190,7 +1300,15 @@ impl AllFrames {
         let enum_type_expanded = self.graphql_to_iri_name(enum_type);
         let enum_type_definition = self.frames[enum_type].as_enum_definition();
         let value = enum_type_definition.value_name(value);
-        IriName(format!("{enum_type_expanded}/{value}"))
+        // Members mint under the enum's @base resolved under @schema,
+        // or under the enum IRI itself by default.
+        match &enum_type_definition.base {
+            Some(base) => {
+                let expanded = self.context.expand_schema(&node_variety(base));
+                IriName(format!("{expanded}{value}"))
+            }
+            None => IriName(format!("{enum_type_expanded}/{value}")),
+        }
     }
 
     pub fn reverse_link<'a>(
@@ -1209,6 +1327,54 @@ impl AllFrames {
             .get(class)
             .cloned()
             .unwrap_or_else(|| vec![class.clone()])
+    }
+
+    /// Returns all transitive superclasses of `class` (including `class`
+    /// itself), walking every entry of `@inherits` (a class may inherit
+    /// from multiple parents). Used to declare which GraphQL interfaces
+    /// a class implements.
+    pub fn ancestors_of<'a>(&'a self, class: &GraphQLName<'a>) -> Vec<GraphQLName<'a>> {
+        let mut result = vec![class.clone()];
+        let mut cursor = 0;
+        while cursor < result.len() {
+            let current = result[cursor].clone();
+            cursor += 1;
+            if let Some(TypeDefinition::Class(cd)) = self.frames.get(&current) {
+                if let Some(inherits) = &cd.inherits {
+                    for parent in inherits {
+                        if !result.contains(parent) {
+                            result.push(parent.clone());
+                        }
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    /// Returns all superclasses of `class` (including `class` itself),
+    /// walking the `@inherits` chain. Used by _ChangeSet to group
+    /// subclass documents under their superclass fields.
+    pub fn superclasses_of<'a>(&'a self, class: &GraphQLName<'a>) -> Vec<GraphQLName<'a>> {
+        let mut result = vec![class.clone()];
+        let mut current = class.clone();
+        loop {
+            let next = self.frames.get(&current);
+            match next {
+                Some(TypeDefinition::Class(cd)) => {
+                    if let Some(inherits) = &cd.inherits {
+                        if let Some(first) = inherits.first() {
+                            result.push(first.clone());
+                            current = first.clone();
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                _ => break,
+            }
+        }
+        result
     }
 
     pub fn is_foreign<'a>(&'a self, class: &GraphQLName<'a>) -> bool {
@@ -1375,6 +1541,66 @@ _{'@type': "Array", '@class': 'Something'}
     }
 
     #[test]
+    fn deserialize_unfold_container_field() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        // Real frames carry '@type' and '@unfold' as atoms, '@class' as a
+        // string. Untagged buffering turns the atom `true` into
+        // Content::Str("true"), which Option<bool> rejects — this test
+        // guards the Option<IgnoredAny> declaration it requires.
+        let term = r#"
+_{'@type':'Optional', '@class':"WH", '@unfold':true}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: UncleanFieldDefinition = context.deserialize_from_term(&term).unwrap();
+
+        assert_eq!(
+            UncleanFieldDefinition::Optional(BaseOrDerived::Derived(ShortName("WH".to_string()))),
+            typedef
+        );
+    }
+
+    #[test]
+    fn deserialize_unfold_set_field() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"
+_{'@type':'Set', '@class':"WH", '@unfold':true}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: UncleanFieldDefinition = context.deserialize_from_term(&term).unwrap();
+
+        assert_eq!(
+            UncleanFieldDefinition::Set(BaseOrDerived::Derived(ShortName("WH".to_string()))),
+            typedef
+        );
+    }
+
+    #[test]
+    fn deserialize_unfold_simple_field() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        // Non-container @unfold renders as {'@class':X,'@unfold':true} with no
+        // '@type' — the shape the schema frame emits for required fields.
+        let term = r#"
+_{'@class':"WH", '@unfold':true}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: UncleanFieldDefinition = context.deserialize_from_term(&term).unwrap();
+
+        assert_eq!(
+            UncleanFieldDefinition::Required(BaseOrDerived::Derived(ShortName("WH".to_string()))),
+            typedef
+        );
+    }
+
+    #[test]
     fn deserialize_key_definition() {
         let engine = Engine::new();
         let activation = engine.activate();
@@ -1413,6 +1639,7 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
                 key: None,
                 is_subdocument: None,
                 is_unfoldable: None,
+                is_shared: None,
                 is_abstract: None,
                 inherits: None,
                 one_of: Some(vec![
@@ -1449,6 +1676,7 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
                         ])
                     }
                 ]),
+                base: None,
                 fields: BTreeMap::from([]),
             }),
             typedef
@@ -1471,6 +1699,107 @@ json{'@context':_27018{'@base':"terminusdb:///data/",
         let _frames: UncleanAllFrames = context.deserialize_from_term(&term).unwrap();
 
         // TODO actually test something here
+    }
+
+    #[test]
+    fn deserialize_tagged_union_and_foreign_frames() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"
+json{'@context':_27018{'@base':"terminusdb:///data/",
+                       '@schema':"terminusdb:///schema#",
+                       '@type':'Context'},
+      'TU':json{'@type':'TaggedUnion','@base':"tu_",
+                '@key':json{'@type':"ValueHash"},
+                '@oneOf':[json{a:'sys:Unit',b:'xsd:string'}]},
+      'Ext':json{'@type':'Foreign'}}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let frames: UncleanAllFrames = context.deserialize_from_term(&term).unwrap();
+
+        let (types, _restrictions, _to_iri, _to_short, _prefixes) = frames.sanitize();
+        assert_eq!(1, types.len());
+        match &types[&GraphQLName(Cow::Borrowed("TU"))] {
+            TypeDefinition::Class(cd) => {
+                assert_eq!(
+                    1,
+                    cd.one_of
+                        .as_ref()
+                        .expect("tagged union members under @oneOf")
+                        .len()
+                );
+            }
+            other => panic!("tagged union must remain a class definition: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn deserialize_empty_lists_in_frames() {
+        // Prolog [] reaches serde's internally-tagged buffering as a unit
+        // value, which cannot feed a Vec field: one empty @values (or empty
+        // @fields on a key) must not poison every query for the database.
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"
+json{'@context':_27018{'@base':"terminusdb:///data/",
+                       '@schema':"terminusdb:///schema#",
+                       '@type':'Context'},
+      'Min':json{'@type':'Enum','@values':[]},
+      'Sub':json{'@type':'Class','@subdocument':[],
+                 '@key':json{'@type':"Lexical",'@fields':[]},
+                 value:'xsd:string'}}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let frames: UncleanAllFrames = context.deserialize_from_term(&term).unwrap();
+
+        let (types, _restrictions, _to_iri, _to_short, _prefixes) = frames.sanitize();
+        match &types[&GraphQLName(Cow::Borrowed("Min"))] {
+            TypeDefinition::Enum(ed) => assert!(ed.values.is_empty()),
+            other => panic!("empty enum must remain an enum definition: {other:?}"),
+        }
+        match &types[&GraphQLName(Cow::Borrowed("Sub"))] {
+            TypeDefinition::Class(_) => {}
+            other => panic!("subdocument class must remain a class definition: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn deserialize_shared_class() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"json{'@key':json{'@type':"Random"},
+                           '@shared':[],
+                           '@type':'Class',
+                           destination:'City',
+                           name:'xsd:string'}"#;
+
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: UncleanTypeDefinition = context.deserialize_from_term(&term).unwrap();
+        let UncleanTypeDefinition::Class(class) = typedef else {
+            panic!("expected a class definition");
+        };
+        // '@shared' is a class annotation and must not be parsed as a field
+        assert_eq!(
+            BTreeMap::from([
+                (
+                    ShortName("destination".to_string()),
+                    UncleanFieldDefinition::Required(BaseOrDerived::Derived(ShortName(
+                        "City".to_string()
+                    )))
+                ),
+                (
+                    ShortName("name".to_string()),
+                    UncleanFieldDefinition::Required(BaseOrDerived::Base("string".to_string()))
+                ),
+            ]),
+            class.fields
+        );
     }
 
     #[test]
@@ -1510,6 +1839,7 @@ json{ '@documentation':json{ '@comment':"The exhaustive list of actions which ar
         assert_eq!(
             UncleanTypeDefinition::Enum(UncleanEnumDefinition {
                 metadata: None,
+                base: None,
                 documentation: OneOrMore::One(UncleanEnumDocumentationDefinition {
                     label: None,
                     values: None,

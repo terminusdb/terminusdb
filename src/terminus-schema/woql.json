@@ -327,6 +327,122 @@
 }
 {
   "@documentation": {
+    "@comment":"Specify an edge pattern with a half-open value range [low, high) on the object. Returns triples whose object value falls within the range.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "high":"The exclusive upper bound of the value range.",
+      "low":"The inclusive lower bound of the value range.",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"TripleSlice",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "low", "high", "optional(graph)" ],
+      "mode": ["?", "?", "?", "+", "+", "+" ],
+      "types": ["node", "node", "value", "value", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "high":"Value",
+  "low":"Value",
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Specify an edge pattern with a half-open value range [low, high) on the object, returning triples in reverse (descending) object order. Same semantics as TripleSlice but iterates from highest to lowest value.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "high":"The exclusive upper bound of the value range.",
+      "low":"The inclusive lower bound of the value range.",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"TripleSliceRev",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "low", "high", "optional(graph)" ],
+      "mode": ["?", "?", "?", "+", "+", "+" ],
+      "types": ["node", "node", "value", "value", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "high":"Value",
+  "low":"Value",
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Find the next object value after a reference for a given subject-predicate pair. When object is bound and next is free, finds the smallest next value greater than object. When next is bound and object is free, finds the largest object value less than next.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "next":"The next object value or the reference upper bound.",
+      "object":"The current object value or the result of lookup by next.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"TripleNext",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "next", "optional(graph)" ],
+      "mode": ["+", "+", "?", "?", "+" ],
+      "types": ["node", "node", "value", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "next":"Value",
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Find the previous object value before a reference for a given subject-predicate pair. When object is bound and previous is free, finds the largest previous value less than object. When previous is bound and object is free, finds the smallest object value greater than previous.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"The current object value or the result of lookup by previous.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "previous":"The previous object value or the reference lower bound.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"TriplePrevious",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "previous", "optional(graph)" ],
+      "mode": ["+", "+", "?", "?", "+" ],
+      "types": ["node", "node", "value", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"Value",
+  "predicate":"NodeValue",
+  "previous":"Value",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
     "@comment":"Specify an edge to add to the graph.",
     "@properties": {
       "graph":"An optional graph (either 'instance' or 'schema')",
@@ -1053,6 +1169,404 @@
 }
 {
   "@documentation": {
+    "@comment":"Predicate determining if one thing is greater than or equal to another according to natural ordering.",
+    "@properties": {"left":"The greater or equal element.", "right":"The lesser or equal element."}
+  },
+  "@id":"Gte",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["left", "right" ],
+      "mode": ["+", "+" ],
+      "types": ["any", "any" ]
+    }
+  },
+  "@type":"Class",
+  "left":"DataValue",
+  "right":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Predicate determining if one thing is less than or equal to another according to natural ordering.",
+    "@properties": {"left":"The lesser or equal element.", "right":"The greater or equal element."}
+  },
+  "@id":"Lte",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["left", "right" ],
+      "mode": ["+", "+" ],
+      "types": ["any", "any" ]
+    }
+  },
+  "@type":"Class",
+  "left":"DataValue",
+  "right":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Predicate testing whether a value falls within a half-open range [Start, End). Succeeds if Start <= Value < End.",
+    "@properties": {"value":"The value to test.", "start":"The inclusive lower bound.", "end":"The exclusive upper bound."}
+  },
+  "@id":"InRange",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["value", "start", "end" ],
+      "mode": ["+", "+", "+" ],
+      "types": ["any", "any", "any" ]
+    }
+  },
+  "@type":"Class",
+  "value":"DataValue",
+  "start":"DataValue",
+  "end":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Generates a sequence of values in the half-open range [Start, End). When Value is unbound, produces each value via backtracking. Supports integer and decimal types.",
+    "@properties": {"value":"The generated sequence value.", "start":"The inclusive start of the sequence.", "end":"The exclusive end of the sequence.", "step":"Optional increment per step. Defaults to 1 for integers, 1.0 for decimals.", "count":"Optional total count. If bound, validates. If unbound, unifies with actual count."}
+  },
+  "@id":"Sequence",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["value", "start", "end", "optional(step)", "optional(count)" ],
+      "mode": ["?", "+", "+", "+", "?" ],
+      "types": ["data_value", "data_value", "data_value", "data_value", "data_value" ]
+    }
+  },
+  "@type":"Class",
+  "value":"DataValue",
+  "start":"DataValue",
+  "end":"DataValue",
+  "step": {"@class":"DataValue", "@type":"Optional"},
+  "count": {"@class":"DataValue", "@type":"Optional"}
+}
+{
+  "@documentation": {
+    "@comment":"The interval is a half-open xdd:dateTimeInterval [start, end). Give start and end to make an interval, or give an interval to get start and end. The endpoints are stored in UTC for correct lexical order. A date includes its full day: the interval starts at 00:00:00Z of the start date and ends at 00:00:00Z of the day after the end date.",
+    "@properties": {"start":"Start date or dateTime, included in the interval.", "end":"End date or dateTime. A date includes its full day and is stored as 00:00:00Z of the next day.", "interval":"The xdd:dateTimeInterval value."}
+  },
+  "@id":"Interval",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["start", "end", "interval"],
+      "mode": ["?", "?", "?"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "start":"DataValue",
+  "end":"DataValue",
+  "interval":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Relates an xdd:dateTimeInterval to its start endpoint and precise xsd:duration. Bidirectional: given interval extracts start+duration, given start+duration computes interval. Duration is a precise day/time count. A date-only start includes its full day from 00:00:00Z.",
+    "@properties": {"start":"Inclusive start date or dateTime.", "duration":"The xsd:duration between start and end.", "interval":"The xdd:dateTimeInterval value."}
+  },
+  "@id":"IntervalStartDuration",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["start", "duration", "interval"],
+      "mode": ["?", "?", "?"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "start":"DataValue",
+  "duration":"DataValue",
+  "interval":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Relates an xdd:dateTimeInterval to its end endpoint and precise xsd:duration. Bidirectional: given interval extracts duration+end, given duration+end computes interval. Duration is a precise day/time count. A date-only end includes its full day and is stored as 00:00:00Z of the next day.",
+    "@properties": {"duration":"The xsd:duration between start and end.", "end":"End date or dateTime. A date includes its full day and is stored as 00:00:00Z of the next day.", "interval":"The xdd:dateTimeInterval value."}
+  },
+  "@id":"IntervalDurationEnd",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["duration", "end", "interval"],
+      "mode": ["?", "?", "?"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "duration":"DataValue",
+  "end":"DataValue",
+  "interval":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the calendar day after the given date. Bidirectional: given date computes next, given next computes date.",
+    "@properties": {"date":"The input date.", "next":"The next calendar day."}
+  },
+  "@id":"DayAfter",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "next"],
+      "mode": ["?", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "next":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the calendar day before the given date. Bidirectional: given date computes previous, given previous computes date.",
+    "@properties": {"date":"The input date.", "previous":"The previous calendar day."}
+  },
+  "@id":"DayBefore",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "previous"],
+      "mode": ["?", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "previous":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the first day of the month for a given year-month. YearMonth must be ground.",
+    "@properties": {"year_month":"A gYearMonth value (e.g. 2024-01).", "date":"The resulting xsd:date for the first day of the month."}
+  },
+  "@id":"MonthStartDate",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["year_month", "date"],
+      "mode": ["+", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "year_month":"DataValue",
+  "date":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the last day of the month for a given year-month. Handles leap years correctly. YearMonth must be ground.",
+    "@properties": {"year_month":"A gYearMonth value (e.g. 2024-02).", "date":"The resulting xsd:date for the last day of the month."}
+  },
+  "@id":"MonthEndDate",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["year_month", "date"],
+      "mode": ["+", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "year_month":"DataValue",
+  "date":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Generator: produces every first-of-month date in the half-open range [Start, End).",
+    "@properties": {"date":"The generated first-of-month date.", "start":"The inclusive start date.", "end":"The exclusive end date."}
+  },
+  "@id":"MonthStartDates",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "start", "end"],
+      "mode": ["?", "+", "+"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "start":"DataValue",
+  "end":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Generator: produces every last-of-month date in the half-open range [Start, End).",
+    "@properties": {"date":"The generated last-of-month date.", "start":"The inclusive start date.", "end":"The exclusive end date."}
+  },
+  "@id":"MonthEndDates",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "start", "end"],
+      "mode": ["?", "+", "+"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "start":"DataValue",
+  "end":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Allen's Interval Algebra: classifies or validates the temporal relationship between two half-open intervals [x_start, x_end] and [y_start, y_end]. When relation is ground, validates that the named relation holds. When relation is a variable, determines which of the 13 Allen relations holds (deterministic). Supported relations: before, after, meets, met_by, overlaps, overlapped_by, starts, started_by, during, contains, finishes, finished_by, equals.",
+    "@properties": {"relation":"The Allen relation name (string) or variable.", "x_start":"Inclusive start of interval X.", "x_end":"Exclusive end of interval X.", "y_start":"Inclusive start of interval Y.", "y_end":"Exclusive end of interval Y."}
+  },
+  "@id":"IntervalRelation",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["relation", "x_start", "x_end", "y_start", "y_end"],
+      "mode": ["?", "+", "+", "+", "+"],
+      "types": ["data_value", "data_value", "data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "relation":"DataValue",
+  "x_start":"DataValue",
+  "x_end":"DataValue",
+  "y_start":"DataValue",
+  "y_end":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Allen's Interval Algebra on xdd:dateTimeInterval values. Classifies or validates the temporal relationship between two interval values. When relation is ground, validates that the named relation holds. When relation is a variable, determines which of the 13 Allen relations holds (deterministic). Supported relations: before, after, meets, met_by, overlaps, overlapped_by, starts, started_by, during, contains, finishes, finished_by, equals.",
+    "@properties": {"relation":"The Allen relation name (string) or variable.", "x":"The first xdd:dateTimeInterval.", "y":"The second xdd:dateTimeInterval."}
+  },
+  "@id":"IntervalRelationTyped",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["relation", "x", "y"],
+      "mode": ["?", "+", "+"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "relation":"DataValue",
+  "x":"DataValue",
+  "y":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Finds triples whose object stands in a typed relation to a reference value. Allen interval relations on xdd:dateTimeInterval objects; instant operands (xsd:dateTime) compare as zero-duration points. Supported relations: before, after, meets, met_by, overlaps, overlapped_by, starts, started_by, during, contains, finishes, finished_by, equals.",
+    "@properties": {"subject":"The subject, or variable to bind it.", "predicate":"The predicate, or variable to bind it.", "object":"The interval or instant object, or variable to bind it.", "relation":"The Allen relation name (string).", "value":"The reference interval or instant literal."}
+  },
+  "@id":"TripleRelation",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "relation", "value"],
+      "mode": ["?", "?", "?", "+", "+"],
+      "types": ["node", "node", "value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "subject":"NodeValue",
+  "predicate":"NodeValue",
+  "object":"Value",
+  "relation":"DataValue",
+  "value":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the ISO 8601 weekday number (Monday=1, Sunday=7) for a date. Accepts xsd:date or xsd:dateTime. Date must be ground.",
+    "@properties": {"date":"The input date or dateTime.", "weekday":"The ISO weekday number (1=Monday, 7=Sunday)."}
+  },
+  "@id":"Weekday",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "weekday"],
+      "mode": ["+", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "weekday":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the US-convention weekday number (Sunday=1, Saturday=7) for a date. Accepts xsd:date or xsd:dateTime. Date must be ground.",
+    "@properties": {"date":"The input date or dateTime.", "weekday":"The US weekday number (1=Sunday, 7=Saturday)."}
+  },
+  "@id":"WeekdaySundayStart",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "weekday"],
+      "mode": ["+", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "weekday":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the ISO 8601 week-numbering year and week number for a date. Accepts xsd:date or xsd:dateTime. Date must be ground. The ISO year may differ from the calendar year at year boundaries.",
+    "@properties": {"date":"The input date or dateTime.", "year":"The ISO week-numbering year.", "week":"The ISO week number (1-53)."}
+  },
+  "@id":"IsoWeek",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "year", "week"],
+      "mode": ["+", "?", "?"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "week":"DataValue",
+  "year":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Tri-directional duration arithmetic for dates and dateTimes. Given any two of start, end, and duration, computes the third. Accepts xsd:date or xsd:dateTime for start/end and xsd:duration for duration. Uses end-of-month (EOM) preservation: if the input is the last day of its month, the result will be the last day of the target month. Duration output omits time components when they are zero.",
+    "@properties": {"start":"The start date or dateTime.", "end":"The end date or dateTime.", "duration":"The xsd:duration between start and end."}
+  },
+  "@id":"DateDuration",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["start", "end", "duration"],
+      "mode": ["?", "?", "?"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "duration":"DataValue",
+  "end":"DataValue",
+  "start":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"A query which will succeed (without bindings) even in the case of failure.",
     "@properties": {"query":"The query to run."}
   },
@@ -1098,6 +1612,28 @@
     }
   },
   "@id":"RandomKey",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["base", "uri" ],
+      "mode": ["+", "?" ],
+      "types": ["string", "node" ]
+    }
+  },
+  "@type":"Class",
+  "base":"DataValue",
+  "uri":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Generates a key identical to those generated automatically by 'UuidV7' specifications.",
+    "@properties": {
+      "base":"The URI base to the left of the key.",
+      "uri":"The resulting URI."
+    }
+  },
+  "@id":"UuidV7",
   "@inherits":"Query",
   "@key": {"@type":"Random"},
   "@metadata": {
@@ -1318,6 +1854,44 @@
 }
 {
   "@documentation": {
+    "@comment":"Find the minimum value in a list using the standard ordering (woql_less). Works with any comparable types: numbers, dates, strings. Empty list produces no bindings.",
+    "@properties": {"list":"The list of values to search.", "result":"The minimum value found."}
+  },
+  "@id":"RangeMin",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "result"],
+      "mode": ["+", "?"],
+      "types": ["list(any)", "any"]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Find the maximum value in a list using the standard ordering (woql_less). Works with any comparable types: numbers, dates, strings. Empty list produces no bindings.",
+    "@properties": {"list":"The list of values to search.", "result":"The maximum value found."}
+  },
+  "@id":"RangeMax",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "result"],
+      "mode": ["+", "?"],
+      "types": ["list(any)", "any"]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"Start a query at the nth solution specified by 'start'. Allows resumption and paging of queries.",
     "@properties": {
       "query":"The query to perform.",
@@ -1437,6 +2011,30 @@
 }
 {
   "@documentation": {
+    "@comment":"Collect all solutions of a sub-query into a list. The template specifies what to collect from each solution, and the result is unified with into. If the query has no solutions, into is unified with the empty list.",
+    "@properties": {
+      "into":"The variable to bind the collected list of solutions.",
+      "query":"The subquery whose solutions will be collected.",
+      "template":"The template of elements in the result list."
+    }
+  },
+  "@id":"Collect",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["template", "into", "query"],
+      "mode": ["?", "?", ":"],
+      "types": ["value", "data_value", "query"]
+    }
+  },
+  "@type":"Class",
+  "into":"Value",
+  "query":"Query",
+  "template":"Value"
+}
+{
+  "@documentation": {
     "@comment":"Group a query into a list with each element of the list specified by 'template' using a given variable set for the group.",
     "@properties": {
       "group_by":"The variables which should be grouped into like solutions.",
@@ -1551,6 +2149,7 @@
   "@documentation": {
     "@comment":"Casts one type as another if possible.",
     "@properties": {
+      "prefixes":"An optional prefix map (dictionary value or variable) used to expand or contract expanded names (xsd:QName, xbrl:SQName) during the cast. When absent, the database context prefixes apply.",
       "result":"The resulting value after cast.",
       "type":"The type to which to cast.",
       "value":"The value to cast."
@@ -1561,12 +2160,13 @@
   "@key": {"@type":"Random"},
   "@metadata": {
     "https://terminusdb.com": {
-      "fields": ["value", "type", "result" ],
-      "mode": ["+", "+", "?" ],
-      "types": ["value", "node", "value" ]
+      "fields": ["value", "type", "result", "optional(prefixes)" ],
+      "mode": ["+", "+", "?", "+" ],
+      "types": ["value", "node", "value", "json" ]
     }
   },
   "@type":"Class",
+  "prefixes":{"@class":"Value", "@type":"Optional"},
   "result":"Value",
   "type":"NodeValue",
   "value":"Value"
@@ -1731,10 +2331,14 @@
 }
 {
   "@documentation": {
-    "@comment":"The number of edges in a database.",
+    "@comment":"The number of edges in a database. Two forms exist: with a resource and a count it counts all edges in the given resource. With subject, predicate and object fields it counts the edges matching the partially bound pattern, where unbound (variable) fields match anything.",
     "@properties": {
       "count":"The count of edges.",
-      "resource":"The resource to obtain the edges from."
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "resource":"The resource to obtain the edges from.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
     }
   },
   "@id":"TripleCount",
@@ -1749,7 +2353,41 @@
   },
   "@type":"Class",
   "count":"DataValue",
-  "resource":"xsd:string"
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object": {"@class":"Value", "@type":"Optional"},
+  "predicate": {"@class":"NodeValue", "@type":"Optional"},
+  "resource": {"@class":"xsd:string", "@type":"Optional"},
+  "subject": {"@class":"NodeValue", "@type":"Optional"}
+}
+{
+  "@documentation": {
+    "@comment":"Count the edges matching a partially bound subject and/or predicate whose object value falls in the half-open value range [low, high), without enumerating them.",
+    "@properties": {
+      "count":"The count of matching edges.",
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "high":"The exclusive upper bound of the value range.",
+      "low":"The inclusive lower bound of the value range.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"TripleRangeCount",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "low", "high", "count", "optional(graph)" ],
+      "mode": ["?", "?", "+", "+", "?", "+" ],
+      "types": ["node", "node", "value", "value", "decimal", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "count":"DataValue",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "high":"Value",
+  "low":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
 }
 {
   "@documentation": {
@@ -1772,4 +2410,168 @@
   "@type":"Class",
   "type":"NodeValue",
   "value":"Value"
+}
+{
+  "@documentation": {
+    "@comment":"A comment. The query is disabled (not executed) and the comment serves as documentation.",
+    "@properties": {
+      "comment":"The comment string explaining why the query is disabled.",
+      "query":"The query which is commented out and will not be executed."
+    }
+  },
+  "@id":"Comment",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["comment", "optional(query)" ],
+      "mode": ["+", ":" ],
+      "types": ["string", "query" ]
+    }
+  },
+  "@type":"Class",
+  "comment":"DataValue",
+  "query": {"@class":"Query", "@type":"Optional"}
+}
+{
+  "@documentation": {
+    "@comment":"Extracts a contiguous subsequence from a list.",
+    "@properties": {
+      "list":"The input list to slice.",
+      "result":"The resulting sliced list.",
+      "start":"The start index (0-based).",
+      "end":"The end index (exclusive, optional)."
+    }
+  },
+  "@id":"Slice",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "result", "start", "optional(end)" ],
+      "mode": ["+", "?", "+", "+" ],
+      "types": ["list(any)", "list(any)", "integer", "integer" ]
+    }
+  },
+  "@type":"Class",
+  "end": {"@class":"DataValue", "@type":"Optional"},
+  "list":"DataValue",
+  "result":"DataValue",
+  "start":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the set difference of two lists (elements in list_a but not in list_b).",
+    "@properties": {
+      "list_a":"The first list.",
+      "list_b":"The second list.",
+      "result":"The resulting set difference."
+    }
+  },
+  "@id":"SetDifference",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list_a", "list_b", "result" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["list(any)", "list(any)", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "list_a":"DataValue",
+  "list_b":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the set intersection of two lists (elements in both list_a and list_b).",
+    "@properties": {
+      "list_a":"The first list.",
+      "list_b":"The second list.",
+      "result":"The resulting set intersection."
+    }
+  },
+  "@id":"SetIntersection",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list_a", "list_b", "result" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["list(any)", "list(any)", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "list_a":"DataValue",
+  "list_b":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the set union of two lists (elements in either list_a or list_b).",
+    "@properties": {
+      "list_a":"The first list.",
+      "list_b":"The second list.",
+      "result":"The resulting set union."
+    }
+  },
+  "@id":"SetUnion",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list_a", "list_b", "result" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["list(any)", "list(any)", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "list_a":"DataValue",
+  "list_b":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Tests if an element is a member of a set.",
+    "@properties": {
+      "element":"The element to check for membership.",
+      "set":"The set (list) to check membership in."
+    }
+  },
+  "@id":"SetMember",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["element", "set" ],
+      "mode": ["?", "+" ],
+      "types": ["any", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "element":"DataValue",
+  "set":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Converts a list to a set by removing duplicates and sorting.",
+    "@properties": {
+      "list":"The input list.",
+      "set":"The resulting set with duplicates removed."
+    }
+  },
+  "@id":"ListToSet",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "set" ],
+      "mode": ["+", "?" ],
+      "types": ["list(any)", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "set":"DataValue"
 }

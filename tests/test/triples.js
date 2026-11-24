@@ -109,6 +109,42 @@ describe('triples', function () {
     await db.delete(agent)
   })
 
+  it('rejects an integer literal outside the xsd:int range', async function () {
+    await db.create(agent, { schema: false })
+    const turtle = `
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+    <terminusdb:///data/a> <terminusdb:///schema#n> "2147483648"^^xsd:int .`
+    await triples.insertIntoBranch(agent, turtle).fails()
+    await db.delete(agent)
+  })
+
+  it('rejects an unsignedLong literal below zero', async function () {
+    await db.create(agent, { schema: false })
+    const turtle = `
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+    <terminusdb:///data/a> <terminusdb:///schema#n> "-1"^^xsd:unsignedLong .`
+    await triples.insertIntoBranch(agent, turtle).fails()
+    await db.delete(agent)
+  })
+
+  it('rejects a malformed xsd:decimal literal', async function () {
+    await db.create(agent, { schema: false })
+    const turtle = `
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+    <terminusdb:///data/a> <terminusdb:///schema#n> "not a decimal"^^xsd:decimal .`
+    await triples.insertIntoBranch(agent, turtle).fails()
+    await db.delete(agent)
+  })
+
+  it('rejects an xsd:date literal with components outside their domains', async function () {
+    await db.create(agent, { schema: false })
+    const turtle = `
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+    <terminusdb:///data/a> <terminusdb:///schema#n> "2024-13-45"^^xsd:date .`
+    await triples.insertIntoBranch(agent, turtle).fails()
+    await db.delete(agent)
+  })
+
   // TODO: Create test for this, it responds with an application/json type now... which it isn't.
   // See issue: https://github.com/terminusdb/terminusdb/issues/981
   it('responds with a turtle mimetype', async function () {

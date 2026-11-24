@@ -7,6 +7,20 @@ module.exports = {
       'api:parameter': parameter,
     }
   },
+  malformedParameter (parameter) {
+    return {
+      '@type': 'api:MalformedParameter',
+      'api:parameter': parameter,
+    }
+  },
+  conflictingDocumentId (parameterId, documentId) {
+    return {
+      '@type': 'api:ConflictingDocumentId',
+      'api:parameter': 'id',
+      'api:parameter_id': parameterId,
+      'api:document_id': documentId,
+    }
+  },
   badParameterType (name, type, value) {
     return {
       '@type': 'api:BadParameterType',

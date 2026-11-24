@@ -11,7 +11,7 @@ on:
   pull_request:
     branches: [ main ]
     paths:
-      - '.github/workflows/generate-docs.yml'
+      - '.github/workflows/docs-generate.yml'
     
 jobs:
 
@@ -24,7 +24,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Check for file changes
       id: check_changes
@@ -42,35 +42,38 @@ jobs:
         RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/terminusdb\.1\.ronn\.template|Makefile|\.github/workflows/)' || true)
         if [ -n "$RELEVANT_CHANGED" ]; then
           echo "Relevant files changed: $RELEVANT_CHANGED"
-          echo "::set-output name=relevant_changed::true"
+          echo "relevant_changed=true" >> "$GITHUB_OUTPUT"
         else
           echo "No relevant files changed"
-          echo "::set-output name=relevant_changed::false"
+          echo "relevant_changed=false" >> "$GITHUB_OUTPUT"
         fi
 
   docs:
     name: Generate
     needs: check
-    if: ${{ needs.check.outputs.changed == 'true' }}
+    if: ${{ github.event_name == 'push' && needs.check.outputs.changed == 'true' }}
 
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install swi-prolog 
-        run: ./.github/install-swi-prolog.sh stable
+        run: ./.github/install-swi-prolog.sh 10.0.2
 
       - name: Checkout tus
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          repository: terminusdb/tus
+          repository: terminusdb-org/tus
           path: tus
-          ref: v0.0.5
+          ref: v0.0.17
 
       - name: Install tus
-        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
+        run: |
+          swipl -g "ignore(catch(pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)]), _, fail))" \
+               -g "ignore(catch(pack_attach('$GITHUB_WORKSPACE/tus', []), _, fail))" \
+               -g "(use_module(library(tus)) -> writeln(tus_ok) ; halt(1))" -g halt
 
       - name: Install Protobuf Compiler (Linux)
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -83,8 +86,16 @@ jobs:
       - name: Build Docs
         run: make docs
   
-      - name: Commit changes
-        uses: stefanzweifel/git-auto-commit-action@v4
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
         with:
-          commit_message: Update man page
-          file_pattern: docs/terminusdb.1          
+          commit-message: Update man page
+          title: "docs: Update generated man page"
+          body: |
+            Auto-generated PR to update the man page documentation.
+            
+            This PR was created automatically by the Documentation workflow.
+          branch: docs/update-man-page
+          base: main
+          delete-branch: true
+          add-paths: docs/terminusdb.1          

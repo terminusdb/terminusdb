@@ -1,0 +1,35 @@
+--- a/alice-strace/syscall.c
++++ b/alice-strace/syscall.c
+@@ -1980,6 +1980,7 @@
+ 
+ #endif
+ 
++#if defined (I386) || defined (X86_64)
+ static void
+ print_i386_ebp_backtrace(struct tcb* tcp)
+ {
+@@ -2019,6 +2020,7 @@
+ 		ret = umoven(tcp, (long)cur_ebp, current_wordsize, (void*)&cur_ebp);
+ 	}
+ }
++#endif /* I386 || X86_64 */
+ 
+ static void
+ output_stacktrace(int really_output_stacktrace, struct tcb* tcp)
+@@ -2093,8 +2095,14 @@
+ 	}
+ # endif
+ 
+-#else
+-# error "Unknown architecture (not I386 or X86_64)"
++#elif defined (AARCH64)
++
++	/* Stack attribution unsupported on this arch — libunwind's remote
++	 * context is never initialised here, and the checker degrades
++	 * gracefully without frames. Emit an empty trace. */
++
++#else
++# error "Unknown architecture (not I386, X86_64 or AARCH64)"
+ #endif
+ 
+ 	tprintstackinfo("]\n"); // closing brace for stack trace

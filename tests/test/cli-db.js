@@ -12,11 +12,18 @@ describe('cli-db', function () {
     return exec(command, { env: envs })
   }
 
+  // This is added to test with really funky data that would normally be rejected by the schema check
+  // but we want to test that the flag works and that this mode is viable (completely unsupported though)
+  // TERMINUSDB_SCHEMALESS_SHAPE_CHECK_DISABLED: 'true'
   before(async function () {
     this.timeout(200000)
     const testDir = path.join(__dirname, '..')
     dbPath = util.testDbPath(testDir)
-    envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
+    envs = {
+      ...process.env,
+      TERMINUSDB_SERVER_DB_PATH: dbPath,
+      TERMINUSDB_SCHEMALESS_SHAPE_CHECK_DISABLED: 'true',
+    }
     {
       const r = await execEnv(`${util.terminusdbScript()} store init --force`)
       expect(r.stdout).to.match(/^Successfully initialised database/)
@@ -83,6 +90,66 @@ describe('cli-db', function () {
     // demonstrate success
     const r4 = await execEnv(`${util.terminusdbScript()} query admin/${db}/local/branch/main "t('terminusdb://data/Schema', rdf:type, X, schema)"`)
     expect(r4.stdout).to.match(/^X\n$/)
+    await execEnv(`${util.terminusdbScript()} db delete admin/${db}`)
+  })
+
+  it('accepts invalid documents when schema is off and rejects them when on', async function () {
+    const db = util.randomString()
+    await execEnv(`${util.terminusdbScript()} db create admin/${db}`)
+
+    const schemaFile = path.join(dbPath, `${db}-schema.json`)
+    const schema = '{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n{"@id":"Person","@type":"Class","@key":{"@type":"Lexical","@fields":["name"]},"name":"xsd:string","age":"xsd:integer"}\n'
+    await fs.writeFile(schemaFile, schema)
+    await execEnv(`${util.terminusdbScript()} doc insert admin/${db} --graph-type schema --full-replace < ${schemaFile}`)
+
+    // Valid document is accepted with schema on
+    const validFile = path.join(dbPath, `${db}-valid.json`)
+    await fs.writeFile(validFile, '{"@type":"Person","name":"Alice","age":30}\n')
+    const r1 = await execEnv(`${util.terminusdbScript()} doc insert admin/${db} < ${validFile}`)
+    expect(r1.stdout).to.match(/^Documents inserted:\n 1: terminusdb:\/\/\/data\/Person\/Alice/)
+
+    // Invalid document is rejected with schema on
+    const invalidFile = path.join(dbPath, `${db}-invalid.json`)
+    await fs.writeFile(invalidFile, '{"@type":"Person","name":"Bob","age":"thirty"}\n')
+    let threw = false
+    try {
+      await execEnv(`${util.terminusdbScript()} doc insert admin/${db} < ${invalidFile}`)
+    } catch (err) {
+      threw = true
+      expect(err.stderr).to.match(/Schema check failure/)
+    }
+    expect(threw).to.equal(true)
+
+    // Turn schema off
+    await execEnv(`${util.terminusdbScript()} db update admin/${db} --schema false`)
+
+    // Invalid document is accepted with schema off
+    const invalidFile2 = path.join(dbPath, `${db}-invalid2.json`)
+    await fs.writeFile(invalidFile2, '{"@type":"Person","name":"Charlie","age":"forty"}\n')
+    const r2 = await execEnv(`${util.terminusdbScript()} doc insert admin/${db} < ${invalidFile2}`)
+    expect(r2.stdout).to.match(/^Documents inserted:\n 1: terminusdb:\/\/\/data\/Person\/Charlie/)
+
+    // Key generation still works with schema off
+    const keygenFile = path.join(dbPath, `${db}-keygen.json`)
+    await fs.writeFile(keygenFile, '{"@type":"Person","name":"Dana","age":25}\n')
+    const r3 = await execEnv(`${util.terminusdbScript()} doc insert admin/${db} < ${keygenFile}`)
+    expect(r3.stdout).to.match(/^Documents inserted:\n 1: terminusdb:\/\/\/data\/Person\/Dana/)
+
+    // Turn schema back on (must not have schema-violating data)
+    await execEnv(`${util.terminusdbScript()} db update admin/${db} --schema true`)
+
+    // Invalid document is rejected again
+    const invalidFile3 = path.join(dbPath, `${db}-invalid3.json`)
+    await fs.writeFile(invalidFile3, '{"@type":"Person","name":"Eve","age":"fifty"}\n')
+    threw = false
+    try {
+      await execEnv(`${util.terminusdbScript()} doc insert admin/${db} < ${invalidFile3}`)
+    } catch (err) {
+      threw = true
+      expect(err.stderr).to.match(/Schema check failure/)
+    }
+    expect(threw).to.equal(true)
+
     await execEnv(`${util.terminusdbScript()} db delete admin/${db}`)
   })
 

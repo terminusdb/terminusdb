@@ -162,7 +162,19 @@ The fastest way to start developing is using the test server script after clonin
 
 #### Manual Build
 
+**Prerequisites for a fresh clone:**
+
+- `protoc` (the Protocol Buffers compiler) — e.g. `brew install protobuf` on macOS. Without it,
+  `cargo build` fails inside a transitive dependency with
+  `Could not find protoc installation`.
+- `make install-deps` must be run once, **before** the first `make dev`, to fetch the SWI-Prolog
+  `tus` pack. Without it, the Prolog bootstrap fails with
+  `` source_sink `library(tus)' does not exist ``.
+
 ```bash
+# One-time: fetch Prolog dependencies (tus pack, etc.)
+make install-deps
+
 # Build Rust library and create development binary
 make dev
 

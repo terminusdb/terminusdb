@@ -38,7 +38,7 @@ impl Prefix {
         Prefix::Other(contraction.to_string(), expansion.to_string())
     }
 
-    pub fn contraction(&self) -> PrefixContraction {
+    pub fn contraction(&self) -> PrefixContraction<'_> {
         match self {
             Prefix::Schema(_) => PrefixContraction::Schema,
             Prefix::Base(_) => PrefixContraction::Base,
@@ -192,6 +192,8 @@ impl PrefixContracter {
                     } else {
                         offset = 0;
                     }
+                    // Silenced, kept for symmetry, but not needed
+                    let _ = offset; // silence unused warning
 
                     parent.children.push(previous);
                     previous = parent;
@@ -208,7 +210,7 @@ impl PrefixContracter {
         }
     }
 
-    pub fn contract<'a>(&self, s: &'a str) -> Option<(PrefixContraction, &'a str)> {
+    pub fn contract<'a>(&self, s: &'a str) -> Option<(PrefixContraction<'_>, &'a str)> {
         let mut cur: &[PrefixContracterTree] = &self.trees;
         let slice = s.as_bytes();
         let mut offset = 0;
@@ -264,7 +266,12 @@ impl PrefixContracter {
             Some((PrefixContraction::Base, rest)) => Cow::Owned(format!("@base:{}", rest)),
             Some((PrefixContraction::Schema, rest)) => Cow::Borrowed(rest),
             Some((PrefixContraction::Other(p), rest)) => Cow::Owned(format!("{}:{}", p, rest)),
-            Some((PrefixContraction::JSON, rest)) => Cow::Borrowed(rest),
+            // json: predicate local names are URI-segment-encoded at
+            // insert; decode so field names read back verbatim.
+            Some((PrefixContraction::JSON, rest)) => match urlencoding::decode(rest) {
+                Ok(decoded) => decoded,
+                Err(_) => Cow::Borrowed(rest),
+            },
         }
     }
 

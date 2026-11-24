@@ -15,29 +15,96 @@ use terminus_store::store::{sync::*, Store};
 
 use terminusdb_grpc_labelstore_client::GrpcLabelStore;
 
+/// Get the current process resident set size (RSS) in bytes.
+/// Returns None if the value cannot be determined on this platform.
+#[cfg(target_os = "macos")]
+fn get_process_rss_bytes() -> Option<usize> {
+    #[repr(C)]
+    struct MachTaskBasicInfo {
+        suspend_count: i32,
+        virtual_size: u64,
+        resident_size: u64,
+        user_time: [u32; 2],
+        system_time: [u32; 2],
+        policy: i32,
+    }
+
+    const MACH_TASK_BASIC_INFO: u32 = 20;
+    const MACH_TASK_BASIC_INFO_COUNT: u32 =
+        (std::mem::size_of::<MachTaskBasicInfo>() / std::mem::size_of::<u32>()) as u32;
+
+    extern "C" {
+        fn mach_task_self() -> u32;
+        fn task_info(
+            target_task: u32,
+            flavor: u32,
+            task_info_out: *mut MachTaskBasicInfo,
+            task_info_count: *mut u32,
+        ) -> i32;
+    }
+
+    unsafe {
+        let mut info: MachTaskBasicInfo = std::mem::zeroed();
+        let mut count = MACH_TASK_BASIC_INFO_COUNT;
+        let result = task_info(
+            mach_task_self(),
+            MACH_TASK_BASIC_INFO,
+            &mut info,
+            &mut count,
+        );
+        if result == 0 {
+            Some(info.resident_size as usize)
+        } else {
+            None
+        }
+    }
+}
+
+/// Get the current process resident set size (RSS) in bytes.
+/// Returns None if the value cannot be determined on this platform.
+#[cfg(target_os = "linux")]
+fn get_process_rss_bytes() -> Option<usize> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    for line in status.lines() {
+        if line.starts_with("VmRSS:") {
+            let kb_str = line.split_whitespace().nth(1)?;
+            let kb: usize = kb_str.parse().ok()?;
+            return Some(kb * 1024);
+        }
+    }
+    None
+}
+
+/// Get the current process resident set size (RSS) in bytes.
+/// Returns None on unsupported platforms.
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn get_process_rss_bytes() -> Option<usize> {
+    None
+}
+
 predicates! {
     pub semidet fn open_memory_store(_context, term) {
         let store = open_sync_memory_store();
-        term.unify(&WrappedStore(store))
+        term.unify(WrappedStore(store))
     }
 
     pub semidet fn open_directory_store(_context, dir_term, out_term) {
         let dir: PrologText = dir_term.get_ex()?;
         let store = open_sync_directory_store(&*dir);
-        out_term.unify(&WrappedStore(store))
+        out_term.unify(WrappedStore(store))
     }
 
     pub semidet fn open_raw_archive_store(_context, dir_term, out_term) {
         let dir: PrologText = dir_term.get_ex()?;
         let store = open_sync_raw_archive_store(&*dir);
-        out_term.unify(&WrappedStore(store))
+        out_term.unify(WrappedStore(store))
     }
 
     pub semidet fn open_archive_store(_context, dir_term, cache_size_term, out_term) {
         let dir: PrologText = dir_term.get_ex()?;
         let cache_size: usize = cache_size_term.get_ex::<u64>()? as usize;
         let store = open_sync_archive_store(&*dir, cache_size);
-        out_term.unify(&WrappedStore(store))
+        out_term.unify(WrappedStore(store))
     }
 
     pub semidet fn open_grpc_store(context, dir_term, address_term, initial_pool_term, cache_size_term, out_term) {
@@ -47,13 +114,17 @@ predicates! {
         let cache_size: usize = cache_size_term.get_ex::<u64>()? as usize;
         let directory_layer_backend = DirectoryArchiveBackend::new((&*dir).into());
         let layer_backend = LruArchiveBackend::new(directory_layer_backend.clone(), directory_layer_backend, cache_size);
+        let lru_ref = layer_backend.clone();
+        let lru_evict_ref = layer_backend.clone();
         let layer_store = CachedLayerStore::new(ArchiveLayerStore::new(layer_backend.clone(), layer_backend), LockingHashMapLayerCache::new());
 
         let label_store = context.try_or_die_generic(task_sync(GrpcLabelStore::new(address.to_string(), pool_size as usize)))?;
 
-        let store = SyncStore::wrap(Store::new(label_store, layer_store));
+        let store = SyncStore::wrap(Store::new(label_store, layer_store)
+            .with_lru_used_bytes(move || lru_ref.used_bytes())
+            .with_lru_evict(move |fraction| lru_evict_ref.evict_to_target(fraction)));
 
-        out_term.unify(&WrappedStore(store))
+        out_term.unify(WrappedStore(store))
     }
 
     pub semidet fn open_write(context, store_or_graph_or_layer_term, builder_term) {
@@ -131,7 +202,12 @@ predicates! {
         layer_parents_term.unify(result_terms.as_slice())
     }
 
-    pub semidet fn pack_import(context, store_term, layer_ids_term, pack_term) {
+    /// Import the given layers from the pack into the store.
+    ///
+    /// Layers that already exist are not overwritten; their contents
+    /// are verified against the pack instead, and the list of
+    /// mismatched layer ids is unified with the last argument.
+    pub semidet fn pack_import(context, store_term, layer_ids_term, pack_term, mismatched_term) {
         let store: WrappedStore = store_term.get_ex()?;
 
         let layer_id_strings: Vec<String> = layer_ids_term.get_ex()?;
@@ -143,7 +219,21 @@ predicates! {
 
         let pack: Vec<u8> = pack_term.get_ex()?;
 
-        context.try_or_die(store.import_layers(pack.as_slice(), Box::new(layer_ids.into_iter())))
+        let mismatched = context.try_or_die(store.import_layers(pack.as_slice(), Box::new(layer_ids.into_iter())))?;
+        let mismatched_strings: Vec<String> = mismatched.into_iter().map(name_to_string).collect();
+
+        mismatched_term.unify(mismatched_strings.as_slice())
+    }
+
+    /// Create an empty base layer with the given name in this store.
+    ///
+    /// Fails if a layer with this name already exists.
+    pub semidet fn create_empty_base_layer(context, store_term, layer_id_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let layer_id_string: String = layer_id_term.get_ex()?;
+        let name = context.try_or_die(string_to_name(&layer_id_string))?;
+
+        context.try_or_die(store.create_named_base_layer(name))
     }
 
     pub semidet fn merge_base_layers(context, store_term, temp_dir_term, layer_ids_term, output_id_term) {
@@ -162,6 +252,62 @@ predicates! {
         let result_string = name_to_string(result);
 
         output_id_term.unify(result_string)
+    }
+
+    /// Get layer cache statistics: (total_entries, live_entries, dead_entries)
+    /// Dead entries are stale weak references that should be cleaned up.
+    pub semidet fn layer_cache_stats(_context, store_term, total_term, live_term, dead_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let (total, live, dead) = store.layer_cache_stats();
+        total_term.unify(total as u64)?;
+        live_term.unify(live as u64)?;
+        dead_term.unify(dead as u64)
+    }
+
+    /// Get bytes of backing data for layer cache entries: (total, live, dead).
+    pub semidet fn layer_cache_memory_bytes(_context, store_term, total_term, live_term, dead_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let (total, live, dead) = store.layer_cache_memory_bytes();
+        total_term.unify(total as u64)?;
+        live_term.unify(live as u64)?;
+        dead_term.unify(dead as u64)
+    }
+
+    /// Get current LRU archive cache usage in bytes.
+    /// Fails if no LRU backend is configured (e.g. memory store).
+    pub semidet fn lru_cache_used_bytes(_context, store_term, bytes_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        match store.lru_cache_used_bytes() {
+            Some(bytes) => bytes_term.unify(bytes as u64),
+            None => Err(PrologError::Failure),
+        }
+    }
+
+    /// Remove stale (dead) weak references from the layer cache.
+    /// Returns the number of entries removed.
+    pub semidet fn cleanup_layer_cache(_context, store_term, removed_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let removed = store.cleanup_layer_cache();
+        removed_term.unify(removed as u64)
+    }
+
+    /// Invalidate a specific layer from the cache, forcing reload from disk on next access.
+    /// This is useful after rollup to ensure the rolled-up version is loaded.
+    pub semidet fn invalidate_layer_cache_entry(context, store_term, layer_id_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let layer_id_string: PrologText = layer_id_term.get_ex()?;
+        let layer_id = context.try_or_die(string_to_name(&layer_id_string))?;
+        store.invalidate_layer(layer_id);
+        Ok(())
+    }
+
+    /// Get the current process resident set size (RSS) in bytes.
+    /// Fails if the value cannot be determined on this platform.
+    pub semidet fn process_rss_bytes(_context, bytes_term) {
+        match get_process_rss_bytes() {
+            Some(bytes) => bytes_term.unify(bytes as u64),
+            None => Err(PrologError::Failure),
+        }
     }
 }
 

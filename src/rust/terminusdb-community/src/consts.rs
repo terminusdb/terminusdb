@@ -21,6 +21,8 @@ pub const SYS_ENUM: &str = "http://terminusdb.com/schema/sys#Enum";
 pub const SYS_SET: &str = "http://terminusdb.com/schema/sys#Set";
 pub const SYS_SUBDOCUMENT: &str = "http://terminusdb.com/schema/sys#subdocument";
 pub const SYS_UNFOLDABLE: &str = "http://terminusdb.com/schema/sys#unfoldable";
+pub const SYS_UNFOLD: &str = "http://terminusdb.com/schema/sys#unfold";
+pub const SYS_SHARED: &str = "http://terminusdb.com/schema/sys#shared";
 pub const SYS_INHERITS: &str = "http://terminusdb.com/schema/sys#inherits";
 pub const SYS_BASE: &str = "http://terminusdb.com/schema/sys#base";
 pub const SYS_SCHEMA: &str = "http://terminusdb.com/schema/sys#schema";
@@ -35,6 +37,7 @@ pub const SYS_JSON_DOCUMENT: &str = "http://terminusdb.com/schema/sys#JSONDocume
 pub const SYS_FOREIGN_TYPE_PREDICATE_ID: &str = "http://terminusdb.com/schema/sys#foreign_type";
 pub const SYS_KEY: &str = "http://terminusdb.com/schema/sys#key";
 pub const SYS_VALUE_HASH: &str = "http://terminusdb.com/schema/sys#ValueHash";
+pub const SYS_RANDOM: &str = "http://terminusdb.com/schema/sys#Random";
 generate_lookup_type! {
     SysIds {
         class: node SYS_CLASS,
@@ -44,6 +47,8 @@ generate_lookup_type! {
         set: node SYS_SET,
         subdocument: pred SYS_SUBDOCUMENT,
         unfoldable: pred SYS_UNFOLDABLE,
+        unfold: pred SYS_UNFOLD,
+        shared: pred SYS_SHARED,
         inherits: pred SYS_INHERITS,
         base: pred SYS_BASE,
         schema: pred SYS_SCHEMA,
@@ -59,6 +64,7 @@ generate_lookup_type! {
         tdb_context: node TDB_CONTEXT,
         key: pred SYS_KEY,
         value_hash: node SYS_VALUE_HASH,
+        random: node SYS_RANDOM,
     }
 }
 

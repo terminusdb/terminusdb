@@ -11,6 +11,13 @@ const defaultContext = {
   '@type': '@context',
 }
 
+// True when the suite runs against an enterprise server (MOCHA_ENTERPRISE=true,
+// exported by the terminusdb-enterprise Makefile). Enterprise routes may
+// deliberately differ — e.g. anonymous /api/info returns only the caller's
+// authority — so tests branch on this rather than asserting community-only
+// behaviour.
+const enterprise = process.env.MOCHA_ENTERPRISE === 'true'
+
 function deepClone (object) {
   return JSON.parse(JSON.stringify(object))
 }
@@ -186,17 +193,24 @@ function servedPath (filename) {
  * @param {string} [testDir] - Optional test directory path. Defaults to __dirname/..
  * @returns {string} Database path - relative for Docker, absolute for snap/native
  */
-function testDbPath (testDir) {
+function testDbPath () {
   const isDocker = !!process.env.TERMINUSDB_DOCKER_CONTAINER
-  const dir = testDir || path.join(__dirname, '..')
 
   if (isDocker) {
     // Docker: use relative path (resolves inside container's /app/terminusdb/tests workdir)
     return `./storage/${randomString()}`
-  } else {
-    // Snap/Native: use absolute path to avoid working directory ambiguity
-    return path.resolve(dir, 'storage', randomString())
   }
+  // Snap/Native/in-container: absolute path on tmpfs where available, so
+  // per-command fsync goes to RAM. /dev/shm is tmpfs on Linux; /tmp is not,
+  // but still avoids repo checkout I/O. TERMINUSDB_TEST_TMPDIR overrides.
+  // Under strict snap confinement /dev/shm exists but mkdir is AppArmor-denied
+  // and /tmp is a private namespace, so use the snap's shared common dir.
+  let base = process.env.TERMINUSDB_TEST_TMPDIR
+  if (!base && (process.env.TERMINUSDB_EXEC_PATH || '').startsWith('/snap/')) {
+    base = path.join(process.env.HOME, 'snap', 'terminusdb', 'common')
+  }
+  if (!base) base = fs.existsSync('/dev/shm') ? '/dev/shm' : '/tmp'
+  return path.join(base, 'terminusdb-test', randomString())
 }
 
 module.exports = {
@@ -211,6 +225,7 @@ module.exports = {
   authorizationHeader,
   deepClone,
   defaultContext,
+  enterprise,
   firstCapture,
   isBoolean,
   isDefined,

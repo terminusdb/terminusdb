@@ -1,6 +1,6 @@
-.\" generated with Ronn-NG/v0.9.1
-.\" http://github.com/apjanke/ronn-ng/tree/0.9.1
-.TH "TERMINUSDB" "1" "December 2025" ""
+.\" generated with Ronn-NG/v0.10.1
+.\" http://github.com/apjanke/ronn-ng/tree/0.10.1
+.TH "TERMINUSDB" "1" "November 2026" ""
 .SH "NAME"
 \fBterminusdb\fR \- command line interface to the terminusdb Graph DBMS
 .SH "SYNOPSIS"
@@ -42,6 +42,24 @@ Run server in interactive mode
 .TP
 \fB\-m\fR, \fB\-\-memory\fR=[value]
 Run server in\-memory, without a persistent store\. Takes a password as an optional argument\. The in\-memory store will be initialized with an admin account with the given password\. If absent, the admin account will have 'root' as a password\.
+.TP
+\fB\-p\fR, \fB\-\-port\fR=[value]
+Port to listen on\. Overrides TERMINUSDB_SERVER_PORT (default 6363)\.
+.TP
+\fB\-s\fR, \fB\-\-store\fR=[value]
+Storage root directory\. Overrides TERMINUSDB_STORE and TERMINUSDB_SERVER_DB_PATH (default ~~/\.terminusdb)\. The db lives at \fIroot\fR/db, vectorlink at \fIroot\fR/vectorlink\.
+.SS "mcp"
+\fBterminusdb mcp OPTIONS\fR
+.TS
+allbox;
+Run an MCP (Model Context Protocol) server on stdin/stdout against the local store\. No port is opened\. Connect a client such as Claude Code with \fBclaude mcp add terminusdb \-\- terminusdb mcp\fR\. Configuration is via environment variables: TERMINUSDB_STORE (storage root \(em the db lives at \fIroot\fR/db, vectorlink at \fIroot\fR/vectorlink; default ~/\.terminusdb) or the legacy TERMINUSDB_SERVER_DB_PATH (db dir directly), TERMINUSDB_INDEXER_BACKEND (semantic indexer \(em the embedded vectorlink backend is selected automatically at startup when an OpenAI\-compatible endpoint such as Ollama answers on localhost:11434, VECTORLINK_EMBED_URL to point elsewhere; set vectorlink	http_vectorlink	none explicitly to override), TERMINUSDB_MEMORY_PASSWORD (run in\-memory without a persistent store, with the value as admin password \(em empty means 'root')\.
+.TE
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+Print help for \fBmcp\fR command
 .SS "list"
 \fBterminusdb list OPTIONS\fR
 .P
@@ -293,6 +311,9 @@ Skeleton of the document to retain as context
 \fB\-c\fR, \fB\-\-copy\-value\fR, \fB\-\-copy_value\fR=[value]
 Maintain explit copies of diffs in lists
 .TP
+\fB\-u\fR, \fB\-\-unfold\fR=[value]
+Expand subdocuments inline when comparing documents from commits
+.TP
 \fB\-d\fR, \fB\-\-docid\fR=[value]
 document id to use for comparisons
 .TP
@@ -391,6 +412,22 @@ Number of results to return
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR=[value]
 give back schema update information
+.SS "enrich\-history"
+\fBterminusdb enrich\-history DB_SPEC\fR
+.P
+Enrich legacy commits with document change tracking metadata\. Required before using fast=true on the history endpoint\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBenrich\-history\fR command
+.TP
+\fB\-f\fR, \fB\-\-force\fR=[value]
+force re\-enrichment of all commits, even those already enriched
+.TP
+\fB\-d\fR, \fB\-\-diagnose\fR=[value]
+diagnose enrichment: print what each commit would produce without writing
 .SS "reset"
 \fBterminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC\fR
 .P
@@ -602,6 +639,9 @@ merge repeated documents into a single document record
 .TP
 \fB\-f\fR, \fB\-\-full_replace\fR, \fB\-\-full\-replace\fR=[value]
 delete all previous documents and substitute these
+.TP
+\fB\-z\fR, \fB\-\-compress_ids\fR, \fB\-\-compress\-ids\fR=[value]
+return compressed / minimized ids using default prefixes
 .SS "doc delete"
 \fBterminusdb doc delete DATABASE_SPEC OPTIONS\fR
 .P
@@ -671,8 +711,14 @@ document data
 \fB\-j\fR, \fB\-\-raw_json\fR, \fB\-\-raw\-json\fR=[value]
 replace as raw json
 .TP
+\fB\-s\fR, \fB\-\-merge_repeats\fR, \fB\-\-merge\-repeats\fR=[value]
+merge repeated documents into a single document record
+.TP
 \fB\-c\fR, \fB\-\-create\fR=[value]
 create document if it does not exist
+.TP
+\fB\-z\fR, \fB\-\-compress_ids\fR, \fB\-\-compress\-ids\fR=[value]
+return compressed / minimized ids using default prefixes
 .SS "doc get"
 \fBterminusdb doc get DATABASE_SPEC OPTIONS\fR
 .P
@@ -719,7 +765,7 @@ document query search template
 .SS "role create"
 \fBterminusdb role create ROLE_NAME ACTION_1 \.\. ACTION_N OPTIONS\fR
 .P
-Create a new role with the listed actions\. Actions may be any of: "create_database", "delete_database", "class_frame", "clone", "fetch", "push", "branch", "rebase", "instance_read_access", "instance_write_access", "schema_read_access", "schema_write_access", "meta_read_access", "meta_write_access", "commit_read_access", "commit_write_access", "manage_capabilities"
+Create a new role with the listed actions\. Actions may be any of: "create_database", "delete_database", "class_frame", "clone", "fetch", "push", "branch", "rebase", "instance_read_access", "instance_write_access", "schema_read_access", "schema_write_access", "meta_read_access", "meta_write_access", "commit_read_access", "commit_write_access", "manage_capabilities", "search", "search_snippets", "reindex_write", "woql_main_exec", "woql_logic_exec", "woql_logic_read", "woql_logic_write", "woql_other_exec", "woql_search", "woql_instance_read", "woql_instance_write", "woql_schema_read", "woql_schema_write"
 .TP
 \fB\-\-impersonate\fR=[value]
 impersonate a particular user
@@ -1036,9 +1082,9 @@ The most specific branch descriptor, allows you to address a branch other than m
 The descriptor which allows an individual commit to be addressed directly\.
 .P
 For commands that refer to a GRAPH_SPEC, it should be a DB_SPEC (specifying the precise branch if a database) followed by one of:
-.IP "\[ci]" 4
+.IP "\(bu" 4
 \fBDB_SPEC/instance\fR
-.IP "\[ci]" 4
+.IP "\(bu" 4
 \fBDB_SPEC/schema\fR
 .IP "" 0
 .P

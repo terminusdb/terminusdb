@@ -2,21 +2,50 @@
               document_created_at/3,
               document_updated_at/3,
               document_history/5,
+              document_history/6,
+              document_history_entries/5,
+              enrich_entry/7,
               changed_document_id/2,
-              commits_changed_id/5
+              commits_changed_id/5,
+              commit_info_dict/3
           ]).
 
 :- use_module(library(yall)).
-:- use_module(library(lists)).
+:- use_module(library(lists), [append/3, reverse/2, member/2]).
+:- use_module(library(apply), [maplist/3]).
 :- use_module(library(lazy_lists)).
 :- use_module(library(solution_sequences)).
 :- use_module(core(util)).
 :- use_module(core(document/json), [
-                  database_prefixes/2
+                  database_prefixes/2,
+                  get_document/3,
+                  get_document/4
+              ]).
+:- use_module(core(document/diff), [
+                  simple_diff/4
               ]).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(core(triple)).
+:- use_module(library(terminus_store)).
+:- use_module(core(plugins)).
 :- use_module(library(option)).
+:- use_module(library(json), [json_write_dict/3]).
+
+commit_info_dict(Repo, Commit_Id, Info) :-
+    commit_id_uri(Repo, Commit_Id, Commit_Uri),
+    commit_uri_to_metadata(Repo, Commit_Uri, Author, Message, Timestamp),
+    (   commit_uri_to_user(Repo, Commit_Uri, User)
+    ->  true
+    ;   User = null
+    ),
+    Info = json{
+               identifier: Commit_Id,
+               author: Author,
+               message: Message,
+               timestamp: Timestamp,
+               user: User
+           }.
 
 /*
 
@@ -40,13 +69,7 @@ history_to_created_at([Commit_Id|_], Repo, Id, Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
     document_created(Commit_Descriptor, Id, []),
     !,
-    commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
-    Info = json{
-               identifier: Commit_Id,
-               author: Author,
-               message: Message,
-               timestamp: Timestamp
-           }.
+    commit_info_dict(Repo, Commit_Id, Info).
 history_to_created_at([_|T], Repo, Id, Info) :-
     history_to_created_at(T, Repo, Id, Info).
 
@@ -62,13 +85,7 @@ history_to_updated_at([Commit_Id|_], Repo, Id, Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
     document_modified(Commit_Descriptor, Id, []),
     !,
-    commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
-    Info = json{
-               identifier: Commit_Id,
-               author: Author,
-               message: Message,
-               timestamp: Timestamp
-           }.
+    commit_info_dict(Repo, Commit_Id, Info).
 history_to_updated_at([_|T], Repo, Id, Info) :-
     history_to_updated_at(T, Repo, Id, Info).
 
@@ -121,24 +138,95 @@ changed_document_id(Askable,Containing,Options) :-
              ;   document_created(Askable, Containing, Options)
              ;   document_deleted(Askable, Containing, Options))).
 
+%% commit_graph_layer(+Context, +Commit_Id, +Type, -Layer)
+%
+%  The commit's instance or schema read layer, resolved through the repo
+%  context.
+commit_graph_layer(Context, Commit_Id, Type, Layer) :-
+    commit_id_uri(Context, Commit_Id, Commit_Uri),
+    layer_uri_for_commit(Context, Commit_Uri, Type, Layer_Uri),
+    layer_id_uri(Context, Layer_Id, Layer_Uri),
+    storage(Store),
+    store_id_layer(Store, Layer_Id, Layer).
+
+%% squashed_delta_transaction(+Context, +Branch_Descriptor, +Base_Layer,
+%%                            +Head_Commit_Id, -Transaction)
+%
+%  Squash the head commit's instance layer down to the shared base layer —
+%  one delta whose parent is exactly the base, so it cannot overshoot the
+%  segment — and wrap it as a transaction object with the head's schema.
+squashed_delta_transaction(Context, Branch_Descriptor, Base_Layer,
+                           Head_Commit_Id, Transaction) :-
+    commit_graph_layer(Context, Head_Commit_Id, instance, Head_Layer),
+    commit_graph_layer(Context, Head_Commit_Id, schema, Schema_Layer),
+    % A base commit with no instance layer gives squash_upto no anchor —
+    % the whole head segment then squashes to the bottom, which is the
+    % base→head delta anyway since nothing existed instance-wise at base.
+    (   Base_Layer = none
+    ->  squash(Head_Layer, Delta_Layer)
+    ;   squash_upto(Head_Layer, Base_Layer, Delta_Layer)),
+    open_read_write_obj(Delta_Layer, Delta_Object, [], _),
+    open_read_write_obj(Schema_Layer, Schema_Object, [], _),
+    Transaction = transaction_object{
+                      descriptor: Branch_Descriptor,
+                      instance_objects: [Delta_Object],
+                      schema_objects: [Schema_Object],
+                      inference_objects: [] }.
+
+%% delta_changed_id(+Transaction, +Options, -Changed)
+%
+%  Enumerate net changed document ids from a squashed delta layer. The Rust
+%  collector reads the layer's additions/removals directly; the WOQL scan
+%  pays the query engine ~0.24 ms per triple — measured ~250x slower.
+delta_changed_id(Transaction, Options, Changed) :-
+    (   option(type(Type), Options)
+    ->  atom_string(Type_Atom, Type),
+        '$changes':collect_changed_documents_filtered(Transaction, [Type_Atom],
+                                                      Changed, _Change_Type)
+    ;   '$changes':changed_document_id(Transaction, Changed_String, _),
+        atom_string(Changed, Changed_String)).
+
 commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed, Options) :-
     create_context(Branch_Descriptor.repository_descriptor, Context),
     most_recent_common_ancestor(Context, Context,
                                 Before_Commit_Id, After_Commit_Id,
-                                _Shared_Commit_Id, Commit1_Path, Commit2_Path),
-
-    distinct(Changed,
-             (   union(Commit1_Path, Commit2_Path, All_Commits),
-                 member(Commit_Id, All_Commits),
-                 resolve_relative_descriptor(Branch_Descriptor,
-                                             ["commit", Commit_Id],
-                                             Commit_Descriptor),
-                 do_or_die(
-                     open_descriptor(Commit_Descriptor, Transaction),
-                     error(unresolvable_collection(Commit_Descriptor), _)),
-                 changed_document_id(Transaction, Changed, Options)
-             )
-            ).
+                                Shared_Commit_Id, Commit1_Path, Commit2_Path),
+    (   Shared_Commit_Id = some(Base_Commit_Id)
+    ->  (   commit_graph_layer(Context, Base_Commit_Id, instance, Base_Layer)
+        ->  true
+        ;   Base_Layer = none),
+        % Each segment head squashes down to the shared base — one delta
+        % scan per non-empty segment. The Rust collector iterates a hash
+        % map, so its order is non-deterministic — sorted ids keep paging
+        % (start/count over the enumeration stream) stable across calls.
+        findall(Changed_Id,
+                (   member(Head_Commit_Id-Path,
+                           [Before_Commit_Id-Commit1_Path,
+                            After_Commit_Id-Commit2_Path]),
+                    Path \= [],
+                    squashed_delta_transaction(Context, Branch_Descriptor,
+                                               Base_Layer, Head_Commit_Id,
+                                               Delta_Transaction),
+                    delta_changed_id(Delta_Transaction, Options, Changed_Id)),
+                Raw_Changed),
+        sort(Raw_Changed, Sorted_Changed),
+        member(Changed, Sorted_Changed)
+    ;   % No shared base — an endpoint is the initial commit — scan the
+        % commits on the reported paths one by one.
+        findall(Changed_Id,
+                (   append(Commit1_Path, Commit2_Path, All_Commits),
+                    member(Commit_Id, All_Commits),
+                    resolve_relative_descriptor(Branch_Descriptor,
+                                                ["commit", Commit_Id],
+                                                Commit_Descriptor),
+                    do_or_die(
+                        open_descriptor(Commit_Descriptor, Transaction),
+                        error(unresolvable_collection(Commit_Descriptor), _)),
+                    changed_document_id(Transaction, Changed_Id, Options)),
+                Raw_Changed),
+        sort(Raw_Changed, Sorted_Changed),
+        member(Changed, Sorted_Changed)
+    ).
 
 commit_generator(Repo, state(name(Branch_Name)), state(commit(Head_Commit)), Commit_Id) :-
     ask(Repo,
@@ -158,40 +246,145 @@ commits(Repo, Branch_Name, Commits) :-
 has_change(Repo,Commit_Id,Id,Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
     changed_document_id(Commit_Descriptor, Id),
-    commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
-    Info = json{
-               identifier: Commit_Id,
-               author: Author,
-               message: Message,
-               timestamp: Timestamp
-           }.
+    commit_info_dict(Repo, Commit_Id, Info).
 
-collect_history([_|_], _Repo, _Id, _Start, Count, I, History-History) :-
+enrich_entry(Repo, _Descriptor, Commit_Id, Id, Info0, Info, Options) :-
+    (   option(complete(true), Options)
+    ->  (   catch(
+                (   commit_id_uri(Repo, Commit_Id, Commit_Uri),
+                    get_document(Repo, Commit_Uri, Commit_Doc),
+                    (   del_dict('@id', Commit_Doc, _, CD1)
+                    ->  true
+                    ;   CD1 = Commit_Doc
+                    ),
+                    (   del_dict('@type', CD1, _, Info1)
+                    ->  true
+                    ;   Info1 = CD1
+                    )
+                ),
+                _,
+                fail)
+        ->  true
+        ;   Info1 = Info0
+        )
+    ;   Info1 = Info0
+    ),
+    (   option(diff(true), Options)
+    ->  (   catch(
+                (   commit_id_uri(Repo, Commit_Id, CUri),
+                    resolve_relative_descriptor(Repo, ["commit", Commit_Id], Commit_Desc),
+                    open_descriptor(Commit_Desc, commit_info{}, Commit_Transaction, [], Map1),
+                    Doc_Options = options{
+                                      compress_ids : true,
+                                      unfold: true,
+                                      keep_json_type: true
+                                  },
+                    get_document(Commit_Transaction, Id, After_Doc, Doc_Options),
+                    (   commit_uri_to_parent_uri(Repo, CUri, Parent_Uri),
+                        commit_id_uri(Repo, Parent_Commit_Id, Parent_Uri),
+                        resolve_relative_descriptor(Repo, ["commit", Parent_Commit_Id], Parent_Desc),
+                        open_descriptor(Parent_Desc, commit_info{}, Parent_Transaction, Map1, _),
+                        get_document(Parent_Transaction, Id, Before_Doc, Doc_Options)
+                    ->  simple_diff(Before_Doc, After_Doc, Diff,
+                                    options{keep: json{'@id': true, '_id': true}})
+                    ;   Diff = json{ '@op' : "Insert",
+                                     '@insert' : After_Doc }
+                    ),
+                    put_dict(diff, Info1, Diff, Info)
+                ),
+                _,
+                fail)
+        ->  true
+        ;   Info = Info1
+        )
+    ;   Info = Info1
+    ).
+
+walk_history(Commits, Repo, Descriptor, Id, Start, Count, I, Goal, Before, After, Options) :-
+    walk_history_(Commits, Repo, Descriptor, Id, Start, Count, I, Goal, Before, After, Options).
+
+walk_history_([_|_], _Repo, _Descriptor, _Id, _Start, Count, I, _Goal, _Before, _After, _Options) :-
     I >= Count,
     !.
-collect_history([Commit_URI|Rest], Repo, Id, Start, Count, I, History-History_Tail) :-
-    I >= Start,
+walk_history_([Commit_Id|Rest], Repo, Descriptor, Id, Start, Count, I, Goal, Before, After, Options) :-
+    commit_id_uri(Repo, Commit_Id, Commit_Uri),
+    commit_uri_to_metadata(Repo, Commit_Uri, _, _, TS),
     !,
-    (   has_change(Repo,Commit_URI,Id,Info)
-    ->  History=[Info|Middle],
-        Iprime is I + 1,
-        collect_history(Rest, Repo, Id, Start, Count, Iprime, Middle-History_Tail)
-    ;   collect_history(Rest, Repo, Id, Start, Count, I, History-History_Tail)
+    (   Before \= none, TS >= Before
+    ->  walk_history_(Rest, Repo, Descriptor, Id, Start, Count, I, Goal, Before, After, Options)
+    ;   After \= none, TS < After
+    ->  true
+    ;   I >= Start
+    ->  (   has_change(Repo, Commit_Id, Id, Info0)
+        ->  call(Goal, Info0),
+            Iprime is I + 1,
+            walk_history_(Rest, Repo, Descriptor, Id, Start, Count, Iprime, Goal, Before, After, Options)
+        ;   walk_history_(Rest, Repo, Descriptor, Id, Start, Count, I, Goal, Before, After, Options)
+        )
+    ;   StartPrime is Start - 1,
+        walk_history_(Rest, Repo, Descriptor, Id, StartPrime, Count, I, Goal, Before, After, Options)
     ).
-collect_history([_|Rest], Repo, Id, Start, Count, I, History-History_Tail) :-
-    I < Start,
-    !,
-    StartPrime is Start - 1,
-    collect_history(Rest, Repo, Id, StartPrime, Count, I, History-History_Tail).
-collect_history([], _Repo, _Id, _Start, _Count, _I, History-History).
+walk_history_([], _Repo, _Descriptor, _Id, _Start, _Count, _I, _Goal, _Before, _After, _Options).
 
-document_history(Descriptor, Id, Start, Count, History) :-
+document_history_entries(Descriptor, Id, Goal, Options, History_Options) :-
+    database_prefixes(Descriptor, Prefixes),
+    prefix_expand(Id, Prefixes, Id_Ex),
     Branch_Name = (Descriptor.branch_name),
     Repo = (Descriptor.repository_descriptor),
-    commits(Repo,Branch_Name,LL),
+    Enriched_Goal = 'document/history':enrich_and_call(Repo, Descriptor, Id_Ex, Options, Goal),
+    (   option(fast(true), Options)
+    ->  (   plugins:fast_document_history_entries(Descriptor, Id_Ex,
+                                                  Enriched_Goal, Options,
+                                                  History_Options)
+        ->  true
+        ;   throw(error(fast_history_not_available, _))
+        )
+    ;   commits(Repo, Branch_Name, LL),
+        option(start(Start), History_Options, 0),
+        option(count(Count), History_Options, inf),
+        (   option(before(Before), History_Options) -> true ; Before = none ),
+        (   option(after(After), History_Options) -> true ; After = none ),
+        walk_history(LL, Repo, Descriptor, Id_Ex, Start, Count, 0,
+                     Enriched_Goal, Before, After, Options)
+    ).
+
+enrich_and_call(Repo, Descriptor, Id, Options, Goal, Info0) :-
+    enrich_history_entry(Repo, Descriptor, Id, Options, Info0, Info),
+    call(Goal, Info).
+
+enrich_history_entry(Repo, Descriptor, Id, Options, Info0, Info) :-
+    get_dict(identifier, Info0, Commit_Id),
+    enrich_entry(Repo, Descriptor, Commit_Id, Id, Info0, Info, Options).
+
+collect_goal(Acc, Entry) :-
+    nb_getval(Acc, Entries),
+    nb_linkval(Acc, [Entry|Entries]).
+
+document_history(Descriptor, Id, Start, Count, History) :-
+    document_history(Descriptor, Id, Start, Count, History, []).
+
+document_history(Descriptor, Id, Start, Count, History, Options) :-
     database_prefixes(Descriptor, Prefixes),
     prefix_expand(Id,Prefixes,Id_Ex),
-    collect_history(LL,Repo,Id_Ex,Start,Count,0,History-[]).
+    (   fast_document_history(Descriptor, Id_Ex, Start, Count, History0, Options)
+    ->  true
+    ;   option(fast(true), Options)
+    ->  throw(error(fast_history_not_available, _))
+    ;   Branch_Name = (Descriptor.branch_name),
+        Repo0 = (Descriptor.repository_descriptor),
+        commits(Repo0, Branch_Name, LL),
+        (   option(before(Before), Options) -> true ; Before = none ),
+        (   option(after(After), Options) -> true ; After = none ),
+        Acc = '$history_acc',
+        nb_setval(Acc, []),
+        walk_history(LL, Repo0, Descriptor, Id_Ex, Start, Count, 0,
+                     collect_goal(Acc), Before, After, Options),
+        nb_getval(Acc, Rev_History0),
+        reverse(Rev_History0, History0),
+        nb_setval(Acc, [])
+    ),
+    Repo = (Descriptor.repository_descriptor),
+    maplist(enrich_history_entry(Repo, Descriptor, Id_Ex, Options), History0, History).
 
 
 :- begin_tests(history).
@@ -229,12 +422,14 @@ test(show_document_history,
     History = [ json{ author:"test",
 	                  identifier:_,
 	                  message:"test",
-	                  timestamp:_
+	                  timestamp:_,
+	                  user:null
                     },
                 json{ author:"test",
 	                  identifier:_,
 	                  message:"test",
-	                  timestamp:_
+	                  timestamp:_,
+	                  user:null
                     }
               ].
 
@@ -264,12 +459,14 @@ test(show_document_updated_created,
     History = [ json{ author:"test",
 	                  identifier:Commit_1,
 	                  message:"test",
-	                  timestamp:TS_1
+	                  timestamp:TS_1,
+	                  user:null
                     },
                 json{ author:"test",
 	                  identifier:Commit_2,
 	                  message:"test",
-	                  timestamp:TS_2
+	                  timestamp:TS_2,
+	                  user:null
                     }
               ],
 
@@ -277,15 +474,99 @@ test(show_document_updated_created,
     json{ author:"test",
 	      identifier:Commit_1,
 	      message:"test",
-	      timestamp:TS_1
+	      timestamp:TS_1,
+	      user:null
         } :< Updated,
 
     document_created_at(Descriptor, Warsaw, Created),
     json{ author:"test",
 	      identifier:Commit_2,
 	      message:"test",
-	      timestamp:TS_2
+	      timestamp:TS_2,
+	      user:null
         } :< Created.
+
+test(complete_history_includes_commit,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,_{'@type' : "City", name : "Warsaw"}, Warsaw)
+    ),
+
+    document_history(Descriptor, Warsaw, 0, inf, History, [complete(true)]),
+    History = [Entry],
+    get_dict(identifier, Entry, _),
+    get_dict(author, Entry, _),
+    get_dict(message, Entry, _),
+    get_dict(timestamp, Entry, _),
+    get_dict(instance, Entry, _),
+    get_dict(schema, Entry, _),
+    get_dict(parent, Entry, _).
+
+test(diff_history_includes_diff,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,_{'@type' : "City", name : "Warsaw"}, Warsaw)
+    ),
+
+    with_test_transaction(
+        Descriptor,
+        C2,
+        replace_document(C2,_{'@id' : Warsaw, '@type' : "City", name : "Warszawa"}, _)
+    ),
+
+    document_history(Descriptor, Warsaw, 0, inf, History, [diff(true)]),
+    History = [Update_Entry, _Create_Entry],
+    get_dict(diff, Update_Entry, Diff),
+    get_dict(name, Diff, _).
+
+test(complete_and_diff_combined,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,_{'@type' : "City", name : "Warsaw"}, Warsaw)
+    ),
+
+    with_test_transaction(
+        Descriptor,
+        C2,
+        replace_document(C2,_{'@id' : Warsaw, '@type' : "City", name : "Warszawa"}, _)
+    ),
+
+    document_history(Descriptor, Warsaw, 0, inf, History, [complete(true), diff(true)]),
+    History = [Entry1, Entry2],
+    get_dict(instance, Entry1, _),
+    get_dict(diff, Entry1, _),
+    get_dict(instance, Entry2, _),
+    get_dict(diff, Entry2, _).
 
 original_changed_document_id(Askable,Containing) :-
     ask(Askable,

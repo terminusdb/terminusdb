@@ -23,6 +23,7 @@
               is_super_user/1,
               is_super_user/2,
               resolve_descriptor_auth/6,
+              resolve_descriptor_action_auth/5,
 
               % user_management.pl
               add_user/3,

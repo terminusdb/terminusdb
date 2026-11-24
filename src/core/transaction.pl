@@ -6,6 +6,8 @@
               with_transaction/3,
               with_transaction/4,
               graph_inserts_deletes/3,
+              reset_transaction_object_graph_descriptors/1,
+              reset_transaction_objects_graph_descriptors/1,
 
               % descriptor.pl
               is_descriptor/1,
@@ -31,6 +33,9 @@
               collection_descriptor_graph_filter_graph_descriptor/3,
               ensure_transaction_has_builder/2,
               ensure_transaction_schema_written/1,
+              db_creation_bypass/2,
+              db_currently_creating/2,
+              db_failed/3,
 
               % validate.pl
               transaction_objects_to_validation_objects/2,
@@ -56,10 +61,14 @@
               commit_id_uri/3,
               commit_id_to_metadata/5,
               commit_uri_to_metadata/5,
+              commit_uri_to_user/3,
+              maybe_inject_auth_user/3,
               commit_id_to_parent_uri/3,
               commit_uri_to_parent_uri/3,
               descriptor_commit_id_uri/4,
               insert_branch_object/3,
+              insert_branch_object/4,
+              descriptor_spec_string/2,
               delete_branch_object/2,
               insert_base_commit_object/5,
               insert_base_commit_object/6,

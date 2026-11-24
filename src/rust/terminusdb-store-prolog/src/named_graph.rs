@@ -10,7 +10,7 @@ predicates! {
         let graph_name: PrologText = graph_name_term.get_ex()?;
 
         let graph = context.try_or_die(store.create(&graph_name))?;
-        graph_term.unify(&WrappedNamedGraph(graph))
+        graph_term.unify(WrappedNamedGraph(graph))
     }
 
     pub semidet fn open_named_graph(context, store_term, graph_name_term, graph_term) {
@@ -19,7 +19,7 @@ predicates! {
 
         match context.try_or_die(store.open(&graph_name))? {
             None => Err(PrologError::Failure),
-            Some(graph) => graph_term.unify(&WrappedNamedGraph(graph)),
+            Some(graph) => graph_term.unify(WrappedNamedGraph(graph)),
         }
     }
 
@@ -35,7 +35,7 @@ predicates! {
         let graph: WrappedNamedGraph = graph_term.get_ex()?;
         match context.try_or_die(graph.head())? {
             None => Err(PrologError::Failure),
-            Some(layer) => layer_term.unify(&WrappedLayer(layer)),
+            Some(layer) => layer_term.unify(WrappedLayer(layer)),
         }
     }
 
@@ -46,7 +46,7 @@ predicates! {
         version_term.unify(version)?;
 
         if let Some(layer) = layer_opt {
-            layer_term.unify(&WrappedLayer(layer))?;
+            layer_term.unify(WrappedLayer(layer))?;
         }
 
         Ok(())

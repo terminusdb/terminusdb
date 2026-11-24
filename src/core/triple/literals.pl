@@ -8,6 +8,7 @@
               storage_object/2,
               date_string/2,
               date_time_string/2,
+              remove_date_time_offset/9,
               time_string/2,
               duration_string/2,
               gyear_string/2,
@@ -21,7 +22,17 @@
               instance_uri_to_prefixed/3,
               prefixed_to_uri/3,
               prefixed_to_property/3,
-              uri_eq/3
+              expanded_name_datatype/1,
+              split_clark/3,
+              qname_local/2,
+              is_ncname/1,
+              non_whitespace/1,
+              lexical_to_clark/4,
+              clark_to_lexical/3,
+              anyuri_to_clark/4,
+              uri_eq/3,
+              add_duration_to_component/3,
+              subtract_duration_from_component/3
           ]).
 
 /** <module> Literals
@@ -36,7 +47,8 @@
 :- use_module(library(lists), [reverse/2]).
 :- use_module(library(sort)).
 :- use_module(core(util)).
-:- use_module(core(triple/casting), [typecast/4, decimal_precision/1]).
+:- use_module(core(util/xsd_parser), [ncname//0]).
+:- use_module(core(triple/casting), [typecast/3, decimal_precision/1, rational_to_decimal_string/3]).
 :- use_module(core(triple/base_type), [basetype_subsumption_of/2]).
 
 /*
@@ -78,71 +90,6 @@ string_decimal_to_rational(String, Rational) :-
             )
         )
     ).
-
-/*
- * rational_to_decimal_string(+Rational, -String, +MaxDecimals) is det.
- *
- * Convert rational to decimal string with up to MaxDecimals precision.
- * Per XSD_DECIMAL_SPECIFICATION.md: compute 20 digits, preserve all significant digits.
- */
-rational_to_decimal_string(Rational, String, MaxDecimals) :-
-    (   rational(Rational)
-    ->  % Use exact rational arithmetic
-        (   Rational < 0
-        ->  Sign = "-",
-            AbsRational is abs(Rational)
-        ;   Sign = "",
-            AbsRational = Rational
-        ),
-        % Extract numerator and denominator (may be simplified by GCD)
-        rational(AbsRational, Num, Den),
-        % Integer part
-        IntPart is Num // Den,
-        % Fractional part
-        Remainder is Num mod Den,
-        (   Remainder =:= 0
-        ->  % No fractional part
-            format(string(String), "~w~w", [Sign, IntPart])
-        ;   % Compute MaxDecimals digits of precision WITH ROUNDING
-            Multiplier is 10^MaxDecimals,
-            % Round to nearest: add 0.5 before truncating
-            % (Remainder * Multiplier * 2 + Den) // (Den * 2) achieves rounding
-            FracDigits is (Remainder * Multiplier * 2 + Den) // (Den * 2),
-            % Format with leading zeros if needed, then trim trailing zeros
-            format_and_trim_decimal(FracDigits, MaxDecimals, FracStr),
-            format(string(String), "~w~w.~w", [Sign, IntPart, FracStr])
-        )
-    ;   number(Rational)
-    ->  % Regular number - format as-is
-        format(string(String), "~w", [Rational])
-    ;   throw(error(type_error(number, Rational), _))
-    ).
-
-/*
- * format_and_trim_decimal(+FracDigits, +MaxLen, -FracStr) is det.
- *
- * Format fractional digits with leading zeros, then trim trailing zeros.
- * Preserves all significant digits (non-zero or zeros between non-zeros).
- */
-format_and_trim_decimal(FracDigits, MaxLen, FracStr) :-
-    % Pad with leading zeros to MaxLen
-    format(string(Padded), "~w", [FracDigits]),
-    atom_length(Padded, ActualLen),
-    (   ActualLen < MaxLen
-    ->  ZeroCount is MaxLen - ActualLen,
-        format(string(Zeros), "~*c", [ZeroCount, 0'0]),
-        string_concat(Zeros, Padded, FullStr)
-    ;   FullStr = Padded
-    ),
-    % Trim trailing zeros
-    atom_codes(FullStr, Codes),
-    reverse(Codes, RevCodes),
-    trim_trailing_zeros(RevCodes, TrimmedRev),
-    reverse(TrimmedRev, TrimmedCodes),
-    atom_codes(FracStr, TrimmedCodes).
-
-trim_trailing_zeros([0'0|Rest], Trimmed) :- !, trim_trailing_zeros(Rest, Trimmed).
-trim_trailing_zeros(Codes, Codes).
 
 /*
  * date_time_string(-Date_Time,+String) is det.
@@ -211,12 +158,109 @@ date_time_stamp_string(Date_Time,String) :-
     !,
     atom_codes(String,Codes),
     phrase(dateTimeStamp(Y,M,D,HH,MM,SS,NS,Offset),Codes),
-    remove_date_time_offset(Y,M,D,HH,MM,SS,Offset,NS,Date_Time).
+    remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,Date_Time).
 
 remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_Floor,NS)) :-
+    % time_offset//1 already emits SWI-Prolog's convention: seconds *west* of
+    % Greenwich (+02:00 parses to -7200), matching date_time_stamp arg 7.
     date_time_stamp(date(Y, M, D, HH, MM, SS, Offset, -, -), TS),
     stamp_date_time(TS, date(Y1, M1, D1, HH1, MM1, SS1, 0, 'UTC', -), 'UTC'),
     SS_Floor is floor(SS1).
+
+/*
+ * add_duration_to_component(+Component, +Duration, -Result) is det.
+ *
+ * Calendar-aware duration addition. Handles year/month components via
+ * calendar arithmetic and day/time via seconds. Result type matches
+ * input unless sub-day time components are added to a date.
+ */
+add_duration_to_component(date(Y,M,D,O), duration(Sign,W,DY,DMo,DD0,DH,DMi,DS), End) :-
+    DD is DD0 + 7 * W,
+    Y1 is Y + Sign * DY,
+    M1 is M + Sign * DMo,
+    duration_normalize_year_month(Y1, M1, Y2, M2),
+    duration_clamp_day(Y2, M2, D, D2),
+    WholeDS is floor(DS),
+    FracNS is Sign * round((DS - WholeDS) * 1000000000),
+    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + WholeDS),
+    date_time_stamp(date(Y2,M2,D2,0,0,0,0,-,-), BaseStamp),
+    (   FracNS < 0
+    ->  Carry = -1, ENS is FracNS + 1000000000
+    ;   Carry = 0, ENS = FracNS
+    ),
+    EndStamp is BaseStamp + DaySecs + Carry,
+    stamp_date_time(EndStamp, date(EY,EM,ED,EHH,EMM,ESS,0,'UTC',-), 'UTC'),
+    ESSF is floor(ESS),
+    (   DH =:= 0, DMi =:= 0, DS =:= 0
+    ->  End = date(EY,EM,ED,O)
+    ;   End = date_time(EY,EM,ED,EHH,EMM,ESSF,ENS)
+    ).
+add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,W,DY,DMo,DD0,DH,DMi,DS), End) :-
+    DD is DD0 + 7 * W,
+    Y1 is Y + Sign * DY,
+    M1 is M + Sign * DMo,
+    duration_normalize_year_month(Y1, M1, Y2, M2),
+    duration_clamp_day(Y2, M2, D, D2),
+    % Split the duration seconds: whole seconds go through the timestamp (which
+    % is float and must never carry nanoseconds), the fractional part is kept
+    % as integer nanoseconds to avoid float error (0.1s -> 99999904ns).
+    WholeDS is floor(DS),
+    FracNS is Sign * round((DS - WholeDS) * 1000000000),
+    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + WholeDS),
+    date_time_stamp(date(Y2,M2,D2,HH,MM,SS,0,-,-), BaseStamp),
+    NS_Total is NS + FracNS,
+    (   NS_Total < 0
+    ->  Carry = -1, ENS is NS_Total + 1000000000
+    ;   NS_Total >= 1000000000
+    ->  Carry = 1, ENS is NS_Total - 1000000000
+    ;   Carry = 0, ENS = NS_Total
+    ),
+    EndStamp is BaseStamp + DaySecs + Carry,
+    stamp_date_time(EndStamp, date(EY,EM,ED,EHH,EMM,ESS1,0,'UTC',-), 'UTC'),
+    ESSF is floor(ESS1),
+    End = date_time(EY,EM,ED,EHH,EMM,ESSF,ENS).
+
+/*
+ * subtract_duration_from_component(+Component, +Duration, -Result) is det.
+ *
+ * Negate the duration sign and add.
+ */
+subtract_duration_from_component(Component, duration(Sign,W,Y,Mo,D,H,M,S), Start) :-
+    NSign is Sign * -1,
+    add_duration_to_component(Component, duration(NSign,W,Y,Mo,D,H,M,S), Start).
+
+% Normalize month overflow/underflow: e.g. month 0 or 13.
+% Uses floored division so that month 0 wraps to December of the previous year.
+duration_normalize_year_month(Y, M, NY, NM) :-
+    NM0 is ((M - 1) mod 12) + 1,
+    NY is Y + div((M - 1), 12),
+    NM = NM0.
+
+% Clamp day to the maximum valid day for a given year/month.
+duration_clamp_day(Y, M, D, CD) :-
+    duration_days_in_month(Y, M, MaxD),
+    CD is min(D, MaxD).
+
+duration_days_in_month(_, 1, 31).
+duration_days_in_month(Y, 2, 29) :- duration_is_leap(Y), !.
+duration_days_in_month(_, 2, 28).
+duration_days_in_month(_, 3, 31).
+duration_days_in_month(_, 4, 30).
+duration_days_in_month(_, 5, 31).
+duration_days_in_month(_, 6, 30).
+duration_days_in_month(_, 7, 31).
+duration_days_in_month(_, 8, 31).
+duration_days_in_month(_, 9, 30).
+duration_days_in_month(_, 10, 31).
+duration_days_in_month(_, 11, 30).
+duration_days_in_month(_, 12, 31).
+
+duration_is_leap(Y) :-
+    0 =:= Y mod 4,
+    (   0 =\= Y mod 100
+    ->  true
+    ;   0 =:= Y mod 400
+    ).
 
 /*
  * date_string(-Date,+String) is det.
@@ -356,16 +400,19 @@ time_string(time(HN,MN,SN),String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(time(HH,MM,SS,_NS,Offset),Codes),
-    time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)).
+    phrase(time(HH,MM,SS,NS,Offset),Codes),
+    time_to_internal_time(time(HH,MM,SS,NS,Offset),time(HN,MN,SN)).
 
 duration_string(Duration,String) :-
     nonvar(Duration),
     !,
-    Duration = duration(S,Y,M,D,HH,MM,SS),
+    Duration = duration(S,W,Y,M,D,HH,MM,SS),
     (   S = 1
     ->  SP = ''
     ;   SP = '-'),
+    (   W \= 0
+    ->  format(atom(WP),'~wW',[W])
+    ;   WP = ''),
     (   Y \= 0
     ->  format(atom(YP),'~wY',[Y])
     ;   YP = ''),
@@ -375,7 +422,7 @@ duration_string(Duration,String) :-
     (   D \= 0
     ->  format(atom(DP),'~wD',[D])
     ;   DP = ''),
-    (   \+ (HH =:= 0, MM =:= 0, SS =:= 0.0)
+    (   \+ (HH =:= 0, MM =:= 0, SS =:= 0)
     ->  TP = 'T'
     ;   TP = ''),
     (   HH \= 0
@@ -384,16 +431,25 @@ duration_string(Duration,String) :-
     (   MM \= 0
     ->  format(atom(MMP),'~wM',[MM])
     ;   MMP = ''),
-    (   SS \= 0.0
-    ->  format(atom(SSP),'~wS',[SS])
+    (   SS =\= 0
+    ->  % seconds carry a GMP rational — render exact decimal digits,
+        % never the `1r…` term form or f64 `…e-10` notation
+        rational_to_decimal_string(SS, SS_Str, 49),
+        format(atom(SSP),'~wS',[SS_Str])
     ;   SSP = ''),
-    atomic_list_concat([SP,'P',YP,MP,DP,TP,HHP,MMP,SSP],Atom),
+    atomic_list_concat([SP,'P',WP,YP,MP,DP,TP,HHP,MMP,SSP],Atom0),
+    % Zero duration: "P" alone is not valid ISO 8601. The canonical zero is
+    % "PT0S" — seconds precision is the maximum-precision spelling.
+    (   (Atom0 == 'P' ; Atom0 == '-P')
+    ->  atom_concat(Atom0, 'T0S', Atom)
+    ;   Atom = Atom0
+    ),
     atom_string(Atom,String).
-duration_string(duration(Sign,Y,M,D,HH,MM,SS),String) :-
+duration_string(duration(Sign,W,Y,M,D,HH,MM,SS),String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(duration(Sign,Y,M,D,HH,MM,SS),Codes).
+    phrase(duration(Sign,W,Y,M,D,HH,MM,SS),Codes).
 
 current_xsd_date_time(XSD) :-
     get_time(Unix),
@@ -421,7 +477,7 @@ literal_to_string(X^^'http://www.w3.org/2001/XMLSchema#string', X) :-
 literal_to_turtle(String@Lang,literal(lang(Lang,S))) :-
     atom_string(S,String).
 literal_to_turtle(Elt^^Type,literal(type(Type,S))) :-
-    typecast(Elt^^Type, 'http://www.w3.org/2001/XMLSchema#string', [], Val^^_),
+    typecast(Elt^^Type, 'http://www.w3.org/2001/XMLSchema#string', Val^^_),
     atom_string(S,Val).
 
 /*
@@ -436,7 +492,7 @@ turtle_to_literal(literal(lang(Lang,S)),String@Lang) :-
     !.
 turtle_to_literal(literal(type(Type,A)),Val^^Type) :-
     atom_string(A,S),
-    typecast(S^^'http://www.w3.org/2001/XMLSchema#string', Type, [], Val^^_),
+    typecast(S^^'http://www.w3.org/2001/XMLSchema#string', Type, Val^^_),
     !.
 turtle_to_literal(literal(L),String^^'http://www.w3.org/2001/XMLSchema#string') :-
     (   atom(L)
@@ -641,7 +697,7 @@ storage_literal(X1^^T1,X3^^T2) :-
     ;   T2 = 'http://www.w3.org/2001/XMLSchema#anyURI'
     ->  X2 = X3
     ;   typecast(X2^^'http://www.w3.org/2001/XMLSchema#string',T2,
-                 [], X3^^_)
+                 X3^^_)
     ).
 storage_literal(X1@L1,X2@L2) :-
     storage_atom(L1,L2),
@@ -759,6 +815,159 @@ prefixed_to_property(Term, Ctx, URI) :-
     get_dict('@schema', Ctx, Schema),
     put_dict('@base', Ctx, Schema, New_Ctx),
     prefixed_to_uri(Term, New_Ctx, URI).
+
+/*
+ * Expanded names: xsd:QName and xbrl:SQName.
+ *
+ * The storage form is always Clark notation `{uri}local`. The lexical edge
+ * form is `prefix:local` (OIM §3.1: split on the FIRST colon; the prefix is
+ * an NCName bound in the active prefix map; the localname is any
+ * non-whitespace string, colons included — xsd:QName additionally requires
+ * an NCName localname).
+ *
+ * Rendering performs an exact whole-namespace URI->prefix lookup only.
+ * Longest-prefix substring matching (as uri_to_prefixed uses for IRIs) must
+ * NOT be used here: it would corrupt a namespace that merely shares a
+ * leading substring with a bound URI.
+ */
+
+expanded_name_datatype('http://www.w3.org/2001/XMLSchema#QName').
+expanded_name_datatype('https://xbrl.org/2021SQName').
+
+is_ncname(S) :-
+    atom_codes(S,C),
+    phrase(xsd_parser:ncname,C,[]).
+
+non_whitespace(S) :-
+    \+ (sub_atom(S,_,1,_,C), char_type(C,white)).
+
+% split_clark(+Clark, -Ns, -Local) is semidet.
+% Namespace is delimited by the first '}' (SQName locals may contain '}').
+split_clark(Clark, Ns, Local) :-
+    sub_atom(Clark, 0, 1, _, '{'),
+    once(sub_atom(Clark, Before, 1, _, '}')),
+    Ns_Length is Before - 1,
+    Ns_Length > 0,
+    sub_atom(Clark, 1, Ns_Length, _, Ns),
+    Local_Before is Before + 1,
+    sub_atom(Clark, Local_Before, Local_Length, 0, Local),
+    Local_Length > 0.
+
+qname_local(Clark, Local) :-
+    split_clark(Clark, _, Local).
+
+% Localname grammar beyond the shared non-whitespace rule: xsd:QName
+% requires an NCName; xbrl:SQName accepts anything non-whitespace.
+expanded_name_local_ok(Local, 'http://www.w3.org/2001/XMLSchema#QName') :-
+    !,
+    is_ncname(Local).
+expanded_name_local_ok(_, _).
+
+% lexical_to_clark(+Lexical, +Prefixes:dict, +TypeURI, -Clark) is det.
+% Accepts `prefix:local` (expanded via Prefixes) or `{uri}local` Clark input
+% (validated, kept verbatim). Throws casting_error on malformed input or an
+% unbound prefix.
+lexical_to_clark(Lexical, Prefixes, TypeURI, Clark) :-
+    (   split_clark(Lexical, _Ns, Local)
+    ->  (   non_whitespace(Local),
+            expanded_name_local_ok(Local, TypeURI)
+        ->  Clark = Lexical
+        ;   throw(error(casting_error(Lexical, TypeURI), _)))
+    ;   (   sub_atom(Lexical, Before, 1, _, ':'), % leftmost ':'
+            sub_atom(Lexical, 0, Before, _, Prefix),
+            Local_Before is Before + 1,
+            sub_atom(Lexical, Local_Before, _, 0, Local),
+            Prefix \= '',
+            is_ncname(Prefix),
+            Local \= '',
+            non_whitespace(Local),
+            expanded_name_local_ok(Local, TypeURI)
+        ->  (   get_dict(Prefix, Prefixes, URI)
+            ->  atomic_list_concat(['{', URI, '}', Local], Clark)
+            ;   throw(error(unbound_prefix(Prefix, Lexical, TypeURI), _)))
+        ;   throw(error(casting_error(Lexical, TypeURI), _)))
+    ).
+
+% clark_to_lexical(+Clark, +Prefixes:dict, -Lexical) is det.
+% Exact-match URI->prefix lookup; smallest prefix on ties; Clark verbatim
+% when the namespace is unbound or the input is not Clark-shaped.
+% Output is always a string, matching the xsd:string cast convention.
+clark_to_lexical(Clark, Prefixes, Lexical) :-
+    (   split_clark(Clark, Ns, Local)
+    ->  % exact-match key enumeration; '@'-keys are context keywords, not bindings.
+        % Dict values may be atoms or strings — compare textually like
+        % anyuri_expansion_split does, or a string-valued map misses.
+        findall(P, (get_dict(P, Prefixes, Ns0),
+                    \+ sub_atom(P, 0, 1, _, '@'),
+                    atomic(Ns0),
+                    atom_string(Ns0, Ns)),
+                Candidates),
+        (   Candidates = []
+        ->  Lexical0 = Clark
+        ;   sort(Candidates, [Prefix|_]),
+            atomic_list_concat([Prefix, Local], ':', Lexical0)
+        )
+    ;   Lexical0 = Clark
+    ),
+    (   atom(Lexical0)
+    ->  atom_string(Lexical0, Lexical)
+    ;   Lexical = Lexical0
+    ).
+
+/*
+ * anyuri_to_clark(+AnyURI, +Prefixes:dict, +TypeURI, -Clark) is det.
+ *
+ * xsd:anyURI carries a raw IRI, not a `prefix:local` lexical, so the split
+ * resolves against the prefix map in the other direction: an expansion that
+ * prefixes the IRI (longest wins) gives the namespace. `prefix:local` input
+ * and `{uri}local` input are still honoured. An IRI whose namespace is not
+ * bound in the map raises casting_error — the namespace boundary is not
+ * guessable without ambiguity, so the prefix must be declared first.
+ */
+anyuri_to_clark(AnyURI, Prefixes, TypeURI, Clark) :-
+    (   split_clark(AnyURI, _Ns, Local)
+    ->  (   expanded_name_local_ok(Local, TypeURI)
+        ->  Clark = AnyURI
+        ;   throw(error(casting_error(AnyURI, TypeURI), _)))
+    ;   anyuri_expansion_split(AnyURI, Prefixes, Ns, Local)
+    ->  clark_or_error(AnyURI, Ns, Local, TypeURI, Clark)
+    ;   anyuri_lexical_split(AnyURI, Prefixes, Ns, Local)
+    ->  clark_or_error(AnyURI, Ns, Local, TypeURI, Clark)
+    ;   throw(error(casting_error(AnyURI, TypeURI), _))
+    ).
+
+% Longest bound expansion that is a prefix of the IRI wins.
+anyuri_expansion_split(AnyURI, Prefixes, Ns, Local) :-
+    findall(Len-Ns0,
+            (   get_dict(_P, Prefixes, Ns0),
+                atomic(Ns0),
+                atom_string(Ns0, Ns_String),
+                string_length(Ns_String, Len),
+                Len > 0,
+                sub_atom(AnyURI, 0, Len, _, Ns_String)),
+            Matches),
+    Matches \= [],
+    sort(0, @>=, Matches, [Len-Ns|_]),
+    atom_string(Ns, Ns_String),
+    sub_atom(AnyURI, Len, Local_Len, 0, Local),
+    Local_Len > 0.
+
+% `prefix:local` input: leftmost colon, NCName prefix bound in the map.
+anyuri_lexical_split(AnyURI, Prefixes, Ns, Local) :-
+    sub_atom(AnyURI, Before, 1, _, ':'),
+    Before > 0,
+    sub_atom(AnyURI, 0, Before, _, Prefix),
+    is_ncname(Prefix),
+    get_dict(Prefix, Prefixes, Ns),
+    Local_Before is Before + 1,
+    sub_atom(AnyURI, Local_Before, Local_Len, 0, Local),
+    Local_Len > 0.
+
+clark_or_error(AnyURI, Ns, Local, TypeURI, Clark) :-
+    (   non_whitespace(Local),
+        expanded_name_local_ok(Local, TypeURI)
+    ->  atomic_list_concat(['{', Ns, '}', Local], Clark)
+    ;   throw(error(casting_error(AnyURI, TypeURI), _))).
 
 :- begin_tests(turtle_literal_marshalling).
 

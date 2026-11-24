@@ -17,7 +17,7 @@
                json_read_list_stream_head/3,
                json_read_tail_stream/2,
                terminus_schema_path/1]).
-:- use_module(library(http/json), [json_write_dict/3]).
+:- use_module(library(json), [json_write_dict/3]).
 :- use_module(core(query), [literally/2]).
 
 is_var(v(_)).
@@ -49,6 +49,10 @@ term_vars(group_by(Unique,_Template,Query,Result), Vars) =>
     intersection(UVars, QVars, Both_Vars),
     term_vars(Result, RVars),
     union(Both_Vars, RVars, Vars).
+term_vars(collect(_Template,Into,Query), Vars) =>
+    term_vars(Query, QVars),
+    term_vars(Into, IVars),
+    union(QVars, IVars, Vars).
 term_vars(Term, Vars) =>
     Term =.. [_|Rest],
     maplist(term_vars, Rest, Vars_Lists),
@@ -165,6 +169,13 @@ definition(
         types: [value,template,data_value,query]
     }).
 definition(
+    collect{
+        name: 'Collect',
+        fields: [template,into,query],
+        mode: [?,?,:],
+        types: [value,data_value,query]
+    }).
+definition(
     distinct{
         name: 'Distinct',
         fields: [variables,query],
@@ -270,6 +281,34 @@ definition(
         types: [node,node,value,graph]
     }).
 definition(
+    triple_slice{
+        name: 'TripleSlice',
+        fields: [subject,predicate,object,low,high,optional(graph)],
+        mode: [?,?,?,+,+,+],
+        types: [node,node,value,value,value,graph]
+    }).
+definition(
+    triple_slice_rev{
+        name: 'TripleSliceRev',
+        fields: [subject,predicate,object,low,high,optional(graph)],
+        mode: [?,?,?,+,+,+],
+        types: [node,node,value,value,value,graph]
+    }).
+definition(
+    triple_next{
+        name: 'TripleNext',
+        fields: [subject,predicate,object,next,optional(graph)],
+        mode: [+,+,?,?,+],
+        types: [node,node,value,value,graph]
+    }).
+definition(
+    triple_previous{
+        name: 'TriplePrevious',
+        fields: [subject,predicate,object,previous,optional(graph)],
+        mode: [+,+,?,?,+],
+        types: [node,node,value,value,graph]
+    }).
+definition(
     path{
         name: 'Path',
         fields: [subject,pattern,object,optional(path)],
@@ -289,6 +328,20 @@ definition(
         fields: [resource,count],
         mode: [+,?],
         types: [collection,decimal]
+    }).
+definition(
+    triple_count{
+        name: 'TripleCount',
+        fields: [subject,predicate,object,count,optional(graph)],
+        mode: [?,?,?,?,+],
+        types: [node,node,value,decimal,graph]
+    }).
+definition(
+    triple_range_count{
+        name: 'TripleRangeCount',
+        fields: [subject,predicate,low,high,count,optional(graph)],
+        mode: [?,?,+,+,?,+],
+        types: [node,node,value,value,decimal,graph]
     }).
 definition(
     size{
@@ -319,6 +372,160 @@ definition(
         fields: [left,right],
         mode: [+,+],
         types: [any,any]
+    }).
+definition(
+    '>='{
+        name: 'Gte',
+        fields: [left,right],
+        mode: [+,+],
+        types: [any,any]
+    }).
+definition(
+    '=<'{
+        name: 'Lte',
+        fields: [left,right],
+        mode: [+,+],
+        types: [any,any]
+    }).
+definition(
+    in_range{
+        name: 'InRange',
+        fields: [value,start,'end'],
+        mode: [+,+,+],
+        types: [any,any,any]
+    }).
+definition(
+    sequence{
+        name: 'Sequence',
+        fields: [value,start,'end',optional(step),optional(count)],
+        mode: [?,+,+,+,?],
+        types: [data_value,data_value,data_value,data_value,data_value]
+    }).
+definition(
+    interval{
+        name: 'Interval',
+        fields: [start,'end',interval],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    interval_start_duration{
+        name: 'IntervalStartDuration',
+        fields: [start,duration,interval],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    interval_duration_end{
+        name: 'IntervalDurationEnd',
+        fields: [duration,'end',interval],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    day_after{
+        name: 'DayAfter',
+        fields: [date,next],
+        mode: [?,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    day_before{
+        name: 'DayBefore',
+        fields: [date,previous],
+        mode: [?,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    month_start_date{
+        name: 'MonthStartDate',
+        fields: [year_month,date],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    month_end_date{
+        name: 'MonthEndDate',
+        fields: [year_month,date],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    month_start_dates{
+        name: 'MonthStartDates',
+        fields: [date,start,'end'],
+        mode: [?,+,+],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    month_end_dates{
+        name: 'MonthEndDates',
+        fields: [date,start,'end'],
+        mode: [?,+,+],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    interval_relation{
+        name: 'IntervalRelation',
+        fields: [relation,x_start,x_end,y_start,y_end],
+        mode: [?,+,+,+,+],
+        types: [data_value,data_value,data_value,data_value,data_value]
+    }).
+definition(
+    interval_relation_typed{
+        name: 'IntervalRelationTyped',
+        fields: [relation,x,y],
+        mode: [?,+,+],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    triple_relation{
+        name: 'TripleRelation',
+        fields: [subject,predicate,object,relation,value],
+        mode: [?,?,?,+,+],
+        types: [node,node,data_value,data_value,data_value]
+    }).
+definition(
+    weekday{
+        name: 'Weekday',
+        fields: [date,weekday],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    weekday_sunday_start{
+        name: 'WeekdaySundayStart',
+        fields: [date,weekday],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    iso_week{
+        name: 'IsoWeek',
+        fields: [date,year,week],
+        mode: [+,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    date_duration{
+        name: 'DateDuration',
+        fields: [start,'end',duration],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    range_min{
+        name: 'RangeMin',
+        fields: [list,result],
+        mode: [+,?],
+        types: [list(any),any]
+    }).
+definition(
+    range_max{
+        name: 'RangeMax',
+        fields: [list,result],
+        mode: [+,?],
+        types: [list(any),any]
     }).
 definition(
     like{
@@ -426,6 +633,41 @@ definition(
         types: [list(any),decimal]
     }).
 definition(
+    set_difference{
+        name: 'SetDifference',
+        fields: [list_a, list_b, result],
+        mode: [+, +, ?],
+        types: [list(any), list(any), list(any)]
+    }).
+definition(
+    set_intersection{
+        name: 'SetIntersection',
+        fields: [list_a, list_b, result],
+        mode: [+, +, ?],
+        types: [list(any), list(any), list(any)]
+    }).
+definition(
+    set_union{
+        name: 'SetUnion',
+        fields: [list_a, list_b, result],
+        mode: [+, +, ?],
+        types: [list(any), list(any), list(any)]
+    }).
+definition(
+    set_member{
+        name: 'SetMember',
+        fields: [element, set],
+        mode: [+, +],
+        types: [any, list(any)]
+    }).
+definition(
+    list_to_set{
+        name: 'ListToSet',
+        fields: [list, set],
+        mode: [+, ?],
+        types: [list(any), list(any)]
+    }).
+definition(
     slice{
         name: 'Slice',
         fields: [list, result, start, end],
@@ -467,6 +709,13 @@ definition(
         mode: [+, +, ?],
         types: [string, list(string), node]
     }).
+definition(
+    idgen_uuid_v7{
+        name: 'UuidV7',
+        fields: [base, key_list, uri],
+        mode: [+, +, ?],
+        types: [string, list(string), node]
+    }).
 
 /* types */
 definition(
@@ -486,9 +735,9 @@ definition(
 definition(
     typecast{
         name: 'Typecast',
-        fields: [value,type,result],
-        mode:  [+,+,?],
-        types: [value,node,value]
+        fields: [value,type,result,optional(prefixes)],
+        mode:  [+,+,?,+],
+        types: [value,node,value,json]
     }).
 definition(
     typeof{
@@ -575,6 +824,23 @@ term_mode_correct(Term) :-
 operator(_=_).
 operator(_>_).
 operator(_<_).
+operator(_>=_).
+operator(_=<_).
+operator(in_range(_,_,_)).
+operator(sequence(_,_,_,_,_)).
+operator(month_start_date(_,_)).
+operator(month_end_date(_,_)).
+operator(month_start_dates(_,_,_)).
+operator(month_end_dates(_,_,_)).
+operator(interval_relation(_,_,_,_,_)).
+operator(interval_relation_typed(_,_,_)).
+operator(triple_relation(_,_,_,_,_)).
+operator(weekday(_,_)).
+operator(weekday_sunday_start(_,_)).
+operator(iso_week(_,_,_)).
+operator(date_duration(_,_,_)).
+operator(range_min(_,_)).
+operator(range_max(_,_)).
 operator(like(_,_,_)).
 operator(concat(_,_)).
 operator(trim(_,_)).
@@ -592,7 +858,12 @@ operator(timestamp_now(_)).
 operator(idgen(_,_,_)).
 operator(hash(_,_,_)).
 operator(idgen_random(_,_,_)).
+operator(idgen_uuid_v7(_,_,_)).
 operator(triple_count(_,_)).
+operator(triple_count(_,_,_,_)).
+operator(triple_count(_,_,_,_,_)).
+operator(triple_range_count(_,_,_,_,_)).
+operator(triple_range_count(_,_,_,_,_,_)).
 operator(size(_,_)).
 
 cost(Term, Cost) :-
@@ -665,6 +936,9 @@ cost_(not(Query), Cost, _Polarity) =>
     cost_(Query, Cost, neg).
 
 cost_(group_by(_,_,Query,_), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
+
+cost_(collect(_,_,Query), Cost, Polarity) =>
     cost_(Query, Cost, Polarity).
 
 cost_(distinct(_,Query), Cost, Polarity) =>
@@ -1066,6 +1340,21 @@ cost_(slice(_,_,_), Cost, _Polarity) =>
 cost_(slice(_,_,_,_), Cost, _Polarity) =>
     Cost = 10.
 
+cost_(set_difference(_,_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(set_intersection(_,_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(set_union(_,_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(set_member(_,_), Cost, _Polarity) =>
+    Cost = 5.
+
+cost_(list_to_set(_,_), Cost, _Polarity) =>
+    Cost = 10.
+
 cost_(X=Y, Cost, Polarity),
 Polarity = neg,
 \+ term_vars(X=Y, []) =>
@@ -1115,7 +1404,25 @@ is_var(X),
 is_var(Y) =>
     Cost = 100.
 
+cost_(interval(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(interval_start_duration(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(interval_duration_end(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(day_after(_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(day_before(_,_), Cost, _Polarity) =>
+    Cost = 1.
+
 cost_(typecast(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(typecast(_,_,_,_), Cost, _Polarity) =>
     Cost = 1.
 
 cost_(typeof(_,_), Cost, _Polarity) =>

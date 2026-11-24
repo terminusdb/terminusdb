@@ -9,6 +9,7 @@ TerminusDB uses an automated release workflow with GitHub Actions that handles:
 - Multi-architecture Docker images (AMD64, ARM64) with noroot variants
 - Snap package publishing
 - Automated artifact management
+- Embedded web UIs (tdb-admin / tdb-data) pinned via `UI_VERSIONS`
 - The repository is normally in vX.X.X-dev (and then in either no suffic or -rcX)
 
 <!-- [[[cog
@@ -23,17 +24,17 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 **Last released version:** <!--
 [[[cog cog.out(last_released_version_link) ]]] -->
-[`v11.2.0-dev`](https://github.com/terminusdb/terminusdb/releases/tag/v11.2.0-dev)
+[`v12.1.0-rc3`](https://github.com/terminusdb/terminusdb/releases/tag/v12.1.0-rc3)
 <!-- [[[end]]] -->
 
 **Current repository version:** <!--
 [[[cog cog.out(current_repo_version) ]]] -->
-`v12.0.0`
+`v12.1.0-rc4`
 <!-- [[[end]]] -->
 
 **Changes since last release:** <!--
 [[[cog cog.out(changes_since_last_released_version_link) ]]] -->
-[`11.2.0-dev...main`](https://github.com/terminusdb/terminusdb/compare/v11.2.0-dev...main)
+[`12.1.0-rc3...main`](https://github.com/terminusdb/terminusdb/compare/v12.1.0-rc3...main)
 <!-- [[[end]]] -->
 
 ---
@@ -45,11 +46,12 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 **Before creating the release**, update release notes on `main`:
 
 1. Review changes since last release (see link above)
-2. Create a PR updating [`RELEASE_NOTES.md`](./RELEASE_NOTES.md):
+2. Draft a new release, preparing the tag and generate draft notes
+3. Create a PR updating [`RELEASE_NOTES.md`](./RELEASE_NOTES.md):
    - Add a new section at the top for the intended upcoming version
    - Use standard subsection headers: `Enhancements`, `Bug fixes`, `Maintenance and bug fixes`, `Other`
    - Include issue/PR references (e.g., `#1234`)
-3. Get the PR reviewed, approved, and merged
+4. Get the PR reviewed, approved, and merged
 
 ### 2. Bump Version
 
@@ -59,7 +61,7 @@ Use the **Bump Version** GitHub Action to update the `VERSION` file and related 
 
 Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/actions/workflows/bump-version.yml) and click **Run workflow**:
 - **Branch:** `main`
-- **New version:** e.g., `11.2.0`, or like `11.2.0-rc3`
+- **New version:** e.g., `12.0.0`, or for upcoming release `12.0.1-dev`
 
 The workflow accepts any suffix after the version number: `-rc1`, `-rc2`, `-alpha`, `-beta`, `-dev`, or no suffix etc.
 
@@ -67,7 +69,7 @@ This will:
 - Update `VERSION` file
 - Update `docs/release-steps.md` (this file) via cogapp
 - Update `src/config/terminus_config.pl`
-- Update `distribution/snap/snapcraft.yaml`
+- Update `snap/snapcraft.yaml`
 - Create a PR with the changes
 
 You may need to close and reopen the PR if the version bump verification build is stuck.
@@ -78,20 +80,34 @@ When called as `workflow_call` (from other workflows), the action automatically 
 
 **Review and merge** the version bump PR before proceeding.
 
-### 3. Create Release Tag
+### 3. Pin Embedded UI Versions
+
+The server image embeds the **tdb-admin** and **tdb-data** web UIs, downloaded as release tarballs at image-build time. Their versions are pinned in [`UI_VERSIONS`](../UI_VERSIONS) — the single source of truth read by the Makefile, CI, and the Docker builds. The Dockerfiles carry no fallback defaults: a build without the pins fails rather than silently shipping stale UIs.
+
+The pins must point to **already-published** UI releases *before* the release tag is pushed — the tag freezes whatever `UI_VERSIONS` contains at that commit:
+
+1. Run the release workflows in [tdb-admin](https://github.com/terminusdb-org/tdb-admin) and [tdb-data](https://github.com/terminusdb-org/tdb-data), and publish the resulting draft GitHub releases.
+2. Update `UI_VERSIONS` on `main` to the tags just published, and merge the change.
+3. Optionally verify the pins resolve: `make admin-dist data-dist` downloads the pinned tarballs into `app/{admin,data}/dist`.
+
+If a tag ships stale pins, the fix is a pin update plus a **new tag** — published tags are never rebuilt.
+
+Each embedded UI displays its own version in the interface (tdb-data status bar, tdb-admin sidebar footer), so the running image can be verified visually at `/app/data` and `/app/admin`.
+
+### 4. Create Release Tag
 
 After the version bump PR is merged:
 
 ```bash
 git checkout main
 git pull
-git tag v<VERSION>  # e.g., v11.2.0
+git tag v<VERSION>  # e.g., v12.1.0
 git push origin v<VERSION>
 ```
 
 **Important:** Pushing a tag triggers the automated build and publish workflows.
 
-### 4. Automated Build & Publish
+### 5. Automated Build & Publish
 
 Pushing a version tag (`v*.*.*`) automatically triggers:
 
@@ -100,7 +116,7 @@ Pushing a version tag (`v*.*.*`) automatically triggers:
 - Builds ARM64 image via `.github/workflows/docker-arm64-build.yml` (BuildJet runner)
 - Runs integration tests on both architectures
 - Publishes multi-arch manifests via `.github/workflows/docker-images-publish.yml`:
-  - **Always:** `terminusdb/terminusdb-server:v<VERSION>` (e.g., `v11.2.0-rc3`)
+  - **Always:** `terminusdb/terminusdb-server:v<VERSION>` (e.g., `v12.1.0-rc3`)
   - **Production only:** `terminusdb/terminusdb-server:v<MAJOR>` (e.g., `v11`)
   - **Production only:** `terminusdb/terminusdb-server:latest`
   - Corresponding `-noroot` variants for all tags
@@ -111,31 +127,33 @@ Pushing a version tag (`v*.*.*`) automatically triggers:
 
 | Release Version | Tags Created |
 |-----------------|--------------|
-| `v11.2.0` | `v11.2.0`, `v11`, `latest`, `v11.2.0-noroot`, `v11-noroot`, `latest-noroot` |
-| `v11.2.0-rc3` | `v11.2.0-rc3`, `v11.2.0-rc3-noroot` (no `latest` or `v11`) |
-| `v11.2.0-beta` | `v11.2.0-beta`, `v11.2.0-beta-noroot` (no `latest` or `v11`) |
+| `v12.1.0` | `v12.1.0`, `v12`, `latest`, `v12.1.0-noroot`, `v12-noroot`, `latest-noroot` |
+| `v12.1.0-rc3` | `v12.1.0-rc3`, `v12.1.0-rc3-noroot` (no `latest` or `v12`) |
+| `v12.1.0-beta` | `v12.1.0-beta`, `v12.1.0-beta-noroot` (no `latest` or `v12`) |
 
 #### Snap Package
-- Builds snap via `.github/workflows/snap-build.yml`
+- Builds snap for **AMD64** via `.github/workflows/snap-build.yml`
+- Runs integration tests
 - Publishes to Snap Store via `.github/workflows/snap-publish.yml`:
   - **stable** channel for production releases
+  - **candidate** channel for `-rc`, `-beta`, `-alpha` versions
   - **edge** channel for `-dev` versions
 
-### 5. Create GitHub Release
+### 6. Create GitHub Release
 
 After automated builds complete (monitor in Actions tab):
 
 1. Go to [Releases](https://github.com/terminusdb/terminusdb/releases)
 2. Click **Draft a new release**
-3. Select the tag you created
+3. Select the tag you created (or create a new tag)
 4. **Release title:** `TerminusDB v<VERSION>`
 5. **Description:** Copy relevant section from `RELEASE_NOTES.md`
 6. **Set as a pre-release:** Check this for versions with `-rc`, `-beta`, `-alpha` suffixes
 7. Click **Publish release**
 
-> **Note:** RC versions (e.g., `11.2.0-rc3`) are fully supported and should be marked as pre-releases in GitHub.
+> **Note:** RC versions (e.g., `12.1.0-rc3`) are fully supported and should be marked as pre-releases in GitHub.
 
-### 6. Verify Release
+### 7. Verify Release
 
 Confirm successful publication:
 
@@ -147,15 +165,15 @@ Confirm successful publication:
   - Verify version in appropriate channel
 - **GitHub Release:** Verify release notes are correct
 
-### 7. Bump to development version again
+### 8. Bump to development version again
 
 Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/actions/workflows/bump-version.yml) and click **Run workflow**:
 - **Branch:** `main`
-- **New version:** e.g., `11.2.0-dev`
+- **New version:** e.g., `12.0.9-dev` (when bumping from `12.0.9`)
 
 Then merge the new development version PR (to ensure build images are correctly produced). You may need to close and reopen the PR if the version bump verification build is stuck.
 
-### 8. Post-Release (Optional)
+### 9. Post-Release (Optional)
 
 For major releases, consider:
 - Announcement blog post
@@ -197,7 +215,7 @@ All Docker images are built for both AMD64 and ARM64:
 The `VERSION` file is the single source of truth. Cogapp (`cog -r`) propagates versions to:
 - `docs/release-steps.md` (this file)
 - `src/config/terminus_config.pl`
-- `distribution/snap/snapcraft.yaml`
+- `snap/snapcraft.yaml`
 
 ---
 
@@ -230,9 +248,10 @@ See [`PREPARE_PR.md`](../PREPARE_PR.md) for complete pre-release testing checkli
 - See `.github/workflows/docker-arm64-build.yml`
 
 **Snap publish fails:**
-- Verify `SNAP_STORE_LOGIN` secret is valid
+- Verify `SNAP_STORE_LOGIN` secret is valid (regenerate with `snapcraft export-login --snaps=terminusdb --channels=edge,candidate,stable`)
 - Check version format matches snap naming conventions
 - Review snap build logs
+- The snap is built natively on AMD64 (`ubuntu-latest`) and ARM64 (`ubuntu-24.04-arm`) runners
 
 **Docker manifest creation fails:**
 - Ensure both AMD64 and ARM64 builds succeeded

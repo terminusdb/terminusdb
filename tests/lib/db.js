@@ -1,6 +1,7 @@
 const api = require('./api')
 const { Params } = require('./params.js')
 const util = require('./util.js')
+const { optimizeDatabase } = require('./optimize.js')
 
 function create (agent, params) {
   params = new Params(params)
@@ -29,8 +30,20 @@ function create (agent, params) {
   }
 
   return {
-    then (resolve) {
-      resolve(request.then(api.response.verify(api.response.db.createSuccess)))
+    then (resolve, reject) {
+      return request
+        .then(api.response.verify(api.response.db.createSuccess))
+        .then(async (result) => {
+          try {
+            const dbPath = params.string('path', `${agent.orgName}/${agent.dbName}`)
+            await optimizeDatabase(agent, dbPath, 'main')
+          } catch (error) {
+            // Optimization failures shouldn't break database creation
+            console.warn('Database optimization failed:', error.message)
+          }
+          return result
+        })
+        .then(resolve, reject)
     },
     fails (error) {
       return request.then(api.response.verify(api.response.db.createFailure(error)))
@@ -57,8 +70,10 @@ function exists (agent, params) {
   const request = agent.head(path).query(query)
 
   return {
-    then (resolve) {
-      resolve(request.then(api.response.verify(api.response.db.existsSuccess)))
+    then (resolve, reject) {
+      return request
+        .then(api.response.verify(api.response.db.existsSuccess))
+        .then(resolve, reject)
     },
     fails () {
       return request.then(api.response.verify(api.response.db.existsFailure))
@@ -80,8 +95,10 @@ function delete_ (agent, params) {
   const request = agent.delete(path)
 
   return {
-    then (resolve) {
-      resolve(request.then(api.response.verify(api.response.db.deleteSuccess)))
+    then (resolve, reject) {
+      return request
+        .then(api.response.verify(api.response.db.deleteSuccess))
+        .then(resolve, reject)
     },
     fails (error) {
       return request.then(api.response.verify(api.response.db.deleteFailure(error)))
@@ -103,4 +120,7 @@ module.exports = {
   create,
   exists,
   delete: delete_,
+  optimize: {
+    optimizeDatabase,
+  },
 }

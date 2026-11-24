@@ -25,6 +25,7 @@
 :- use_module(core(query/json_woql), [json_woql/2]).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
+:- use_module(core(document)).
 
 % Define assertion/1 locally to satisfy linter (plunit provides it at runtime)
 :- if(\+ current_predicate(assertion/1)).
@@ -354,34 +355,34 @@ test(json_bindings_decimal_as_string, [
  */
 test(document_decimal_precision, [
          setup((setup_temp_store(State),
-                create_db_with_test_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State)),
-         blocked('Requires proper schema with decimal property - needs further investigation')
+                create_db_with_empty_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
      ]) :-
+    
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    
+    % Add schema with decimal property
+    Schema = _{'@type': "Class",
+               '@id': "DecimalTest",
+               decimal_field: "xsd:decimal"},
+    with_test_transaction(Descriptor, C1, insert_schema_document(C1, Schema)),
     
     High_Precision = "555555555555555555.555555555555555555",
     
     % Insert document with high-precision decimal
-    Doc = _{'@type': 'TestClass',
-            decimal_field: _{'@type': 'http://www.w3.org/2001/XMLSchema#decimal',
+    Doc = _{'@type': 'DecimalTest',
+            decimal_field: _{'@type': 'xsd:decimal',
                            '@value': High_Precision}},
     
-    resolve_absolute_string_descriptor("admin/test", Descriptor),
-    create_context(Descriptor,
-                   commit_info{author: "test", message: "decimal test"},
-                   Context),
+    with_test_transaction(Descriptor, C2, insert_document(C2, Doc, Id)),
     
-    % Insert and retrieve
-    AST = (insert_document(Doc, v('ID')),
-           get_document(v('ID'), v('Retrieved'))),
+    % Retrieve document
+    with_test_transaction(Descriptor, C3, get_document(C3, Id, Retrieved)),
     
-    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
-    [First] = Response.bindings,
+    % Verify decimal value preserved
+    get_dict(decimal_field, Retrieved, Value),
     
-    get_dict('Retrieved', First, Retrieved),
-    get_dict(decimal_field, Retrieved, Field),
-    get_dict('@value', Field, Value),
-    
+    % The value should be a rational with full precision
     assertion(rational(Value)),
     assertion(Value =:= 555555555555555555.555555555555555555).
 

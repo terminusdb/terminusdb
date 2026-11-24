@@ -4,12 +4,25 @@
               server/1,
               server_name/1,
               server_port/1,
+              server_enabled/0,
+              listen_address/1,
               worker_amount/1,
               max_transaction_retries/1,
               db_path/1,
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
               jwt_subject_claim_name/1,
+              jwt_issuer/1,
+              jwt_audience/1,
+              jwt_clock_tolerance/1,
+              oidc_issuer_url/1,
+              jwt_scopes_enabled/0,
+              jwt_scopes_claim/1,
+              check_jwt_scopes_claim_safety/0,
+              check_jwt_subject_claim_safety/0,
+              check_jwt_config_safety/0,
+              jwt_key_source_configured/0,
+              jwt_runtime_enabled/0,
               registry_path/1,
               tmp_path/1,
               server_worker_options/1,
@@ -31,13 +44,23 @@
               pinned_databases/1,
               pinned_organizations/1,
               plugin_path/1,
+              builtin_plugin_path/1,
               dashboard_enabled/0,
               parallelize_enabled/0,
               grpc_label_endpoint/1,
               crypto_password_cost/1,
               lru_cache_size/1,
               trust_migrations/0,
-              expose_stack_traces/0
+              expose_stack_traces/0,
+              is_memory_mode/0,
+              set_memory_mode/0,
+              cache_eviction_probability/1,
+              indexer_backend/1,
+              check_indexer_backend_config/0,
+              clear_indexer_backend_config/0,
+              worker_elaboration_preference/1,
+              root_redirect_target/1,
+              max_body_size/1
 ]).
 
 :- use_module(library(pcre)).
@@ -48,9 +71,12 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 
+:- dynamic legacy_vectorlink:semantic_indexer_endpoint/1.
+:- dynamic vectorlink:vectorlink_endpoint/1.
+
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('12.0.0').
+terminusdb_version('12.1.0-rc4').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -71,11 +97,31 @@ server_name(Value) :-
     ;   random_string(Value)).
 
 server_port(Value) :-
-    getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
+    (   getenv_number('TERMINUSDB_SWIPL_PORT', Value)
+    ->  true
+    ;   getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value)
+    ).
+
+server_enabled :-
+    (   getenv('TERMINUSDB_SWIPL_PORT', Value)
+    ->  Value \= 'false',
+        Value \= '0'
+    ;   getenv('TERMINUSDB_SERVER_PORT', Value)
+    ->  Value \= 'false',
+        Value \= '0'
+    ;   true
+    ).
+
+listen_address(Value) :-
+    getenv_default('TERMINUSDB_LISTEN_ADDRESS', localhost, Value).
 
 worker_amount(Value) :-
     current_prolog_flag(cpu_count,Integer),
     getenv_default_number('TERMINUSDB_SERVER_WORKERS', Integer, Value).
+
+:- table max_body_size/1 as shared.
+max_body_size(Value) :-
+    getenv_default_number('TERMINUSDB_MAX_BODY_SIZE', 33554432, Value).
 
 :- table max_transaction_retries/1 as shared.
 max_transaction_retries(Value) :-
@@ -85,9 +131,24 @@ max_transaction_retries(Value) :-
         Value is Num_Workers * 2).
 
 % This is defined only for testing. Use db_path/1 since it is tabled.
+%
+% Resolution order, first hit wins:
+%   1. TERMINUSDB_SERVER_DB_PATH — names the db dir directly (legacy
+%      override; wins even when TERMINUSDB_STORE is also set).
+%   2. TERMINUSDB_STORE — the storage root (official); the db lives at
+%      <root>/db and vectorlink at <root>/vectorlink.
+%   3. ~/.terminusdb/db — the default storage root ~/.terminusdb.
 default_database_path(Path) :-
-    getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value),
-    absolute_file_name(Value, Path).
+    (   getenv('TERMINUSDB_SERVER_DB_PATH', Value),
+        Value \= ''
+    ->  expand_file_name(Value, [Expanded]),
+        absolute_file_name(Expanded, Path)
+    ;   getenv('TERMINUSDB_STORE', Store),
+        Store \= ''
+    ->  expand_file_name(Store, [Expanded]),
+        absolute_file_name(Expanded, Store_Abs),
+        atomic_list_concat([Store_Abs, 'db'], '/', Path)
+    ;   expand_file_name('~/.terminusdb/db', [Path])).
 
 /**
  * db_path(-Path) is det.
@@ -103,6 +164,10 @@ dashboard_enabled :-
     getenv_default('TERMINUSDB_ENABLE_DASHBOARD', true, Value),
     Value = true.
 
+:- table root_redirect_target/1 as shared.
+root_redirect_target(Target) :-
+    getenv_default('TERMINUSDB_ROOT_REDIRECT', '/dashboard', Target).
+
 :- table plugin_path/1 as shared.
 plugin_path(Path) :-
     (   getenv('TERMINUSDB_PLUGINS_PATH', Value)
@@ -111,6 +176,23 @@ plugin_path(Path) :-
         db_path(Db_Path),
         file_directory_name(Db_Path, Storage_Dir),  % Get parent dir: ./storage/db -> ./storage
         atomic_list_concat([Storage_Dir, 'plugins'], '/', Path)
+    ).
+
+/**
+ * builtin_plugin_path(-Path) is det.
+ *
+ * Directory for built-in plugins that are always loaded (search stack,
+ * webserver plugins, auto-optimize). Defaults to builtin_plugins/ at the
+ * repository root (terminus_home is <repo>/src). Installed deployments set
+ * TERMINUSDB_BUILTIN_PLUGINS_PATH explicitly.
+ */
+:- table builtin_plugin_path/1 as shared.
+builtin_plugin_path(Path) :-
+    (   getenv('TERMINUSDB_BUILTIN_PLUGINS_PATH', Value)
+    ->  absolute_file_name(Value, Path)
+    ;   user:file_search_path(terminus_home, Home),
+        file_directory_name(Home, Repo_Root),
+        atomic_list_concat([Repo_Root, '/builtin_plugins'], Path)
     ).
 
 jwt_enabled_env_var :-
@@ -133,10 +215,148 @@ jwt_jwks_endpoint(Endpoint) :-
     % Ignore an empty value in the environment variable.
     (   Value = ''
     ->  false
-    ;   Endpoint = Value).
+    ;   atom_string(Value, Str),
+        (   string_concat("https://", _, Str)
+        ->  true
+        ;   string_concat("http://localhost", _, Str)
+        ->  true
+        ;   string_concat("http://127.0.0.1", _, Str)
+        ),
+        Endpoint = Value).
 
 jwt_subject_claim_name(Name) :-
-    getenv_default('TERMINUSDB_JWT_AGENT_NAME_PROPERTY', 'preferred_username', Name).
+    getenv_default('TERMINUSDB_JWT_AGENT_NAME_PROPERTY', 'sub', Name).
+
+jwt_issuer(Issuer) :-
+    getenv('TERMINUSDB_JWT_ISSUER', Value),
+    (   Value = '' -> false ; Issuer = Value ).
+
+jwt_audience(Audience) :-
+    getenv('TERMINUSDB_JWT_AUDIENCE', Value),
+    (   Value = '' -> false ; Audience = Value ).
+
+jwt_clock_tolerance(Seconds) :-
+    getenv_default_number('TERMINUSDB_JWT_CLOCK_TOLERANCE', 60, Seconds).
+
+oidc_issuer_url(Url) :-
+    getenv('TERMINUSDB_OIDC_ISSUER_URL', Value),
+    (   Value = ''
+    ->  false
+    ;   atom_string(Value, Str),
+        (   string_concat("https://", _, Str)
+        ->  true
+        ;   string_concat("http://localhost", _, Str)
+        ->  true
+        ;   string_concat("http://127.0.0.1", _, Str)
+        ),
+        Url = Value ).
+
+/**
+ * jwt_key_source_configured is semidet.
+ *
+ * Succeeds if a JWT verification key source is configured: either a JWKS
+ * endpoint (TERMINUSDB_SERVER_JWKS_ENDPOINT) or an OIDC issuer URL
+ * (TERMINUSDB_OIDC_ISSUER_URL). Without a key source no JWT can be
+ * verified.
+ */
+jwt_key_source_configured :-
+    jwt_jwks_endpoint(_),
+    !.
+jwt_key_source_configured :-
+    oidc_issuer_url(_).
+
+/**
+ * jwt_runtime_enabled is semidet.
+ *
+ * Succeeds when JWT authentication is opted into at runtime via
+ * TERMINUSDB_JWT_ENABLED=true. Default is false: JWT support may be
+ * compiled into the binary, but it stays off — and silent — unless
+ * explicitly enabled. A key source (JWKS endpoint or OIDC issuer URL)
+ * alone does not enable JWT; see jwt_key_source_configured/0.
+ */
+jwt_runtime_enabled :-
+    getenv_default('TERMINUSDB_JWT_ENABLED', false, Value),
+    Value = true.
+
+jwt_scopes_enabled :-
+    getenv_default('TERMINUSDB_JWT_SCOPES_ENABLED', false, Value),
+    Value = true.
+
+jwt_scopes_claim(ClaimName) :-
+    getenv_default('TERMINUSDB_JWT_SCOPES_CLAIM', 'scope', ClaimName).
+
+check_jwt_scopes_claim_safety :-
+    jwt_scopes_enabled,
+    (   \+ getenv('TERMINUSDB_JWT_SCOPES_CLAIM', _)
+    ;   getenv('TERMINUSDB_JWT_SCOPES_CLAIM', '')
+    ),
+    !,
+    json_log_error_formatted(
+        'FATAL: JWT scopes are enabled (TERMINUSDB_JWT_SCOPES_ENABLED=true) but no scope claim is configured (TERMINUSDB_JWT_SCOPES_CLAIM is unset or empty). Set TERMINUSDB_JWT_SCOPES_CLAIM explicitly to the JWT claim your IdP uses for authorization scopes.',
+        []),
+    halt(1).
+check_jwt_scopes_claim_safety :-
+    jwt_scopes_enabled,
+    jwt_scopes_claim(ClaimName),
+    !,
+    json_log_warning_formatted(
+        'JWT scopes are enabled. Ensure your IdP controls the "~w" claim and users cannot self-set it.',
+        [ClaimName]).
+check_jwt_scopes_claim_safety.
+
+check_jwt_subject_claim_safety :-
+    jwt_enabled,
+    \+ getenv('TERMINUSDB_JWT_AGENT_NAME_PROPERTY', _),
+    !,
+    json_log_warning_formatted(
+        'JWT enabled with default subject claim "sub". If your IdP uses a different claim for usernames, set TERMINUSDB_JWT_AGENT_NAME_PROPERTY explicitly.',
+        []).
+check_jwt_subject_claim_safety.
+
+check_jwt_config_safety :-
+    check_jwt_key_source_safety,
+    check_jwt_issuer_safety,
+    check_jwt_audience_safety.
+
+check_jwt_key_source_safety :-
+    getenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', JwksVal),
+    JwksVal \= '',
+    \+ jwt_jwks_endpoint(_),
+    !,
+    json_log_warning_formatted(
+        'JWT JWKS endpoint (TERMINUSDB_SERVER_JWKS_ENDPOINT) is set but does not use HTTPS or http://localhost. Only https:// URLs (or http://localhost for testing) are accepted. JWT authentication will fail until a valid endpoint is provided.',
+        []).
+check_jwt_key_source_safety :-
+    getenv('TERMINUSDB_OIDC_ISSUER_URL', OidcVal),
+    OidcVal \= '',
+    \+ oidc_issuer_url(_),
+    !,
+    json_log_warning_formatted(
+        'OIDC issuer URL (TERMINUSDB_OIDC_ISSUER_URL) is set but does not use HTTPS or http://localhost. Only https:// URLs (or http://localhost for testing) are accepted. JWT authentication will fail until a valid issuer URL is provided.',
+        []).
+check_jwt_key_source_safety :-
+    \+ jwt_key_source_configured,
+    !,
+    json_log_warning_formatted(
+        'JWT is enabled but no JWKS endpoint (TERMINUSDB_SERVER_JWKS_ENDPOINT) or OIDC issuer URL (TERMINUSDB_OIDC_ISSUER_URL) is configured. JWT authentication will fail for all tokens until a key source is provided.',
+        []).
+check_jwt_key_source_safety.
+
+check_jwt_issuer_safety :-
+    \+ jwt_issuer(_),
+    !,
+    json_log_warning_formatted(
+        'JWT is enabled but no issuer (TERMINUSDB_JWT_ISSUER) is configured. Tokens from any issuer will be accepted. Set TERMINUSDB_JWT_ISSUER to restrict accepted issuers.',
+        []).
+check_jwt_issuer_safety.
+
+check_jwt_audience_safety :-
+    \+ jwt_audience(_),
+    !,
+    json_log_warning_formatted(
+        'JWT is enabled but no audience (TERMINUSDB_JWT_AUDIENCE) is configured. Tokens with any audience will be accepted. Set TERMINUSDB_JWT_AUDIENCE to restrict accepted audiences.',
+        []).
+check_jwt_audience_safety.
 
 registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
@@ -178,7 +398,7 @@ ignore_ref_and_repo_schema :-
 log_level_env(Log_Level) :-
     getenv('TERMINUSDB_LOG_LEVEL', Log_Level_Lower),
     upcase_atom(Log_Level_Lower, Log_Level),
-    memberchk(Log_Level, ['ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
+    memberchk(Log_Level, ['OFF', 'ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
     !.
 log_level_env('INFO').
 
@@ -191,7 +411,7 @@ log_level(Log_Level) :-
     Log_Level = Found_Log_Level.
 
 set_log_level(Log_Level) :-
-    memberchk(Log_Level, ['ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
+    memberchk(Log_Level, ['OFF', 'ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
     clear_log_level,
     asserta(log_level_override(Log_Level)).
 
@@ -285,7 +505,8 @@ insecure_user_header_key(Header_Key) :-
  * improve the user experience.
  */
 check_all_env_vars :-
-    ignore(insecure_user_header_key(_)).
+    ignore(insecure_user_header_key(_)),
+    check_indexer_backend_config.
 
 is_enterprise :-
     current_prolog_flag(terminusdb_enterprise, true).
@@ -355,11 +576,188 @@ expose_stack_traces :-
     !.
 % Predicate fails (returns false) if env var not set or set to any other value
 
-:- table semantic_indexer_endpoint/1.
-semantic_indexer_endpoint(Endpoint) :-
-    getenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', Endpoint).
+/*
+ * Semantic-indexer backend selector.
+ *
+ * Exactly one indexer backend may be active at a time. The selector makes the
+ * choice explicit and refuses to start on any ambiguous configuration, so that
+ * the legacy pull path (`http_legacy_vectorlink`) and the push path (`http_vectorlink`)
+ * can never both be wired, and no endpoint is ever consulted for an inactive
+ * backend.
+ *
+ *   TERMINUSDB_INDEXER_BACKEND        ∈ {none, http_legacy_vectorlink, http_vectorlink,
+ *                                       vectorlink}
+ *                                       default `none`. `vectorlink` selects the embedded
+ *                                       engine that runs in-process via the Rust plugin;
+ *                                       it takes no remote endpoint.
+ *   TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT  the legacy pull host
+ *                                       (read only when backend = http_legacy_vectorlink).
+ *   TERMINUSDB_VECTORLINK_ENDPOINT    the push/search host
+ *                                       (read only when backend = http_vectorlink).
+ *   TERMINUSDB_SEARCH_ADMIN_USER      HTTP Basic user for the vectorlink backend
+ *                                       (default `admin`).
+ *   TERMINUSDB_SEARCH_ADMIN_SECRET    HTTP Basic secret for the vectorlink backend
+ *                                       (default `root`; must change for any
+ *                                       exposed deployment).
+ */
+
+valid_indexer_backend(none).
+valid_indexer_backend(http_legacy_vectorlink).
+valid_indexer_backend(http_vectorlink).
+valid_indexer_backend(vectorlink).
+
+/**
+ * indexer_backend(-Backend) is det.
+ *
+ * The active semantic-indexer backend. Reads TERMINUSDB_INDEXER_BACKEND,
+ * defaulting to `none`. Fails loud (throws) on an unrecognised value so a
+ * typo can never silently disable indexing.
+ */
+:- table indexer_backend/1.
+indexer_backend(Backend) :-
+    Env_Var = 'TERMINUSDB_INDEXER_BACKEND',
+    getenv_default(Env_Var, none, Value),
+    atom_string(Backend, Value),
+    do_or_die(valid_indexer_backend(Backend),
+              error(bad_env_var_value(Env_Var, Value), _)).
+
+/* For testing: clear the tabled selector predicates after mutating env vars.
+ * The vectorlink_* predicates are now owned by the vectorlink plugin and
+ * use plugin_api_config's tabled env helpers. We clear those tables too.
+ */
+clear_indexer_backend_config :-
+    abolish_table_subgoals(indexer_backend(_)),
+    (   current_predicate(plugin_api_config:plugin_env/2)
+    ->  abolish_table_subgoals(plugin_api_config:plugin_env('TERMINUSDB_VECTORLINK_ENDPOINT', _)),
+        abolish_table_subgoals(plugin_api_config:plugin_env('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', _)),
+        abolish_table_subgoals(plugin_api_config:plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_USER', admin, _)),
+        abolish_table_subgoals(plugin_api_config:plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_SECRET', root, _))
+    ;   true
+    ).
+
+/**
+ * check_indexer_backend_config is det.
+ *
+ * Startup validation for the indexer backend selector. Enforces that exactly
+ * one backend is active and that no endpoint is configured for an inactive
+ * backend. Fails loud (throws) on any ambiguous or incomplete configuration,
+ * so misconfiguration is impossible to ignore (poka-yoke) and a wrong-backend
+ * route or double-indexing can never occur silently.
+ *
+ * Rules:
+ *   - unknown TERMINUSDB_INDEXER_BACKEND value          -> throw (via indexer_backend/1)
+ *   - backend = none, but any indexer endpoint is set   -> throw (endpoint without a backend)
+ *   - backend = http_legacy_vectorlink, vectorlink endpoint set -> throw (two backends configured)
+ *   - backend = http_vectorlink, legacy endpoint set     -> throw (two backends configured)
+ *   - backend = http_legacy_vectorlink, no legacy endpoint      -> throw (active backend missing endpoint)
+ *   - backend = http_vectorlink, no vectorlink endpoint  -> throw (active backend missing endpoint)
+ */
+check_indexer_backend_config :-
+    indexer_backend(Backend),
+    (   current_predicate(legacy_vectorlink:semantic_indexer_endpoint/1),
+        legacy_vectorlink:semantic_indexer_endpoint(_)
+    ->  Legacy_Endpoint_Set = true
+    ;   getenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', _)
+    ->  Legacy_Endpoint_Set = true
+    ;   Legacy_Endpoint_Set = false
+    ),
+    (   % Under the embedded backend, vectorlink_endpoint/1 returns a
+        % marker instead of reading the env, so only the env var itself
+        % counts as "an endpoint is configured".
+        Backend \== vectorlink,
+        current_predicate(vectorlink:vectorlink_endpoint/1),
+        vectorlink:vectorlink_endpoint(_)
+    ->  Search_Endpoint_Set = true
+    ;   getenv('TERMINUSDB_VECTORLINK_ENDPOINT', _)
+    ->  Search_Endpoint_Set = true
+    ;   Search_Endpoint_Set = false
+    ),
+    check_indexer_backend_config_(Backend, Legacy_Endpoint_Set, Search_Endpoint_Set).
+
+check_indexer_backend_config_(none, Legacy_Set, Search_Set) :-
+    die_if(Legacy_Set == true,
+           error(indexer_backend_ambiguous(none,
+                     'TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set but TERMINUSDB_INDEXER_BACKEND is none'), _)),
+    die_if(Search_Set == true,
+           error(indexer_backend_ambiguous(none,
+                     'TERMINUSDB_VECTORLINK_ENDPOINT is set but TERMINUSDB_INDEXER_BACKEND is none'), _)).
+check_indexer_backend_config_(http_legacy_vectorlink, Legacy_Set, Search_Set) :-
+    die_if(Search_Set == true,
+           error(indexer_backend_ambiguous(http_legacy_vectorlink,
+                     'TERMINUSDB_VECTORLINK_ENDPOINT is set but the active backend is http_legacy_vectorlink'), _)),
+    do_or_die(Legacy_Set == true,
+              error(indexer_backend_incomplete(http_legacy_vectorlink,
+                     'TERMINUSDB_INDEXER_BACKEND is http_legacy_vectorlink but TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is not set'), _)).
+check_indexer_backend_config_(http_vectorlink, Legacy_Set, Search_Set) :-
+    die_if(Legacy_Set == true,
+           error(indexer_backend_ambiguous(http_vectorlink,
+                     'TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set but the active backend is http_vectorlink'), _)),
+    do_or_die(Search_Set == true,
+              error(indexer_backend_incomplete(http_vectorlink,
+                     'TERMINUSDB_INDEXER_BACKEND is http_vectorlink but TERMINUSDB_VECTORLINK_ENDPOINT is not set'), _)).
+check_indexer_backend_config_(vectorlink, Legacy_Set, Search_Set) :-
+    die_if(Legacy_Set == true,
+           error(indexer_backend_ambiguous(vectorlink,
+                     'TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set but the active backend is the embedded vectorlink'), _)),
+    die_if(Search_Set == true,
+           error(indexer_backend_ambiguous(vectorlink,
+                     'TERMINUSDB_VECTORLINK_ENDPOINT is set but the active backend is the embedded vectorlink'), _)).
 
 :- table doc_work_limit/1.
 doc_work_limit(Limit) :-
     % This env var is actually read from rust so this default is ignored
     getenv_default('TERMINUSDB_DOC_WORK_LIMIT', Limit, 500_000).
+
+:- table worker_elaboration_preference/1.
+worker_elaboration_preference(Preference) :-
+    getenv_default_number('TERMINUSDB_WORKER_ELABORATION_PREFERENCE', 0.5, Preference),
+    Preference >= 0.0,
+    Preference =< 1.0,
+    !.
+worker_elaboration_preference(0.5).
+
+/**
+ * is_memory_mode is semidet.
+ *
+ * Succeeds if the server was started in in-memory mode (--memory flag).
+ * This is set by set_memory_mode/0 during server initialization.
+ */
+:- dynamic memory_mode_enabled/0.
+
+is_memory_mode :-
+    memory_mode_enabled.
+
+/**
+ * set_memory_mode is det.
+ *
+ * Sets the memory mode flag. Called during server startup when --memory is used.
+ */
+set_memory_mode :-
+    assertz(memory_mode_enabled).
+
+/**
+ * cache_eviction_probability(-Probability) is det.
+ *
+ * Returns the probability (0.0 to 1.0) of triggering cache eviction on each operation.
+ * Default is 0.0 (disabled, opt-in behavior).
+ *
+ * Valid values:
+ * - 0.0 (default): Eviction disabled
+ * - 0.001: 0.1% probability (1 in 1000 operations)
+ * - 0.01: 1% probability (1 in 100 operations)
+ * - 0.1: 10% probability (1 in 10 operations)
+ *
+ * Environment variable: TERMINUSDB_CACHE_EVICTION_PROBABILITY
+ */
+:- table cache_eviction_probability/1 as shared.
+cache_eviction_probability(Probability) :-
+    (   getenv('TERMINUSDB_CACHE_EVICTION_PROBABILITY', Value)
+    ->  (   atom_number(Value, Num),
+            Num >= 0.0,
+            Num =< 1.0
+        ->  Probability = Num
+        ;   json_log_warning_formatted('Invalid TERMINUSDB_CACHE_EVICTION_PROBABILITY value: ~w (must be 0.0-1.0), using default 0.0', [Value]),
+            Probability = 0.0
+        )
+    ;   Probability = 0.0  % Default: disabled
+    ).

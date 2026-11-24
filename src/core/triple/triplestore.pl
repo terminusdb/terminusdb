@@ -10,6 +10,18 @@
               xrdf_db/4,
               xrdf_deleted/4,
               xrdf_added/4,
+              xrdf_count/5,
+              xrdf_value_range/6,
+              xquad_value_range/7,
+              xrdf_value_range_count/6,
+              xrdf_value_range_rev/6,
+              xquad_value_range_rev/7,
+              xrdf_interval_relation/6,
+              xquad_interval_relation/7,
+              xrdf_value_next/5,
+              xquad_value_next/6,
+              xrdf_value_previous/5,
+              xquad_value_previous/6,
               insert/5,
               delete/5,
               delete_all/1,
@@ -35,6 +47,7 @@
 
 :- use_module(config(terminus_config), [db_path/1, grpc_label_endpoint/1, lru_cache_size/1]).
 
+:- use_module(library(aggregate)).
 :- use_module(library(apply)).
 :- use_module(library(debug)).
 :- use_module(library(error)).
@@ -363,6 +376,44 @@ xquad(Gs,G,X,Y,Z) :-
     read_write_obj_reader(G, Layer),
     xrdf_db(Layer,X,Y,Z).
 
+/**
+ * xrdf_count(+Gs:list(read_write_obj),?X,?Y,?Z,-Count) is det.
+ *
+ * Count the triples matching a partially bound pattern in the given
+ * graphs, without enumerating them. The count is the sum over all
+ * graphs, consistent with xrdf/4 which may yield a triple once per
+ * graph it appears in.
+ */
+/**
+ * count_expand_arg(?In, ?Out) is det.
+ *
+ * Expand prefixed compounds (P:X) and literal types (D^^P:T) the way the
+ * xrdf/4 goal expansions do at compile time. Counting may be invoked from
+ * within meta-goals such as aggregate_all/3, which goal expansion does
+ * not reach, so these predicates normalise their arguments at run time.
+ * Vars and already-expanded arguments pass through unchanged.
+ */
+count_expand_arg(X, E) :-
+    (   nonvar(X)
+    ->  (   literal_expand(X, E)
+        ->  true
+        ;   global_prefix_expand_safe(X, E))
+    ;   E = X).
+
+xrdf_count(Gs,X,Y,Z,Count) :-
+    assertion(is_list(Gs)),
+    count_expand_arg(X, XE),
+    count_expand_arg(Y, YE),
+    count_expand_arg(Z, ZE),
+    aggregate_all(sum(Partial),
+                  (   member(G,Gs),
+                      read_write_obj_reader(G, Layer),
+                      pre_convert_node(XE,A),
+                      pre_convert_node(YE,B),
+                      object_storage(ZE,S),
+                      triple_count(Layer,A,B,S,Partial)),
+                  Count).
+
 unlink_object(Gs, ID) :-
     global_prefix_expand(rdf:first, First),
     forall(
@@ -370,6 +421,180 @@ unlink_object(Gs, ID) :-
             Predicate \= First),
         delete(G, Subject, Predicate, ID, _)
     ).
+
+xrdf_value_range(Gs, Low, High, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    member(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Low, LowS),
+    ground_object_storage(High, HighS),
+    triple_value_range(Layer, LowS, HighS, A, B, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xquad_value_range(Gs, G, Low, High, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    memberchk(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Low, LowS),
+    ground_object_storage(High, HighS),
+    triple_value_range(Layer, LowS, HighS, A, B, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+/**
+ * xrdf_value_range_count(+Gs:list(read_write_obj),+Low,+High,?X,?Y,-Count) is det.
+ *
+ * Count the triples whose object value falls in the half-open range
+ * [Low, High) in the given graphs, optionally restricted by a subject
+ * and/or predicate, without enumerating them.
+ */
+xrdf_value_range_count(Gs, Low, High, X, Y, Count) :-
+    assertion(is_list(Gs)),
+    count_expand_arg(Low, LowE),
+    count_expand_arg(High, HighE),
+    ground_object_storage(LowE, LowS),
+    ground_object_storage(HighE, HighS),
+    count_expand_arg(X, XE),
+    count_expand_arg(Y, YE),
+    aggregate_all(sum(Partial),
+                  (   member(G,Gs),
+                      read_write_obj_reader(G, Layer),
+                      pre_convert_node(XE,A),
+                      pre_convert_node(YE,B),
+                      triple_value_range_count(Layer, LowS, HighS, A, B, Partial)),
+                  Count).
+
+xrdf_value_range_rev(Gs, Low, High, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    member(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Low, LowS),
+    ground_object_storage(High, HighS),
+    triple_value_range_rev(Layer, LowS, HighS, A, B, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xquad_value_range_rev(Gs, G, Low, High, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    memberchk(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Low, LowS),
+    ground_object_storage(High, HighS),
+    triple_value_range_rev(Layer, LowS, HighS, A, B, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+/**
+ * xrdf_interval_relation(+Gs,+Rel,+Ref,?X,?Y,?Z) is nondet.
+ *
+ * Triples whose object can satisfy the Allen relation Rel against the
+ * reference value Ref. When Rel and Ref are ground the candidate objects
+ * come from the start-order and end-rank indexes — a superset the caller
+ * verifies semantically. An unbound Rel or Ref falls back to the ordered
+ * triple scan so classification queries still enumerate.
+ */
+xrdf_interval_relation(Gs, Rel, Ref, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    member(G, Gs),
+    read_write_obj_reader(G, Layer),
+    (   ground(Rel), ground(Ref)
+    ->  pre_convert_node(X, A),
+        pre_convert_node(Y, B),
+        ground_object_storage(Rel, RelS),
+        ground_object_storage(Ref, RefS),
+        triple_interval_relation(Layer, RelS, RefS, A, B, S),
+        storage_object(S, Z),
+        post_convert_node(A, X),
+        post_convert_node(B, Y)
+    ;   pre_convert_node(X, A),
+        pre_convert_node(Y, B),
+        xrdf_db(Layer, A, B, S),
+        storage_object(S, Z),
+        post_convert_node(A, X),
+        post_convert_node(B, Y)
+    ).
+
+xquad_interval_relation(Gs, G, Rel, Ref, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    memberchk(G, Gs),
+    read_write_obj_reader(G, Layer),
+    (   ground(Rel), ground(Ref)
+    ->  pre_convert_node(X, A),
+        pre_convert_node(Y, B),
+        ground_object_storage(Rel, RelS),
+        ground_object_storage(Ref, RefS),
+        triple_interval_relation(Layer, RelS, RefS, A, B, S),
+        storage_object(S, Z),
+        post_convert_node(A, X),
+        post_convert_node(B, Y)
+    ;   pre_convert_node(X, A),
+        pre_convert_node(Y, B),
+        xrdf_db(Layer, A, B, S),
+        storage_object(S, Z),
+        post_convert_node(A, X),
+        post_convert_node(B, Y)
+    ).
+
+xrdf_value_next(Gs, X, Y, Ref, Z) :-
+    assertion(is_list(Gs)),
+    member(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Ref, RefS),
+    triple_value_next(Layer, A, B, RefS, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xquad_value_next(Gs, G, X, Y, Ref, Z) :-
+    assertion(is_list(Gs)),
+    memberchk(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Ref, RefS),
+    triple_value_next(Layer, A, B, RefS, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xrdf_value_previous(Gs, X, Y, Ref, Z) :-
+    assertion(is_list(Gs)),
+    member(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Ref, RefS),
+    triple_value_previous(Layer, A, B, RefS, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xquad_value_previous(Gs, G, X, Y, Ref, Z) :-
+    assertion(is_list(Gs)),
+    memberchk(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Ref, RefS),
+    triple_value_previous(Layer, A, B, RefS, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
 
 pre_convert_node(X,A) :-
     (   nonvar(X)
@@ -399,3 +624,61 @@ xrdf_db(Layer,X,Y,Z) :-
     post_convert_node(A,X),
     post_convert_node(B,Y),
     storage_object(S,Z).
+
+:- begin_tests(triplestore_value_range).
+
+test(xrdf_value_range_string_range) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc4", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Gs = [rwo{read: Layer, write: _}],
+    Low = "beta"^^'http://www.w3.org/2001/XMLSchema#string',
+    High = "gamma"^^'http://www.w3.org/2001/XMLSchema#string',
+    findall(S, xrdf_value_range(Gs, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = [doc2, doc4].
+
+test(xrdf_value_range_empty_when_out_of_range, [fail]) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Gs = [rwo{read: Layer, write: _}],
+    Low = "x"^^'http://www.w3.org/2001/XMLSchema#string',
+    High = "z"^^'http://www.w3.org/2001/XMLSchema#string',
+    xrdf_value_range(Gs, Low, High, _, _, _).
+
+test(xrdf_value_range_numeric_int) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "s1", "val", value(10,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s2", "val", value(20,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s3", "val", value(30,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder, Layer),
+    Gs = [rwo{read: Layer, write: _}],
+    Low = 15^^'http://www.w3.org/2001/XMLSchema#int',
+    High = 25^^'http://www.w3.org/2001/XMLSchema#int',
+    findall(S, xrdf_value_range(Gs, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = [s2].
+
+test(xquad_value_range_returns_graph) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    G = rwo{read: Layer, write: _},
+    Gs = [G],
+    Low = "alpha"^^'http://www.w3.org/2001/XMLSchema#string',
+    High = "gamma"^^'http://www.w3.org/2001/XMLSchema#string',
+    findall(GOut-S, xquad_value_range(Gs, GOut, Low, High, S, _, _), Results),
+    length(Results, 3),
+    forall(member(GR-_, Results), get_dict(read, GR, Layer)).
+
+:- end_tests(triplestore_value_range).

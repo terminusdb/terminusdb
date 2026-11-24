@@ -1,41 +1,185 @@
 :- module(api_document, [
               api_can_read_document/6,
-              api_insert_documents/8,
-              api_delete_documents/8,
-              api_delete_document/7,
-              api_delete_documents_by_type/7,
-              api_replace_documents/8,
-              api_nuke_documents/6,
+              api_check_documents/11,
+              api_check_insert_body/4,
+              api_check_replace_body/4,
+              api_check_delete_body/3,
+              api_insert_documents/9,
+              api_delete_documents/9,
+              api_delete_document/8,
+              api_delete_documents_by_type/8,
+              api_replace_documents/9,
+              api_nuke_documents/7,
               api_generate_document_ids/4,
               call_catch_document_mutation/2,
+              api_document_error_wrapper/3,
               api_read_document_selector/12,
               api_generate_document_ids/4,
+              api_generate_document_ids_by_type/5,
               api_get_documents/4,
               api_get_document/5,
+              api_get_documents_by_type/5,
+              api_get_documents_by_query/6,
+              before_read/4,
               api_full_replace_schema/2,
               idlists_duplicates_toplevel/3,
               nonground_captures/2,
+              compress_doc_ids/4,
+              check_validation_witnesses/3,
+              compress_witness_json/3,
 
-              api_insert_documents_core_string/7,
-              api_replace_documents_core_string/6,
-              api_delete_documents_by_ids/3
+              api_insert_documents_core_string/8,
+              api_insert_documents_core_string_with_compress/9,
+              api_replace_documents_core_string/7,
+              api_replace_documents_core_string_with_compress/8,
+              api_delete_documents_by_ids/3,
+              api_delete_documents_by_ids_with_compress/5,
+
+              document_input_format/1,
+              document_output_format/1,
+              detect_input_format/2,
+              detect_output_format/3,
+              convert_input_to_json_stream/4,
+              document_stream_headers/3,
+              document_stream_start/3,
+              document_stream_preamble/3,
+              pre_branch_commit_id/2,
+              document_stream_write/4,
+              document_stream_end/2,
+
+              run_commit_package/1,
+              execute_commit_package/2,
+              commit_package_test_handler/1,
+
+              producer_timeout/1,
+              get_commit_result/4,
+              deliver_commit_result/2,
+
+              verify_contracts_transaction_info/4
           ]).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
+:- use_module(core(transaction/database), [
+                  reset_transaction_objects_graph_descriptors/1,
+                  query_context_transaction_objects/2,
+                  transaction_object_database_key/2,
+                  pre_transaction_tabling/0,
+                  post_transaction_tabling/0,
+                  infer_migrations_for_commit/4
+              ]).
 :- use_module(core(document)).
+:- use_module(core(document/instance), [is_instance_class/3]).
+:- use_module(core(document/commit_queue)).
+:- use_module(core(document/meta_commit_queue)).
+:- use_module(core(document/json), [
+                  insert_document_expanded/4,
+                  insert_document_expanded/5,
+                  insert_document_expanded/6,
+                  insert_document_merge/9,
+                  replace_document_expanded/5,
+                  insert_backlinks/2,
+                  extract_return_ids/2,
+                  compress_schema_uri/3,
+                  path_component/3
+              ]).
+:- use_module(core(document/parallel_elaboration), [
+                  elaborate_insert_request_db/4,
+                  elaborate_insert_request_db_with_contracts/4,
+                  max_chunk_size/1,
+                  with_commit_window_guard/4,
+                  acquire_commit_window_guard/3,
+                  acquire_commit_window_guard/2,
+                  release_commit_window_guard/0,
+                  has_commit_window_guard/0,
+                  branch_key_from_transaction/2,
+                  first_commit_candidate/2
+              ]).
+:- use_module(core(util/json_preserve), [close_list_tails/1]).
 :- use_module(core(account)).
+:- use_module(core(plugins)).
+:- use_module(core(json2markdown)).
+:- use_module(library(aggregate)).
+:- use_module(library(debug)).
 :- use_module(config(terminus_config)).
 
+:- use_module(library(terminus_store)).
+:- use_module(library(utf8)).
 :- use_module(library(option)).
 :- use_module(library(assoc)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
 :- use_module(library(apply)).
+:- use_module(library(pairs)).
+:- use_module(library(pcre), [re_match/3]).
 :- use_module(library(pprint), [print_term/2]).
+
+%%% Document Format Extension Points (multifile hooks)
+%%%
+%%% Enterprise can register additional formats (jsonld, rdfxml) by adding
+%%% clauses to these predicates. Community only supports 'json'.
+
+:- multifile document_input_format/1.
+:- multifile document_output_format/1.
+:- multifile convert_input_to_json_stream/4.
+:- multifile document_stream_headers/3.
+:- multifile document_stream_start/3.
+:- multifile document_stream_preamble/3.
+:- multifile document_stream_write/4.
+:- multifile document_stream_end/2.
+
+document_input_format(json).
+document_output_format(json).
+document_output_format(ids).
+document_output_format(embedding).
+document_output_format(markdown).
+
+detect_input_format(ContentType, Format) :-
+    (   re_match('^application/json', ContentType, [])
+    ->  Format = json
+    ;   re_match('^application/ld\\+json', ContentType, [])
+    ->  (   document_input_format(jsonld)
+        ->  Format = jsonld
+        ;   throw(error(unsupported_document_format(jsonld), _))
+        )
+    ;   re_match('^application/rdf\\+xml', ContentType, [])
+    ->  (   document_input_format(rdfxml)
+        ->  Format = rdfxml
+        ;   throw(error(unsupported_document_format(rdfxml), _))
+        )
+    ;   re_match('^text/turtle', ContentType, [])
+    ->  (   document_input_format(turtle)
+        ->  Format = turtle
+        ;   throw(error(unsupported_document_format(turtle), _))
+        )
+    ;   throw(error(bad_content_type(ContentType, 'application/json'), _))
+    ).
+
+detect_output_format(Search, Request, Format) :-
+    (   memberchk(format=FormatParam, Search),
+        FormatParam \= ''
+    ->  atom_string(FormatAtom, FormatParam),
+        (   document_output_format(FormatAtom)
+        ->  Format = FormatAtom
+        ;   throw(error(unsupported_document_format(FormatAtom), _))
+        )
+    ;   memberchk(accept(AcceptList), Request),
+        member(media(Type/SubType, _, _, _), AcceptList),
+        accept_to_format(Type/SubType, AcceptFormat),
+        document_output_format(AcceptFormat)
+    ->  Format = AcceptFormat
+    ;   Format = json
+    ).
+
+accept_to_format(application/json, json).
+accept_to_format(application/'ld+json', jsonld).
+accept_to_format(application/'rdf+xml', rdfxml).
+accept_to_format(text/turtle, turtle).
+accept_to_format(text/plain, embedding).
+accept_to_format(text/markdown, markdown).
 
 before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction) :-
     do_or_die(
@@ -45,14 +189,15 @@ before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction
     transaction_data_version(Transaction, Actual_Data_Version),
     compare_data_versions(Requested_Data_Version, Actual_Data_Version).
 
-before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction) :-
+before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction) :-
+    Commit_Info0 = commit_info{author: Author, message: Message},
+    maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
     do_or_die(
-        create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
+        create_context(Descriptor, Commit_Info, Context),
         error(unresolvable_collection(Descriptor), _)),
     do_or_die(
         query_default_collection(Context, Transaction),
         error(query_default_collection_failed_unexpectedly(Context), _)),
-
     transaction_data_version(Transaction, Actual_Data_Version),
     compare_data_versions(Requested_Data_Version, Actual_Data_Version).
 
@@ -90,6 +235,60 @@ api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document) :-
     api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
 
 
+/**
+ * api_generate_document_ids_by_id_prefix(+Graph_Type, +Transaction, ?Type,
+ *                                        +Id_Prefix, +Config, -Id) is nondet
+ *
+ * Yield the document ids whose expanded IRI starts with Id_Prefix. The
+ * succinct node dictionary keeps subject names in lexicographic order, so
+ * the matching ids live in a contiguous range that
+ * terminus_store:subject_with_prefix/3 seeks and streams directly instead
+ * of scanning every subject in the graph.
+ *
+ * Candidates are then filtered to actual documents — dictionary entries
+ * are append-only, so names of deleted documents and of nodes that only
+ * ever appear in object position are skipped here. Type restricts matches
+ * the same way as api_generate_document_ids_by_type/5.
+ */
+api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id) :-
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   Type_Ex = Type),
+    database_instance(Transaction, Instance),
+    member(G, Instance),
+    read_write_obj_reader(G, Layer),
+    (   Config.unfold = true
+    ->  Include_Subdocuments = false
+    ;   Include_Subdocuments = true),
+    skip_generate_nsols(
+        (   terminus_store:subject_with_prefix(Layer, Id_Prefix_Ex, Name),
+            id_prefix_candidate(Transaction, Instance, Include_Subdocuments, Type_Ex, Name)),
+        Config.skip,
+        Config.count),
+    Id = Name.
+api_generate_document_ids_by_id_prefix(schema, _Transaction, _Type, _Id_Prefix, _Config, _Id) :-
+    throw(error(id_prefix_is_only_supported_for_instance_graphs, _)).
+
+% id_prefix_candidate(+Transaction, +Instance, +Include_Subdocuments,
+%                     ?Type_Ex, +Name) is semidet
+%
+% Name is a candidate document id (expanded IRI) if it carries an rdf:type
+% edge satisfying the same conditions as get_document_uri/3, or the
+% requested Type with the same class subsumption as is_instance_class/3.
+id_prefix_candidate(Transaction, Instance, Include_Subdocuments, Type_Ex, Name) :-
+    (   ground(Type_Ex)
+    ->  once(   is_instance_class(Transaction, Name, Type_Ex)
+            ;   xrdf(Instance, Name, rdf:type, Type_Ex))
+    ;   global_prefix_expand(sys:'JSONDocument', JSON_Document_Class),
+        once((   xrdf(Instance, Name, rdf:type, Class),
+                (   Class == JSON_Document_Class
+                ;   is_simple_class(Transaction, Class),
+                    (   Include_Subdocuments = true
+                    ;   \+ is_subdocument(Transaction, Class)))))).
+
+
 api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id) :-
     skip_generate_nsols(
         match_expanded_query_document_uri(Transaction, Type, Query, Id),
@@ -98,18 +297,144 @@ api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, I
 api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config, _Id) :-
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
+
+% api_document_context(+Transaction, +Config, -Context) is det.
+% Builds the Rust document-printer context, forwarding the request's XSD
+% canonicalization version.
+api_document_context(Transaction, Config, Context) :-
+    api_document_context_(Transaction, Config.get(raw_id, false), Context).
+
+api_document_context_(Transaction, Include_Id, Context) :-
+    (   xsd_version('1.0')
+    ->  Xsd_10 = true
+    ;   Xsd_10 = false),
+    '$doc':get_document_context(Transaction, Include_Id, Xsd_10, Context).
+
+%% api_emit_instance_document(+Transaction, +Id, +Config, +Raw_Context,
+%%                            +Stream_Started) is det.
+%
+%  Single-document emit under identifiers=false. A sys:JSONDocument
+%  streams verbatim through the Rust printer (Raw_Context is built with
+%  include_id=false): its content @id/@type keys are data, not generated
+%  annotations, and must round-trip. Other documents materialize via
+%  api_get_document where the recursive annotation strip applies.
+api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started) :-
+    database_prefixes(Transaction, Prefixes),
+    prefix_expand(Id, Prefixes, Id_Ex),
+    database_instance(Transaction, Instance),
+    global_prefix_expand(sys:'JSONDocument', JSON_Document_Class),
+    (   xrdf(Instance, Id_Ex, rdf:type, JSON_Document_Class)
+    ->  Stream_Started = started(Started),
+        do_or_die('$doc':print_document_json(current_output, Raw_Context, Id_Ex, (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized), Started),
+                  error(document_not_found(Id), _)),
+        nb_setarg(1, Stream_Started, true)
+    ;   api_get_document(instance, Transaction, Id, Config, Document),
+        json_stream_write_dict(Config, Stream_Started, Document)).
+
 api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, Context),
-    forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
-           (   Stream_Started = started(Started),
-               do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
-                         error(document_not_found(Id), _)),
-               nb_setarg(1, Stream_Started, true)
-           )).
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
+    ;   api_document_context(Transaction, Config, Context),
+        forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
+               (   Stream_Started = started(Started),
+                   do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
+                             error(document_not_found(Id), _)),
+                   nb_setarg(1, Stream_Started, true)
+               ))).
 
 api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document) :-
     api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Config, Id),
     api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
+
+/**
+ * api_count_documents(+Transaction, +Graph_Type, ?Type, +Config, -Count) is det.
+ *
+ * Count the documents that the corresponding listing would yield,
+ * mirroring api_generate_document_ids/4 and
+ * api_generate_document_ids_by_type/5, but using index-based triple
+ * counting instead of enumerating document ids. A document typed with
+ * several matching classes is counted once per rdf:type edge, exactly
+ * as the listing would yield it once per match.
+ */
+% Local id-namespace segment of a class IRI — the text after the last '/'
+% or '#'. Document ids are minted as <Base><Local>/<key>.
+class_iri_local_name(IRI, Local) :-
+    atomic_list_concat(Slash_Parts, '/', IRI),
+    last(Slash_Parts, Last_Slash),
+    atomic_list_concat(Hash_Parts, '#', Last_Slash),
+    last(Hash_Parts, Local).
+
+api_count_documents(Transaction, instance, Type, Config, Count) :-
+    get_dict(id_prefix, Config, Id_Prefix),
+    ground(Id_Prefix),
+    !,
+    api_document_context(Transaction, Config, Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   true),
+    (   % A class mints document ids under its own <Local>/ namespace, so
+        % when the prefix is exactly the requested type's namespace every
+        % subject in the range already has that type — no probing needed.
+        ground(Type_Ex),
+        class_iri_local_name(Type_Ex, Type_Local),
+        atom_concat(Type_Local, '/', Type_NS_Rel),
+        prefix_expand(Type_NS_Rel, Prefixes, Type_NS),
+        Type_NS == Id_Prefix_Ex
+    ->  '$doc':count_subjects_by_prefix(Context, Id_Prefix_Ex, Count)
+    ;   '$doc':count_documents_by_prefix(Context, Id_Prefix_Ex, Type_Ex, (Config.unfold), Count)).
+api_count_documents(Transaction, instance, Type, Config, Count) :-
+    database_instance(Transaction, Instance),
+    (   ground(Type)
+    ->  database_and_default_prefixes(Transaction, Prefixes),
+        prefix_expand_schema(Type, Prefixes, Type_Ex),
+        % Mirrors is_instance_class/3 with ground class argument.
+        (   setof(Class,
+                  (   is_simple_class(Transaction, Class),
+                      class_subsumed(Transaction, Class, Type_Ex)),
+                  Classes0)
+        ->  true
+        ;   Classes0 = []),
+        % Type itself counts its own rdf:type edges even when it is not a
+        % schema-declared simple class (e.g. sys:JSONDocument).
+        ord_union([Type_Ex], Classes0, Classes),
+        aggregate_all(sum(Partial),
+                      (   member(Class, Classes),
+                          xrdf_count(Instance, _, rdf:type, Class, Partial)),
+                      Count)
+    ;   (   Config.unfold = true
+        ->  Include_Subdocuments = false
+        ;   Include_Subdocuments = true),
+        % Mirrors get_document_uri/3.
+        aggregate_all(sum(Partial),
+                      (   is_simple_class(Transaction, Class),
+                          (   Include_Subdocuments = true
+                          ->  true
+                          ;   \+ is_subdocument(Transaction, Class)),
+                          xrdf_count(Instance, _, rdf:type, Class, Partial)),
+                      Simple_Count),
+        global_prefix_expand(sys:'JSONDocument', JSON_Document_Class),
+        xrdf_count(Instance, _, rdf:type, JSON_Document_Class, JSON_Count),
+        Count is Simple_Count + JSON_Count
+    ).
+api_count_documents(Transaction, schema, Type, _Config, Count) :-
+    database_schema(Transaction, Schema),
+    (   ground(Type)
+    ->  default_prefixes(Prefixes),
+        prefix_expand_schema(Type, Prefixes, Type_Ex),
+        % Mirrors get_schema_document_uri_by_type/3.
+        xrdf_count(Schema, _, rdf:type, Type_Ex, Count)
+    ;   % Mirrors get_schema_document_uri/2: '@context' plus every
+        % frame class (which includes foreign types).
+        aggregate_all(sum(Partial),
+                      (   system_frame_class(C),
+                          xrdf_count(Schema, _, rdf:type, C, Partial)),
+                      Frame_Count),
+        Count is 1 + Frame_Count
+    ).
 
 api_document_exists(schema, Transaction, Id) :-
     schema_document_exists(Transaction, Id).
@@ -119,13 +444,16 @@ api_document_exists(instance, Transaction, Id) :-
 api_print_document(Graph_Type, Transaction, Id, Config) :-
     api_print_document(Graph_Type, Transaction, Id, Config, started(true)).
 api_print_document(instance, Transaction, Id, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, Context),
-    Stream_Started = started(Started),
-    database_prefixes(Transaction, Prefixes),
-    prefix_expand(Id, Prefixes, Id_Ex),
-    do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
-              error(document_not_found(Id), _)),
-   nb_setarg(1, Stream_Started, true).
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started)
+    ;   api_document_context(Transaction, Config, Context),
+        Stream_Started = started(Started),
+        database_prefixes(Transaction, Prefixes),
+        prefix_expand(Id, Prefixes, Id_Ex),
+        do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
+                  error(document_not_found(Id), _)),
+        nb_setarg(1, Stream_Started, true)).
 api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)),
@@ -134,42 +462,165 @@ api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
 api_print_documents(schema, Transaction, Config, Stream_Started) :-
     forall(api_get_documents(Transaction, schema, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents(instance, Transaction, Config, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Context),
-    (   parallelize_enabled
-    ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+api_print_documents(instance, Transaction, Config, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_generate_document_ids(instance, Transaction, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
+    ;   api_document_context(Transaction, Config, Context),
+        (   parallelize_enabled
+        ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 
 api_print_documents_by_type(schema, Transaction, Config, Type, Stream_Started) :-
     forall(api_get_documents_by_type(Transaction, schema, Type, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Context),
-    database_and_default_prefixes(Transaction,Prefixes),
-    % TODO errors on unknown prefix
-    prefix_expand_schema(Type, Prefixes, Type_Ex),
+api_print_documents_by_type(instance, Transaction, Config, Type, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_generate_document_ids_by_type(instance, Transaction, Type, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
+    ;   api_document_context(Transaction, Config, Context),
+        database_and_default_prefixes(Transaction,Prefixes),
+        % TODO errors on unknown prefix
+        prefix_expand_schema(Type, Prefixes, Type_Ex),
 
-    (   parallelize_enabled
-    ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+        (   parallelize_enabled
+        ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 
 api_print_documents_by_id(schema, Transaction, Config, Ids, Stream_Started) :-
     forall((member(Id, Ids),
             api_get_document(schema, Transaction, Id, Config, Document)),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Context),
+api_print_documents_by_id(instance, Transaction, Config, Ids, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(member(Id, Ids),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
+    ;   api_document_context(Transaction, Config, Context),
+        database_and_default_prefixes(Transaction, Prefixes),
+        maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
+                Ids,
+                Ids_Ex),
+        (   parallelize_enabled
+        ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
+
+% Documents selected by an id prefix, printed as full documents. The Rust
+% writer streams the sorted subject-dictionary range for the prefix and
+% materializes each document inline — no Prolog-side id list.
+api_print_documents_by_id_prefix(instance, Transaction, Config, Id_Prefix, Type, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
+    ;   api_document_context(Transaction, Config, Context),
+        database_and_default_prefixes(Transaction, Prefixes),
+        prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+        (   ground(Type)
+        ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+        ;   true),
+        (   parallelize_enabled
+        ->  '$doc':par_print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
+api_print_documents_by_id_prefix(schema, _Transaction, _Config, _Id_Prefix, _Type, _Stream_Started) :-
+    throw(error(id_prefix_is_only_supported_for_instance_graphs, _)).
+
+/**
+ * api_print_document_ids(+Graph_Type, +Transaction, ?Id, ?Ids, ?Type,
+ *                        ?Query, +Config, +Stream_Started) is det
+ *
+ * The format=ids output: stream the document ids selected by the usual
+ * selectors instead of the documents themselves. Ids are compressed when
+ * compress_ids is on, matching the shape accepted by the ids parameter.
+ */
+% Instance listings stream ids straight from the Rust document context:
+% a name prefix uses the sorted subject-dictionary range, a bare or typed
+% listing enumerates the allowed types' subjects — no per-id Prolog
+% round-trips. Query and explicit-id selectors stay on the Prolog path.
+api_print_document_ids(instance, Transaction, Id, Ids, Type, Query, Config, _Stream_Started) :-
+    \+ (nonvar(Query) ; ground(Id) ; ground(Ids)),
+    !,
+    api_document_context(Transaction, Config, Context),
     database_and_default_prefixes(Transaction, Prefixes),
-    maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
-            Ids,
-            Ids_Ex),
-    (   parallelize_enabled
-    ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+    (   get_dict(id_prefix, Config, Id_Prefix), ground(Id_Prefix)
+    ->  prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex)
+    ;   true),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   true),
+    '$doc':print_document_ids_json(current_output, Context, Id_Prefix_Ex, Type_Ex,
+                                  (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold)).
+api_print_document_ids(Graph_Type, Transaction, Id, Ids, Type, Query, Config, Stream_Started) :-
+    (   nonvar(Query)
+    ->  die_if(Graph_Type \= instance,
+               error(query_is_only_supported_for_instance_graphs, _)),
+        expand_query_document(Transaction, Type, Query, Query_Ex, Type_Ex),
+        Goal = api_generate_document_ids_by_query(Graph_Type, Transaction, Type_Ex, Query_Ex, Config, Doc_Id)
+    ;   ground(Id)
+    ->  Goal = (Doc_Id = Id)
+    ;   ground(Ids)
+    ->  Goal = member(Doc_Id, Ids)
+    ;   get_dict(id_prefix, Config, Id_Prefix),
+        ground(Id_Prefix)
+    ->  Goal = api_generate_document_ids_by_id_prefix(Graph_Type, Transaction, Type, Id_Prefix, Config, Doc_Id)
+    ;   ground(Type)
+    ->  Goal = api_generate_document_ids_by_type(Graph_Type, Transaction, Type, Config, Doc_Id)
+    ;   Goal = api_generate_document_ids(Graph_Type, Transaction, Config, Doc_Id)),
+    database_prefixes(Transaction, Prefixes),
+    forall(Goal,
+           (   compress_id_for_output(Config, Prefixes, Doc_Id, Out_Id),
+               json_stream_write(Config, Stream_Started, Out_Id))).
+
+compress_id_for_output(Config, Prefixes, Id, Out_Id) :-
+    (   Config.compress = true,
+        catch(compress_dict_uri(Id, Prefixes, Out_Id), _, fail)
+    ->  true
+    ;   Out_Id = Id).
+
+% strip_identifiers(+Config) is semidet.
+% True when the request asked for identifiers=false — document @id/@type
+% annotations are stripped from the response so a fetched document reads
+% back in its submitted lexical form.
+strip_identifiers(Config) :-
+    Config.get(identifiers, true) = false.
+
+% strip_id_type_annotations(+Document, -Stripped) is det.
+% Recursively removes document `@id`/`@type` annotations so the result reads
+% back in submitted lexical form. Typed literal wrappers (dicts carrying
+% `@value`) and `@id` link references are preserved — they are semantic
+% content, not generated annotations.
+strip_id_type_annotations(Value, Value) :-
+    \+ is_dict(Value), \+ is_list(Value), !.
+strip_id_type_annotations(List, Stripped) :-
+    is_list(List), !,
+    maplist(strip_id_type_annotations, List, Stripped).
+strip_id_type_annotations(Dict, Dict) :-
+    (   get_dict('@value', Dict, _)
+    ;   get_dict('@type', Dict, '@id')),
+    !.
+strip_id_type_annotations(Dict, Dict) :-
+    dict_pairs(Dict, _, Pairs),
+    forall(member(Key-_, Pairs), memberchk(Key, ['@id','@type'])),
+    !.
+strip_id_type_annotations(Dict, Stripped) :-
+    dict_pairs(Dict, Tag, Pairs),
+    findall(Key-Stripped_Value,
+            (   member(Key-Value, Pairs),
+                \+ memberchk(Key, ['@id','@type']),
+                strip_id_type_annotations(Value, Stripped_Value)),
+            Stripped_Pairs),
+    dict_pairs(Stripped, Tag, Stripped_Pairs).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
-    do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
-              error(document_not_found(Id), _)).
+    Raw_Id = Config.get(raw_id, false),
+    Options = options{compress_ids: Config.compress, unfold: Config.unfold, keep_json_type: false, raw_id: Raw_Id},
+    do_or_die(get_document(Transaction, Id, Document0, Options),
+              error(document_not_found(Id), _)),
+    (   strip_identifiers(Config)
+    ->  strip_id_type_annotations(Document0, Document)
+    ;   Document = Document0).
 api_get_document(schema, Transaction, Id, _Config, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
@@ -179,10 +630,27 @@ embed_document_in_error(Error, Document, New_Error) :-
     append(Error_List, [Document], New_Error_List),
     New_Error =.. New_Error_List.
 
+compress_doc_ids(false, _, Ids, Ids) :- !.
+compress_doc_ids(true, _Transaction, Ids, Compressed) :-
+    \+ is_list(Ids),
+    !,
+    Compressed = Ids.
+compress_doc_ids(true, Transaction, Ids, Compressed) :-
+    catch(
+        (   database_prefixes(Transaction, Prefixes),
+            maplist({Prefixes}/[Id, Compressed_Id]>>compress_dict_uri(Id, Prefixes, Compressed_Id), Ids, Compressed)
+        ),
+        _,
+        Ids = Compressed
+    ),
+    !.
+compress_doc_ids(true, _, Ids, Ids).
+
 known_document_error(type_not_found(_)).
 known_document_error(can_not_insert_existing_object_with_id(_)).
 known_document_error(unrecognized_property(_,_,_)).
 known_document_error(casting_error(_,_)).
+known_document_error(unbound_prefix(_,_,_)).
 known_document_error(submitted_id_does_not_match_generated_id(_,_)).
 known_document_error(submitted_document_id_does_not_have_expected_prefix(_,_)).
 known_document_error(document_key_type_unknown(_)).
@@ -212,8 +680,21 @@ known_document_error(embedded_subdocument_has_linked_by).
 known_document_error(back_links_not_supported_in_replace).
 known_document_error(prefix_does_not_resolve(_)).
 known_document_error(stored_document_is_not_a_json(_)).
+known_document_error(at_prefixed_properties_not_supported(_)).
+known_document_error(at_prefixed_properties_not_supported(_,_)).
+known_document_error(invalid_jsondocument_at_id_must_be_iri(_)).
+known_document_error(unable_to_elaborate_schema_document(_)).
+known_document_error(elaboration_stale(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
+api_document_error_wrapper(error(E, Context), Document, error(New_E, Context)) :-
+    !,
+    (   known_document_error(E)
+    ->  embed_document_in_error(E, Document, New_E)
+    ;   New_E = E
+    ).
+api_document_error_wrapper(Error, _, Error).
+
 call_catch_document_mutation(Document, Goal) :-
     catch_with_backtrace(Goal,
           error(E, Context),
@@ -222,17 +703,17 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, _Raw_JSON, Transaction, Document, Captures, [Id], Captures, T-T) :-
+api_insert_document_(schema, _Raw_JSON, _Overwrite, _Merge, Transaction, Document, Captures, [Id], Captures, T-T) :-
     call_catch_document_mutation(
         Document,
         do_or_die(insert_schema_document(Transaction, Document),
                   error(document_insertion_failed_unexpectedly(Document), _))),
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, Raw_JSON, Transaction, Document, Captures_In, Id, Captures_Out, BLH-BLT) :-
+api_insert_document_(instance, Raw_JSON, Overwrite, Merge, Transaction, Document, Captures_In, Id, Captures_Out, BLH-BLT) :-
     call_catch_document_mutation(
         Document,
-        do_or_die(insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, BLH-BLT, Captures_Out),
+        do_or_die(insert_document_merge(Transaction, Document, Raw_JSON, Overwrite, Merge, Captures_In, Id, BLH-BLT, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, [Id], Captures, T-T) :-
@@ -253,7 +734,7 @@ api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document,
             error(document_insertion_failed_unexpectedly(Document), _))
     ).
 
-insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, _Merge, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
@@ -272,10 +753,48 @@ insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, 
         database_prefixes(Transaction, Prefixes),
         stream_to_lazy_docs(Stream, Lazy_List)
     ),
-    api_insert_document_from_lazy_list_unsafe(Lazy_List, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BackLinks-[], Ids).
-insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+    inject_document_id(Injected_Id, Lazy_List, Lazy_List_With_Id),
+    api_insert_document_from_lazy_list_unsafe(Lazy_List_With_Id, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BackLinks-[], Ids).
+insert_documents_(false, Graph_Type, Raw_JSON, Overwrite, Merge, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
     stream_to_lazy_docs(Stream, Lazy_List),
-    api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
+    inject_document_id(Injected_Id, Lazy_List, Lazy_List_With_Id),
+    api_insert_document_from_lazy_list(Lazy_List_With_Id, Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
+
+/* A request-level document id is addressed exactly like a body @id. The
+ * body must hold a single document; a matching @id is fine and a differing
+ * one is a client-visible conflict. Injection happens on the parsed
+ * document, so no re-serialization can truncate numeric precision. */
+inject_document_id(null, Lazy_List, Lazy_List) :-
+    !.
+inject_document_id(Id, Lazy_List, Lazy_List_With_Id) :-
+    (   Lazy_List = [Document]
+    ->  true
+    ;   throw(error(malformed_parameter(id), _))
+    ),
+    (   is_dict(Document),
+        get_dict('@id', Document, Doc_Id)
+    ->  (   document_ids_equivalent(Id, Doc_Id)
+        ->  Lazy_List_With_Id = Lazy_List
+        ;   throw(error(conflicting_document_id(Id, Doc_Id), _))
+        )
+    ;   is_dict(Document)
+    ->  put_dict('@id', Document, Id, Document_With_Id),
+        Lazy_List_With_Id = [Document_With_Id]
+    ;   throw(error(malformed_parameter(id), _))
+    ).
+
+/* Two document ids are equivalent when identical or when they expand to
+ * the same IRI under the default prefixes (short form vs full IRI). */
+document_ids_equivalent(A, B) :-
+    atom_string(A, A_Atom),
+    atom_string(B, B_Atom),
+    (   A_Atom == B_Atom
+    ->  true
+    ;   default_prefixes(Prefixes),
+        prefix_expand(A_Atom, Prefixes, A_Ex),
+        prefix_expand(B_Atom, Prefixes, B_Ex),
+        A_Ex == B_Ex
+    ).
 
 api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
     !,
@@ -283,11 +802,19 @@ api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON,
     api_insert_document_from_lazy_list_unsafe(Rest, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
 api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, T-T, []).
 
-api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
+% /8 wrapper - backward compatibility (default overwrite=false)
+api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+    api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, false, false, Transaction, Captures_In, Captures_Out, BackLinks, Ids).
+
+% /9 wrapper - backward compatibility (default merge_repeats=false)
+api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+    api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Overwrite, false, Transaction, Captures_In, Captures_Out, BackLinks, Ids).
+
+api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
     !,
-    api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
-    api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
-api_insert_document_from_lazy_list([], _, _, _, Captures, Captures, T-T, []).
+    api_insert_document_(Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
+    api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
+api_insert_document_from_lazy_list([], _, _, _, _, _, Captures, Captures, T-T, []).
 
 api_replace_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Create,
                                     Captures_In, Captures_Out, [Ids|New_Ids]) :-
@@ -314,10 +841,13 @@ insert_documents_default_options(
         graph_type: instance,
         full_replace: false,
         raw_json: false,
-        merge_repeats: false
+        merge_repeats: false,
+        overwrite: false,
+        compress_ids: true,
+        input_format: json
     }).
 
-api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options_New) :-
+api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options_New) :-
     insert_documents_default_options(Default),
     merge_options(Options_New,Default,Options),
     option(graph_type(Graph_Type), Options),
@@ -326,32 +856,440 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option(full_replace(Full_Replace), Options),
     option(raw_json(Raw_JSON), Options),
     option(merge_repeats(Doc_Merge), Options),
+    option(overwrite(Overwrite), Options),
+    option(compress_ids(Compress_Ids), Options, true),
+    option(input_format(InputFormat), Options),
+    % A request-level document id applies to a single JSON document.
+    Injected_Id = Options.get(document_id, null),
+    die_if(
+        (   Injected_Id \= null,
+            InputFormat \= json
+        ),
+        error(malformed_parameter(id), _)
+    ),
     die_if(
         (   Graph_Type = schema,
             Raw_JSON = true
         ),
         error(raw_json_and_schema_disallowed,_)
     ),
-    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
-    % Transaction replay for conflict resolution:
-    % Save stream position before transaction, reset it on retry.
-    % REQUIRES: Stream must be seekable (string stream, not raw HTTP socket).
-    % See routes.pl where HTTP body is buffered into string stream for this reason.
-    % Reset stream to beginning for each transaction attempt (retry on conflict)
-    stream_property(Stream, position(Pos)),
-    with_transaction(Context,
-                     (   set_stream_position(Stream, Pos),
-                         api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids)
-                     ),
-                     Meta_Data,
-                     Options),
-    meta_data_version(Transaction, Meta_Data, New_Data_Version).
+    (   commit_queue_available,
+        Graph_Type = instance,
+        Raw_JSON = false,
+        Full_Replace = false,
+        InputFormat = json,
+        Injected_Id = null,
+        stream_property(Stream, position(Pos)),
+        setup_call_cleanup(
+            set_stream_position(Stream, Pos),
+            (   stream_to_lazy_docs(Stream, LazyDocs),
+                docs_parallel_eligible(LazyDocs)
+            ),
+            set_stream_position(Stream, Pos)
+        )
+    ->  api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version,
+                                   New_Data_Version, Transaction_Meta_Data, Ids, Options)
+    ;   resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+        before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+        stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
+        with_transaction(Context,
+                         (   set_stream_position(Stream, Pos),
+                             branch_key_from_transaction(Transaction, BranchKey),
+                             (   Injected_Id = null,
+                                 parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options, Stream)
+                             ->  (   branch_descriptor{} :< Transaction.descriptor
+                                 ->  with_commit_window_guard(
+                                         Transaction, BranchKey, PreBranchCommitId,
+                                         setup_call_cleanup(
+                                             parallel_elaborate_stream(Transaction, Stream, Queue, Thread),
+                                             (   CoreStream = queue(Queue),
+                                                 CoreRaw_JSON = true,
+                                                 (   InputFormat = json
+                                                 ->  InsertStream = CoreStream
+                                                 ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
+                                                 ),
+                                                 api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, PreBranchCommitId, Injected_Id, Raw_Ids),
+                                                 compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+                                             ),
+                                             cleanup_parallel_stream(Queue, Thread)))
+                                 ;   % Non-branch descriptors (e.g. system_descriptor) have no
+                                     % advancing branch commit, so a commit-window guard is
+                                     % neither applicable nor acquireable. Fall back to the
+                                     % synchronous path without a guard.
+                                     CoreStream = Stream,
+                                     CoreRaw_JSON = Raw_JSON,
+                                     (   InputFormat = json
+                                     ->  InsertStream = CoreStream
+                                     ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
+                                     ),
+                                     api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, none, Injected_Id, Raw_Ids),
+                                     compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+                                 )
+                             ;   CoreStream = Stream,
+                                 CoreRaw_JSON = Raw_JSON,
+                                 (   InputFormat = json
+                                 ->  InsertStream = CoreStream
+                                 ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
+                                 ),
+                                 api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, none, Injected_Id, Raw_Ids),
+                                 compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+                             )
+                         ),
+                         Meta_Data,
+                         Guarded_Options),
+        meta_data_version(Transaction, Meta_Data, New_Data_Version),
+        Transaction_Meta_Data = Meta_Data
+    ).
 
-api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids) :-
+pre_branch_commit_id(Transaction, CommitId) :-
+    (   catch(transaction_data_version(Transaction, data_version(branch, CommitId)),
+              error(data_version_not_found(_), _),
+              fail)
+    ->  true
+    ;   CommitId = none).
+
+parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options, Stream) :-
+    Graph_Type = instance,
+    Raw_JSON = false,
+    Full_Replace = false,
+    option(input_format(json), Options),
+    current_predicate(parallel_elaboration:elaborate_insert_request_db/4),
+    \+ parallel_elaboration_disabled,
+    stream_property(Stream, position(Pos)),
+    setup_call_cleanup(
+        set_stream_position(Stream, Pos),
+        (   stream_to_lazy_docs(Stream, LazyDocs),
+            docs_parallel_eligible(LazyDocs)
+        ),
+        set_stream_position(Stream, Pos)
+    ).
+
+parallel_replace_enabled(Graph_Type, Raw_JSON, Options, Stream) :-
+    Graph_Type = instance,
+    Raw_JSON = false,
+    option(input_format(json), Options),
+    current_predicate(parallel_elaboration:elaborate_insert_request_db/4),
+    \+ parallel_elaboration_disabled,
+    stream_property(Stream, position(Pos)),
+    setup_call_cleanup(
+        set_stream_position(Stream, Pos),
+        (   stream_to_lazy_docs(Stream, LazyDocs),
+            docs_parallel_eligible(LazyDocs)
+        ),
+        set_stream_position(Stream, Pos)
+    ).
+
+commit_queue_available :-
+    current_predicate(commit_queue:start_workers/1),
+    current_predicate(commit_queue:enqueue_commit/2),
+    commit_queue:multi_purpose_worker_thread(_).
+
+docs_parallel_eligible([]).
+docs_parallel_eligible([Doc|Rest]) :-
+    doc_parallel_eligible(Doc),
+    docs_parallel_eligible(Rest).
+
+doc_parallel_eligible(Doc) :-
+    \+ contains_ineligible_marker(Doc).
+
+contains_ineligible_marker(Doc) :-
+    is_dict(Doc),
+    !,
+    (   get_dict('@capture', Doc, _)
+    ;   get_dict('@linked-by', Doc, _)
+    ;   dict_pairs(Doc, _, Pairs),
+        member(_Key-Value, Pairs),
+        contains_ineligible_marker(Value)
+    ).
+contains_ineligible_marker(List) :-
+    is_list(List),
+    member(Item, List),
+    contains_ineligible_marker(Item).
+
+parallel_elaboration_disabled :-
+    (   getenv('TERMINUSDB_PARALLEL_ELABORATION', Value)
+    ->  (   atom(Value)
+        ->  downcase_atom(Value, Lower),
+            member(Lower, ['0', false, off])
+        ;   Value = 0
+        )
+    ;   false
+    ).
+
+parallel_elaborate_stream(DB, Stream, Queue, Thread) :-
+    stream_to_lazy_docs(Stream, LazyDocs),
+    message_queue_create(Queue, []),
+    thread_create(elaborate_stream_producer(DB, LazyDocs, Queue), Thread, []).
+
+cleanup_parallel_stream(Queue, Thread) :-
+    catch(thread_signal(Thread, abort), _, true),
+    catch(thread_join(Thread, _), _, true),
+    catch(message_queue_destroy(Queue), _, true).
+
+take_chunk_lazy(_, 0, [], Rest) :- !, Rest = [].
+take_chunk_lazy(LazyDocs, N, Chunk, Rest) :-
+    N > 0,
+    (   LazyDocs = [Doc|Rest0]
+    ->  N1 is N - 1,
+        Chunk = [Doc|ChunkRest],
+        take_chunk_lazy(Rest0, N1, ChunkRest, Rest)
+    ;   Chunk = [],
+        Rest = LazyDocs
+    ).
+
+elaborate_stream_producer(DB, LazyDocs, Queue) :-
+    max_chunk_size(ChunkSize),
+    take_chunk_lazy(LazyDocs, ChunkSize, Chunk, Rest),
+    (   Chunk == []
+    ->  thread_send_message(Queue, done)
+    ;   catch(
+            parallel_elaboration:elaborate_insert_request_db_with_contracts(DB, Chunk, Pairs, [workers(4), wrap_api_errors(true)]),
+            Error,
+            (   thread_send_message(Queue, error(Error)),
+                throw(Error)
+            )
+        )
+    ->  thread_send_message(Queue, docs(Pairs)),
+        elaborate_stream_producer(DB, Rest, Queue)
+    ;   % Fallback: the catch above re-throws detailed errors, but if a
+        % failure path reaches here without a detailed error, send a bare
+        % error message so the consumer's defensive guard can react.
+        thread_send_message(Queue, error)
+    ).
+
+consume_elaborated_queue(Queue, Transaction, Overwrite, Merge, CommitId, Ids, Captures_Out) :-
+    (   has_commit_window_guard
+    ->  WaitForGuard = true
+    ;   WaitForGuard = false
+    ),
+    consume_elaborated_queue_(Queue, Transaction, Overwrite, Merge, CommitId, WaitForGuard, Ids, Captures_Out).
+
+consume_elaborated_queue_(Queue, Transaction, Overwrite, Merge, CommitId, WaitForGuard, Ids, Captures_Out) :-
+    (   WaitForGuard = true,
+        \+ first_commit_candidate(Transaction, CommitId)
+    ->  release_commit_window_guard
+    ;   true
+    ),
+    thread_get_message(Queue, Message),
+    (   WaitForGuard = true
+    ->  branch_key_from_transaction(Transaction, BranchKey),
+        acquire_commit_window_guard(BranchKey, CommitId)
+    ;   true
+    ),
+    (   Message = done
+    ->  Ids = [],
+        empty_assoc(Captures_Out)
+    ;   Message = error
+    % Defensive guard: the producer's fallback branch (taken when the
+    % catch around chunk elaboration fails without re-throwing a detailed
+    % error) can still send a bare `error` message. Keep this clause so
+    % the consumer does not hang on an unexpected queue message.
+    ->  throw(error(parallel_elaboration_failed, _))
+    ;   Message = error(Error)
+    ->  throw(Error)
+    ;   Message = docs(Pairs)
+    ->  pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Merge, Ids_Mid, Captures_Mid),
+        consume_elaborated_queue_(Queue, Transaction, Overwrite, Merge, CommitId, WaitForGuard, Ids_Tail, Captures_Tail),
+        append(Ids_Mid, Ids_Tail, Ids),
+        merge_captures(Captures_Mid, Captures_Tail, Captures_Out)
+    ).
+
+pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Merge, Ids, Captures_Out) :-
+    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Merge, Ids, Captures_Out).
+
+verify_contract(Transaction, Contract) :-
+    is_dict(Contract, verification_contract),
+    (   get_dict(pre_schema_layer_id, Contract, PreSchemaLayerId),
+        PreSchemaLayerId \= none
+    ->  [SchemaObject] = Transaction.schema_objects,
+        layer_to_id(SchemaObject.read, CurrentSchemaLayerId),
+        (   CurrentSchemaLayerId \= PreSchemaLayerId
+        ->  throw(error(elaboration_stale(schema_layer_changed), _))
+        ;   true)
+    ;   true),
+    (   get_dict(pre_branch_commit_id, Contract, PreBranchCommitId),
+        branch_key_from_transaction(Transaction, BranchKey),
+        get_dict(must_exist, Contract, MustExist),
+        get_dict(must_not_exist, Contract, MustNotExist),
+        (   catch(transaction_data_version(Transaction, data_version(branch, CurrentBranchCommitId)),
+                  error(data_version_not_found(_), _),
+                  fail)
+        ->  true
+        ;   CurrentBranchCommitId = none),
+        (   CurrentBranchCommitId == PreBranchCommitId
+        ->  true
+        ;   CurrentBranchCommitId \= none,
+            '$change_window':intersects(BranchKey, PreBranchCommitId, CurrentBranchCommitId,
+                                        MustExist, MustNotExist, _)
+        ->  throw(fail_transaction)
+        ;   true
+        )
+    ;   true).
+
+%! verify_contracts(+Transaction, +Contracts) is det.
+%
+%  Verify a batch of contracts in a single branch-window check. This is the
+%  batched equivalent of verify_contract/2: it reads the current schema layer
+%  and branch commit id once, then checks the whole batch against the change
+%  window with one Rust FFI call.
+verify_contracts(Transaction, Contracts) :-
+    verify_contracts(Transaction, Contracts, Result),
+    (   Result = ok
+    ->  true
+    ;   Result = error(fail_transaction)
+    ->  throw(fail_transaction)
+    ;   Result = error(Error)
+    ->  throw(error(Error, _))
+    ).
+
+%! verify_contracts(+Transaction, +Contracts, -Result) is det.
+%
+%  Result is `ok` if the batch passes, or `error(Error)` if the schema layer
+%  changed or the change window conflicts with the union of the contracts'
+%  conflict sets.
+verify_contracts_transaction_info(Transaction, BranchKey, CurrentBranchCommitId, CurrentSchemaLayerId) :-
+    branch_key_from_transaction(Transaction, BranchKey),
+    (   catch(transaction_data_version(Transaction, data_version(branch, CurrentBranchCommitId)),
+              error(data_version_not_found(_), _),
+              fail)
+    ->  true
+    ;   CurrentBranchCommitId = none),
+    (   Transaction.schema_objects = [SchemaObject]
+    ->  layer_to_id(SchemaObject.read, CurrentSchemaLayerId)
+    ;   CurrentSchemaLayerId = none).
+
+verify_contracts(_Transaction, [], ok) :- !.
+verify_contracts(Transaction, Contracts, Result) :-
+    '$doc':verify_contracts(Transaction, Contracts, Result).
+
+pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Merge, Ids, Captures_Out) :-
+    enrich_pairs_for_operation(Pairs, insert, EnrichedPairs),
+    pairs_values(EnrichedPairs, Contracts),
+    verify_contracts(Transaction, Contracts),
+    pairs_to_insert_ids_and_captures__(EnrichedPairs, Transaction, Overwrite, Merge, Ids, Captures_Out).
+
+pairs_to_insert_ids_and_captures__([], _, _, _, [], empty_assoc).
+pairs_to_insert_ids_and_captures__([Doc-Contract], Transaction, Overwrite, Merge, [Ids], Captures_Out) :-
+    insert_document_expanded(Transaction, Doc, Contract, Overwrite, Merge, _),
+    get_dict(id_pairs, Contract, Id_Pairs),
+    extract_return_ids(Id_Pairs, Ids),
+    get_dict(captures_out, Contract, Captures_Out).
+pairs_to_insert_ids_and_captures__([Doc-Contract|Rest], Transaction, Overwrite, Merge, [Ids|Ids_Rest], Captures_Out) :-
+    Rest \= [],
+    insert_document_expanded(Transaction, Doc, Contract, Overwrite, Merge, _),
+    get_dict(id_pairs, Contract, Id_Pairs),
+    extract_return_ids(Id_Pairs, Ids),
+    get_dict(captures_out, Contract, Captures_First),
+    pairs_to_insert_ids_and_captures__(Rest, Transaction, Overwrite, Merge, Ids_Rest, Captures_Rest),
+    merge_captures(Captures_First, Captures_Rest, Captures_Out).
+
+merge_captures(Captures1, Captures2, Merged) :-
+    (   empty_assoc(Captures1)
+    ->  Merged = Captures2
+    ;   empty_assoc(Captures2)
+    ->  Merged = Captures1
+    ;   assoc_to_list(Captures2, Pairs2),
+        foldl(merge_capture_pair, Pairs2, Captures1, Merged)
+    ).
+
+merge_capture_pair(Key-Value, Captures_In, Captures_Out) :-
+    (   get_assoc(Key, Captures_In, Existing)
+    ->  (   Existing == Value
+        ->  Captures_Out = Captures_In
+        ;   (   unify_with_occurs_check(Existing, Value)
+            ->  Captures_Out = Captures_In
+            ;   throw(error(capture_already_bound(Key, Existing), _))
+            )
+        )
+    ;   put_assoc(Key, Captures_In, Value, Captures_Out)
+    ).
+
+consume_replaced_queue(Queue, Transaction, Create, CommitId, Ids, Captures_Out) :-
+    (   has_commit_window_guard
+    ->  WaitForGuard = true
+    ;   WaitForGuard = false
+    ),
+    consume_replaced_queue_(Queue, Transaction, Create, CommitId, WaitForGuard, Ids, Captures_Out).
+
+consume_replaced_queue_(Queue, Transaction, Create, CommitId, WaitForGuard, Ids, Captures_Out) :-
+    (   WaitForGuard = true,
+        \+ first_commit_candidate(Transaction, CommitId)
+    ->  release_commit_window_guard
+    ;   true
+    ),
+    thread_get_message(Queue, Message),
+    (   WaitForGuard = true
+    ->  branch_key_from_transaction(Transaction, BranchKey),
+        acquire_commit_window_guard(BranchKey, CommitId)
+    ;   true
+    ),
+    (   Message = done
+    ->  Ids = [],
+        empty_assoc(Captures_Out)
+    ;   Message = error
+    % Defensive guard: see the matching clause in consume_elaborated_queue_/6.
+    % The producer's fallback branch can still send a bare `error` message,
+    % so this clause prevents the consumer from hanging silently.
+    ->  throw(error(parallel_elaboration_failed, _))
+    ;   Message = error(Error)
+    ->  throw(Error)
+    ;   Message = docs(Pairs)
+    ->  pairs_to_replace_ids_and_captures(Pairs, Transaction, Create, Ids_Mid, Captures_Mid),
+        consume_replaced_queue_(Queue, Transaction, Create, CommitId, WaitForGuard, Ids_Tail, Captures_Tail),
+        append(Ids_Mid, Ids_Tail, Ids),
+        merge_captures(Captures_Mid, Captures_Tail, Captures_Out)
+    ).
+
+pairs_to_replace_ids_and_captures(Pairs, Transaction, Create, Ids, Captures_Out) :-
+    enrich_pairs_for_operation(Pairs, replace, EnrichedPairs),
+    pairs_values(EnrichedPairs, Contracts),
+    verify_contracts(Transaction, Contracts),
+    pairs_to_replace_ids_and_captures__(EnrichedPairs, Transaction, Create, Ids, Captures_Out).
+
+pairs_to_replace_ids_and_captures__([], _, _, [], empty_assoc).
+pairs_to_replace_ids_and_captures__([Doc-Contract], Transaction, Create, [[Id]], Captures_Out) :-
+    replace_document_expanded(Transaction, Doc, Contract, Create, Id),
+    get_dict(captures_out, Contract, Captures_Out).
+pairs_to_replace_ids_and_captures__([Doc-Contract|Rest], Transaction, Create, [[Id]|Ids], Captures_Out) :-
+    Rest \= [],
+    replace_document_expanded(Transaction, Doc, Contract, Create, Id),
+    get_dict(captures_out, Contract, Captures_First),
+    pairs_to_replace_ids_and_captures__(Rest, Transaction, Create, Ids, Captures_Rest),
+    merge_captures(Captures_First, Captures_Rest, Captures_Out).
+
+api_insert_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, CommitId, _Injected_Id, Ids) :-
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    consume_elaborated_queue(Queue, Transaction, Overwrite, Doc_Merge, CommitId, Ids_List, Captures_Out),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
+
+api_insert_documents_core(Transaction, pairs([]), Graph_Type, _Raw_JSON, _Full_Replace, _Doc_Merge, _Overwrite, _CommitId, _Injected_Id, []) :-
+    !,
+    ensure_transaction_has_builder(Graph_Type, Transaction).
+api_insert_documents_core(Transaction, pairs(Pairs), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, _CommitId, _Injected_Id, Ids) :-
+    !,
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Doc_Merge, Ids_List, Captures_Out),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
+
+api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, _CommitId, Injected_Id, Ids) :-
     empty_assoc(Captures_In),
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids_List),
+    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Overwrite, Doc_Merge, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids_List),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     database_instance(Transaction, [Instance]),
@@ -363,11 +1301,30 @@ api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replac
                error(same_ids_in_one_transaction(Duplicates), _))
     ).
 
-api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids) :-
-    open_string(String, Stream),
-    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids_Atoms),
+%% string_octet_stream(+String, -Stream) is det.
+%
+%  Open Stream over String as raw UTF-8 BYTES (one code point per byte) —
+%  the octet convention the byte-level JSON reader consumes. FFI callers
+%  (GraphQL mutations) hand in decoded strings; feeding one straight to
+%  open_string would emit each non-ASCII code point as a lone byte —
+%  invalid UTF-8, failing the parse.
+string_octet_stream(String, Stream) :-
+    string_codes(String, Chars),
+    once(phrase(utf8_codes(Chars), Bytes)),
+    string_codes(Byte_String, Bytes),
+    open_string(Byte_String, Stream).
+
+api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids) :-
+    string_octet_stream(String, Stream),
+    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, none, null, Ids_Atoms),
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
+
+api_insert_documents_core_string_with_compress(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Compress_Ids, Ids) :-
+    string_octet_stream(String, Stream),
+    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, none, null, Raw_Ids),
+    compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Compressed_Ids),
+    maplist(atom_string, Compressed_Ids, Ids).
 
 
 idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
@@ -379,15 +1336,6 @@ idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
     ;   has_duplicates(All_Ids, Duplicates)
     ),
     maplist([[Id|_],Id]>>true, Ids, Toplevel).
-
-insert_backlinks(Links, Graph) :-
-    nb_link_dict(backlinks,Graph,Links),
-    insert_backlinks_(Links, Graph).
-
-insert_backlinks_([], _).
-insert_backlinks_([link(S,P,O)|T], Instance) :-
-    insert(Instance, S, P, O, _),
-    insert_backlinks_(T, Instance).
 
 nonground_captures(Captures, Nonground) :-
     findall(Ref,
@@ -401,7 +1349,7 @@ api_delete_document_(schema, Transaction, Id) :-
 api_delete_document_(instance, Transaction, Id) :-
     delete_document(Transaction, Id).
 
-% Bulk deletion with reference counting support
+% Bulk deletion with reference counting support for sys:JSON
 api_delete_documents_bulk_(schema, Transaction, Ids) :-
     forall(member(Id, Ids),
            delete_schema_document(Transaction, Id)).
@@ -413,7 +1361,7 @@ delete_documents_default_options(
         graph_type: instance
     }).
 
-api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options_New) :-
+api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options_New) :-
     die_if(
         nonvar(Ids),
         error(unexpected_argument_instantiation(api_delete_documents, Ids), _)),
@@ -424,8 +1372,9 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option(message(Message), Options),
 
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     stream_property(Stream, position(Pos)),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          % First pass: collect all IDs to delete
@@ -438,8 +1387,9 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                          api_delete_documents_bulk_(Graph_Type, Transaction, Ids_To_Delete)
                      ),
                      Meta_Data,
-                     Options),
-    meta_data_version(Transaction, Meta_Data, New_Data_Version).
+                     Guarded_Options),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version),
+    Transaction_Meta_Data = Meta_Data.
 
 api_delete_documents_by_ids(Transaction, Graph_Type, Ids) :-
     forall(
@@ -449,18 +1399,26 @@ api_delete_documents_by_ids(Transaction, Graph_Type, Ids) :-
         )
     ).
 
-api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_Version, Options) :-
+api_delete_documents_by_ids_with_compress(Transaction, Graph_Type, Ids, Compress_Ids, Result_Ids) :-
+    api_delete_documents_by_ids(Transaction, Graph_Type, Ids),
+    maplist(atom_string, Ids_Atoms, Ids),
+    compress_doc_ids(Compress_Ids, Transaction, Ids_Atoms, Compressed_Atoms),
+    maplist(atom_string, Compressed_Atoms, Result_Ids).
+
+api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options) :-
     option(graph_type(Graph_Type), Options),
     option(author(Author), Options),
     option(message(Message), Options),
 
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      api_delete_document_(Graph_Type, Transaction, ID),
                      Meta_Data,
-                     Options),
-    meta_data_version(Transaction, Meta_Data, New_Data_Version).
+                     Guarded_Options),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version),
+    Transaction_Meta_Data = Meta_Data.
 
 api_delete_documents_by_type_for_graph(schema, Transaction, Type) :-
     forall(api_generate_document_ids_by_type(schema, Transaction, Type, _{skip: 0, count: unlimited}, ID),
@@ -468,42 +1426,360 @@ api_delete_documents_by_type_for_graph(schema, Transaction, Type) :-
 api_delete_documents_by_type_for_graph(instance, Transaction, Type) :-
     delete_documents_by_type(Transaction, Type, true).
 
-api_delete_documents_by_type(SystemDB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Options) :-
+api_delete_documents_by_type(SystemDB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options) :-
     option(graph_type(Graph_Type), Options),
     option(author(Author), Options),
     option(message(Message), Options),
 
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      api_delete_documents_by_type_for_graph(Graph_Type, Transaction, Type),
                      Meta_Data,
-                     Options),
-    meta_data_version(Transaction, Meta_Data, New_Data_Version).
+                     Guarded_Options),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version),
+    Transaction_Meta_Data = Meta_Data.
 
 api_nuke_documents_(schema, Transaction) :-
     nuke_schema_documents(Transaction).
 api_nuke_documents_(instance, Transaction) :-
     nuke_documents(Transaction).
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * Document check (dry-run)
+ *
+ * api_check_documents runs a document write body against a transaction
+ * context exactly as the committing path does, then runs the same
+ * validation stages run_transactions runs — schema validation and the
+ * pre_commit_hook referential/cascade checks — and never commits. The
+ * uncommitted layer and context are discarded, leaving the branch head
+ * untouched.
+ *
+ * Body is a closure called as call(Body, Transaction, Extra): it runs
+ * the same *_core predicates the commit path uses (e.g.
+ * api_insert_documents_core/10, api_delete_documents_bulk_/3). Extra is
+ * echoed back on success so callers can report assigned ids.
+ *
+ * A check that ran always produces a Result dict — valid:false with
+ * witnesses or the raised error is normal output, not a failure of the
+ * predicate itself. Errors before the context exists (bad path,
+ * missing capability, stale data version) still throw.
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+:- meta_predicate api_check_documents(+, +, +, +, +, +, +, 2, +, +, -).
+
+api_check_documents(SystemDB, Auth, Path, Graph_Type, Author, Message,
+                    Requested_Data_Version, Body, Touched_Types, Options,
+                    Result) :-
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version,
+                 Context, Transaction),
+    setup_call_cleanup(
+        pre_transaction_tabling,
+        check_run(Context, Transaction, Body, Touched_Types, Options, Result),
+        post_transaction_tabling).
+
+check_run(Context, Transaction, Body, Touched_Types, Options, Result) :-
+    database_prefixes(Transaction, Prefixes),
+    catch(
+        (   call(Body, Transaction, Extra)
+        ->  do_or_die(check_validation_witnesses(Context, Options, Witnesses0),
+                      error(check_validation_failed(Context), _)),
+            check_embedding_report(Transaction, Touched_Types, Embedding),
+            maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
+            (   Witnesses = []
+            ->  Result = _{'@type':'api:CheckResponse',
+                           'api:valid':true,
+                           'api:witnesses':[],
+                           'api:extra':Extra,
+                           'api:embedding':Embedding}
+            ;   Result = _{'@type':'api:CheckResponse',
+                           'api:valid':false,
+                           'api:witnesses':Witnesses,
+                           'api:embedding':Embedding})
+        ;   check_no_embedding(Embedding),
+            Result = _{'@type':'api:CheckResponse',
+                       'api:valid':false,
+                       'api:witnesses':[],
+                       'api:error':_{'api:message':'check body failed'},
+                       'api:embedding':Embedding}),
+        Error,
+        check_error_result(Prefixes, Error, Result)).
+
+%% compress_witness_json(+Prefixes, +Value, -Compressed) is det.
+%
+%  Witness documents carry fully expanded IRIs (terminusdb:///schema#X)
+%  in values and in dict keys. Fold them back through the database
+%  prefixes so api:witnesses reads like the schema itself.
+compress_witness_json(Prefixes, Value, Compressed) :-
+    (   is_dict(Value)
+    ->  dict_pairs(Value, Tag, Pairs),
+        maplist(compress_witness_pair(Prefixes), Pairs, Compressed_Pairs),
+        dict_pairs(Compressed, Tag, Compressed_Pairs)
+    ;   is_list(Value)
+    ->  maplist(compress_witness_json(Prefixes), Value, Compressed)
+    ;   (atom(Value) ; string(Value)),
+        atom_string(Value_Atom, Value),
+        fold_witness_uri(Prefixes, Value_Atom, Folded)
+    ->  Compressed = Folded
+    ;   Compressed = Value).
+
+% Schema vocabulary folds to bare local names (matching compress_ids);
+% anything else folds through the ordinary context prefixes (@base
+% relative, xsd:, sys:, user prefixes) or stays unchanged.
+fold_witness_uri(Prefixes, URI, Folded) :-
+    compress_schema_uri(URI, Prefixes, Schema_Folded),
+    (   Schema_Folded \= URI
+    ->  Folded = Schema_Folded
+    ;   compress_dict_uri(URI, Prefixes, Folded)).
+
+compress_witness_pair(Prefixes, Key-Value, Compressed_Key-Compressed_Value) :-
+    (   (atom(Key) ; string(Key)),
+        atom_string(Key_Atom, Key),
+        fold_witness_uri(Prefixes, Key_Atom, Folded_Key)
+    ->  Compressed_Key = Folded_Key
+    ;   Compressed_Key = Key),
+    compress_witness_json(Prefixes, Value, Compressed_Value).
+
+% On invalid checks the embedding block is still present so callers can
+% read api:embedding.'api:will_embed' unconditionally — nothing embeds
+% when the write itself cannot commit.
+check_no_embedding(_{'api:will_embed':false,
+                     'api:relevant':false,
+                     'api:reason':'the write is invalid — fix the witnesses or error first'}).
+
+check_error_result(Prefixes, error(schema_check_failure(Witnesses0), _), Result) :-
+    !,
+    maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
+    Result = _{'@type':'api:CheckResponse',
+               'api:valid':false,
+               'api:witnesses':Witnesses,
+               'api:embedding':Embedding},
+    check_no_embedding(Embedding).
+check_error_result(Prefixes, schema_check_failure(Witnesses0), Result) :-
+    !,
+    maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
+    Result = _{'@type':'api:CheckResponse',
+               'api:valid':false,
+               'api:witnesses':Witnesses,
+               'api:embedding':Embedding},
+    check_no_embedding(Embedding).
+check_error_result(_Prefixes, error(Formal, _), Result) :-
+    !,
+    format(string(Msg), "~w", [Formal]),
+    Result = _{'@type':'api:CheckResponse',
+               'api:valid':false,
+               'api:witnesses':[],
+               'api:error':_{'api:message':Msg},
+               'api:embedding':Embedding},
+    check_no_embedding(Embedding).
+check_error_result(_Prefixes, Formal, Result) :-
+    format(string(Msg), "~w", [Formal]),
+    Result = _{'@type':'api:CheckResponse',
+               'api:valid':false,
+               'api:witnesses':[],
+               'api:error':_{'api:message':Msg},
+               'api:embedding':Embedding},
+    check_no_embedding(Embedding).
+
+%% check_validation_witnesses(+Context, +Options, -Witnesses) is det.
+%
+%  Mirrors the validation stages of run_transactions/4: schema
+%  validation plus the pre_commit_hook referential/cascade checks.
+%  Options carries the same migration flags a commit would see
+%  (require_migration, allow_destructive_migration). Nothing is
+%  committed — there is no commit_validation_objects call.
+check_validation_witnesses(Context, Options, Witnesses) :-
+    query_context_transaction_objects(Context, Transactions),
+    transaction_objects_to_validation_objects(Transactions, Validations0),
+    infer_migrations_for_commit(Validations0, Validations, _Inference, Options),
+    validate_validation_objects(Validations, _All_Witnesses, Schema_Witnesses),
+    findall(Witness,
+            pre_commit_hook(Validations, Witness),
+            Hook_Witnesses),
+    append(Schema_Witnesses, Hook_Witnesses, Witnesses).
+
+%% check_embedding_report(+Transaction, +Touched_Types, -Report) is det.
+%
+%  Reports whether the touched classes would be embedded by the indexer
+%  after such a commit. Relevance is a property of the classes, not the
+%  engine: the report fires whenever a touched class carries
+%  @metadata.embedding (a query and/or a template), whether or not an
+%  indexer backend is configured. will_embed additionally requires a
+%  configured backend and an embedding query on every touched class —
+%  a template without a query does not embed.
+check_embedding_report(_Transaction, [], _{
+        'api:will_embed':false,
+        'api:relevant':false,
+        'api:reason':'no documents touched'}) :-
+    !.
+check_embedding_report(Transaction, Touched_Types, Report) :-
+    database_schema(Transaction, Schema),
+    database_prefixes(Transaction, Prefixes),
+    convlist(class_embedding_mark(Transaction, Schema, Prefixes),
+             Touched_Types, Marks),
+    pairs_keys(Marks, Marked_Unsorted),
+    sort(Marked_Unsorted, Marked),
+    sort(Touched_Types, Touched_Sorted),
+    (   Marked = []
+    ->  Report = _{'api:will_embed':false,
+                   'api:relevant':false,
+                   'api:reason':'no touched class carries @metadata.embedding'}
+    ;   catch(indexer_backend(Backend), _, fail),
+        Backend \= none
+    ->  include([_-Mark]>>(Mark = embeddable), Marks, Embeddable_Pairs),
+        pairs_keys(Embeddable_Pairs, Embeddable_Unsorted),
+        sort(Embeddable_Unsorted, Embeddable),
+        subtract(Touched_Sorted, Embeddable, Not_Embedded),
+        (   Not_Embedded = []
+        ->  Report = _{'api:will_embed':true,
+                       'api:relevant':true,
+                       'api:reason':'all touched classes have embedding metadata'}
+        ;   subtract(Touched_Sorted, Marked, Unmarked),
+            subtract(Marked, Embeddable, Template_Only),
+            embedding_reason_parts(Unmarked, Template_Only, Parts),
+            atomic_list_concat(Parts, ' ', Reason),
+            Report = _{'api:will_embed':false,
+                       'api:relevant':true,
+                       'api:reason':Reason})
+    ;   atomic_list_concat(Marked, ', ', Marked_Text),
+        format(string(Reason),
+               'indexer backend is none or not configured — classes with embedding metadata (~s) will NOT be embedded; enable it with TERMINUSDB_INDEXER_BACKEND (and a running Ollama with the embedding model)', [Marked_Text]),
+        Report = _{'api:will_embed':false,
+                   'api:relevant':true,
+                   'api:reason':Reason}).
+
+%% embedding_reason_parts(+Unmarked, +Template_Only, -Parts) is det.
+embedding_reason_parts(Unmarked, Template_Only, Parts) :-
+    (   Unmarked = []
+    ->  Unmarked_Parts = []
+    ;   atomic_list_concat(Unmarked, ', ', Unmarked_Text),
+        format(string(Unmarked_Reason),
+               'classes without embedding metadata: ~s — their documents will NOT be embedded; add @metadata.embedding to the class or pass indexing:{query} on the write', [Unmarked_Text]),
+        Unmarked_Parts = [Unmarked_Reason]),
+    (   Template_Only = []
+    ->  Parts = Unmarked_Parts
+    ;   atomic_list_concat(Template_Only, ', ', Template_Text),
+        format(string(Template_Reason),
+               'classes with an embedding template but no query: ~s — they will NOT be embedded; add an embedding query', [Template_Text]),
+        append(Unmarked_Parts, [Template_Reason], Parts)).
+
+%% class_embedding_mark(+Transaction, +Schema, +Prefixes, +Type, -Type-Mark)
+%
+%  Mark = embeddable when the class has an embedding query (what the
+%  indexer actually consumes), template_only when it carries an
+%  embedding template without a query.
+class_embedding_mark(Transaction, Schema, Prefixes, Type, Type-Mark) :-
+    atom_string(Type_Atom, Type),
+    prefix_expand(Type_Atom, Prefixes, Expanded),
+    normalize_document_type(Transaction, Expanded, Normalized),
+    xrdf(Schema, Normalized, sys:metadata, _),
+    schema_metadata_descriptor(Schema, Normalized, metadata(Metadata)),
+    get_dict(embedding, Metadata, Embedding),
+    (   get_dict(query, Embedding, _)
+    ->  Mark = embeddable
+    ;   get_dict(template, Embedding, _),
+        Mark = template_only
+    ).
+
+%% api_check_insert_body(+Stream, +Graph_Type, +Options, -Body) is det.
+%
+%  Build the check body mirroring the (non-queued) insert path.
+api_check_insert_body(Stream, Graph_Type, Options, Body) :-
+    option(raw_json(Raw_JSON), Options),
+    option(full_replace(Full_Replace), Options),
+    option(merge_repeats(Doc_Merge), Options),
+    option(overwrite(Overwrite), Options),
+    Injected_Id = Options.get(document_id, null),
+    % api_check_documents is a meta-predicate: call(Body, Transaction,
+    % Extra) qualifies Body to the caller's module, so every goal must
+    % be a fully qualified closure.
+    Body = api_document:insert_check_goal(
+               Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge,
+               Overwrite, Injected_Id).
+
+% insert_check_goal args..., +Transaction, -Extra
+insert_check_goal(Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge,
+                  Overwrite, Injected_Id, Transaction, Extra) :-
+    api_insert_documents_core(Transaction, Stream, Graph_Type,
+                              Raw_JSON, Full_Replace, Doc_Merge,
+                              Overwrite, none, Injected_Id, Ids),
+    Extra = _{ids:Ids}.
+
+%% api_check_replace_body(+Stream, +Graph_Type, +Options, -Body) is det.
+api_check_replace_body(Stream, Graph_Type, Options, Body) :-
+    option(raw_json(Raw_JSON), Options),
+    option(create(Create), Options),
+    option(merge_repeats(Doc_Merge), Options),
+    Injected_Id = Options.get(document_id, null),
+    Body = api_document:replace_check_goal(
+               Stream, Graph_Type, Raw_JSON, Create, Doc_Merge,
+               Injected_Id).
+
+% replace_check_goal args..., +Transaction, -Extra
+replace_check_goal(Stream, Graph_Type, Raw_JSON, Create, Doc_Merge,
+                   Injected_Id, Transaction, Extra) :-
+    api_replace_documents_core(Transaction, Stream, Graph_Type,
+                               Raw_JSON, Create, Doc_Merge, none,
+                               Injected_Id, Ids),
+    Extra = _{ids:Ids}.
+
+%% api_check_delete_body(+Spec, +Graph_Type, -Body) is det.
+%
+%  Mirrors the DELETE dispatch variants — the caller picks one of:
+%  `nuke`, `id(Id)`, `type(Type)`, or `ids_stream(Stream)` whose stream
+%  yields the id list (same parse as the live path).
+api_check_delete_body(nuke, Graph_Type, Body) :-
+    !,
+    Body = api_document:nuke_check_goal(Graph_Type).
+api_check_delete_body(id(Id), Graph_Type, Body) :-
+    !,
+    Body = api_document:delete_id_check_goal(Graph_Type, Id).
+api_check_delete_body(type(Type), Graph_Type, Body) :-
+    !,
+    Body = api_document:delete_type_check_goal(Graph_Type, Type).
+api_check_delete_body(ids_stream(Stream), Graph_Type, Body) :-
+    Body = api_document:delete_ids_check_goal(Graph_Type, Stream).
+
+nuke_check_goal(Graph_Type, Transaction, Extra) :-
+    api_nuke_documents_(Graph_Type, Transaction),
+    Extra = _{}.
+delete_id_check_goal(Graph_Type, Id, Transaction, Extra) :-
+    api_delete_document_(Graph_Type, Transaction, Id),
+    Extra = _{}.
+delete_type_check_goal(Graph_Type, Type, Transaction, Extra) :-
+    api_delete_documents_by_type_for_graph(Graph_Type, Transaction, Type),
+    Extra = _{}.
+delete_ids_check_goal(Graph_Type, Stream, Transaction, Extra) :-
+    findall(Doc_Id,
+            (   json_read_list_stream(Stream, Id_Unchecked),
+                param_check_json(non_empty_string, id,
+                                 Id_Unchecked, Doc_Id)),
+            Ids_To_Delete),
+    api_delete_documents_bulk_(Graph_Type, Transaction, Ids_To_Delete),
+    Extra = _{ids:Ids_To_Delete}.
+
 nuke_documents_default_options(
     options{
         graph_type: instance
     }).
 
-api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Version, Options_New) :-
+api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options_New) :-
     nuke_documents_default_options(Default),
     merge_options(Options_New,Default,Options),
     option(graph_type(Graph_Type),Options),
     option_or_die(author(Author),Options),
     option_or_die(message(Message),Options),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      api_nuke_documents_(Graph_Type, Transaction),
                      Meta_Data,
-                     Options),
-    meta_data_version(Transaction, Meta_Data, New_Data_Version).
+                     Guarded_Options),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version),
+    Transaction_Meta_Data = Meta_Data.
 
 api_replace_document_(instance, Raw_JSON, Transaction, Document, Create, Captures_In, Ids, Captures_Out):-
     replace_document(Transaction, Document, Create, Raw_JSON, Captures_In, Ids, _Dependencies, Captures_Out).
@@ -515,10 +1791,13 @@ replace_document_default_options(
     options{
         graph_type: instance,
         create: false,
-        raw_json: false
+        raw_json: false,
+        merge_repeats: false,
+        compress_ids: true,
+        input_format: json
     }).
 
-api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options_New) :-
+api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options_New) :-
     replace_document_default_options(Default),
     merge_options(Options_New,Default,Options),
     option(graph_type(Graph_Type),Options),
@@ -526,22 +1805,94 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     option_or_die(author(Author),Options),
     option(message(Message),Options),
     option(raw_json(Raw_JSON),Options,false),
-    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
-    stream_property(Stream, position(Pos)),
-    with_transaction(Context,
-                     (   set_stream_position(Stream, Pos),
-                         api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids)
-                     ),
-                     Meta_Data,
-                     Options),
-    meta_data_version(Transaction, Meta_Data, New_Data_Version).
+    option(merge_repeats(Doc_Merge), Options),
+    option(compress_ids(Compress_Ids), Options, true),
+    option(input_format(InputFormat), Options),
+    % A request-level document id applies to a single JSON document.
+    Injected_Id = Options.get(document_id, null),
+    die_if(
+        (   Injected_Id \= null,
+            InputFormat \= json
+        ),
+        error(malformed_parameter(id), _)
+    ),
+    (   commit_queue_available,
+        Graph_Type = instance,
+        Raw_JSON = false,
+        InputFormat = json,
+        Injected_Id = null,
+        stream_property(Stream, position(Pos)),
+        setup_call_cleanup(
+            set_stream_position(Stream, Pos),
+            (   stream_to_lazy_docs(Stream, LazyDocs),
+                docs_parallel_eligible(LazyDocs)
+            ),
+            set_stream_position(Stream, Pos)
+        )
+    ->  api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version,
+                                    New_Data_Version, Transaction_Meta_Data, Ids, Options)
+    ;   resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+        before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+        stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
+        with_transaction(Context,
+                         (   set_stream_position(Stream, Pos),
+                             branch_key_from_transaction(Transaction, BranchKey),
+                             (   InputFormat = json
+                             ->  ReplaceStream = Stream
+                             ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
+                             ),
+                             (   Injected_Id = null,
+                                 parallel_replace_enabled(Graph_Type, Raw_JSON, Options, ReplaceStream)
+                             ->  with_commit_window_guard(
+                                     Transaction, BranchKey, PreBranchCommitId,
+                                     setup_call_cleanup(
+                                         parallel_elaborate_stream(Transaction, ReplaceStream, Queue, Thread),
+                                         (   api_replace_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, Create, Doc_Merge, PreBranchCommitId, Injected_Id, Raw_Ids),
+                                             compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+                                         ),
+                                         cleanup_parallel_stream(Queue, Thread)))
+                             ;   (   api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, none, Injected_Id, Raw_Ids),
+                                    compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+                                 )
+                             )
+                         ),
+                         Meta_Data,
+                         Guarded_Options),
+        meta_data_version(Transaction, Meta_Data, New_Data_Version),
+        Transaction_Meta_Data = Meta_Data
+    ).
 
-api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids) :-
+api_replace_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, Create, Doc_Merge, CommitId, _Injected_Id, Ids) :-
+    !,
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    consume_replaced_queue(Queue, Transaction, Create, CommitId, Ids_List, Captures_Out),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
+api_replace_documents_core(Transaction, pairs(Pairs), Graph_Type, _Raw_JSON, Create, Doc_Merge, _CommitId, _Injected_Id, Ids) :-
+    !,
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    pairs_to_replace_ids_and_captures(Pairs, Transaction, Create, Ids_List, Captures_Out),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
+api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, _CommitId, Injected_Id, Ids) :-
     empty_assoc(Captures),
     ensure_transaction_has_builder(Graph_Type, Transaction),
     stream_to_lazy_docs(Stream, Lazy_List),
-    api_replace_document_from_lazy_list(Lazy_List,
+    inject_document_id(Injected_Id, Lazy_List, Lazy_List_With_Id),
+    api_replace_document_from_lazy_list(Lazy_List_With_Id,
                                         Graph_Type,
                                         Raw_JSON,
                                         Transaction,
@@ -552,20 +1903,610 @@ api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Id
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
-    die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _)).
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
 
-api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Create, Ids) :-
-    open_string(String, Stream),
-    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids_Atoms),
+api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids) :-
+    string_octet_stream(String, Stream),
+    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, none, null, Ids_Atoms),
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
+
+api_replace_documents_core_string_with_compress(Transaction, String, Graph_Type, Raw_JSON, Create, Doc_Merge, Compress_Ids, Ids) :-
+    string_octet_stream(String, Stream),
+    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, none, null, Raw_Ids),
+    compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Compressed_Ids),
+    maplist(atom_string, Compressed_Ids, Ids).
+
+api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version,
+                            New_Data_Version, Transaction_Meta_Data, Ids, Options) :-
+    option(graph_type(Graph_Type), Options),
+    option_or_die(author(Author), Options),
+    option_or_die(message(Message), Options),
+    option(overwrite(Overwrite), Options),
+    option(compress_ids(Compress_Ids), Options, true),
+    option(input_format(InputFormat), Options),
+    option(merge_repeats(Doc_Merge), Options),
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    (   branch_descriptor{} :< Transaction.descriptor
+    ->  branch_key_from_transaction(Transaction, BranchKey),
+        stream_property(Stream, position(Pos)),
+        set_stream_position(Stream, Pos),
+        (   InputFormat = json
+        ->  DocsStream = Stream
+        ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, DocsStream)
+        ),
+        stream_to_lazy_docs(DocsStream, LazyDocs),
+        collect_stream_docs(LazyDocs, Docs),
+        ElaborationOptions = [workers(4), wrap_api_errors(true)],
+        parallel_elaboration:elaborate_insert_request_db_with_contracts(Transaction, Docs, Pairs, ElaborationOptions),
+        query_context_transaction_objects(Context, TransactionObjects),
+        message_queue_create(ReplyQueue, []),
+        gensym(request, RequestId),
+        producer_timeout(ProducerTimeout),
+        setup_call_cleanup(
+            true,
+            (   (   Requested_Data_Version = no_data_version
+                ->  Package_Options = options{overwrite: Overwrite, merge_repeats: Doc_Merge}
+                ;   Package_Options = options{overwrite: Overwrite, merge_repeats: Doc_Merge,
+                                              data_version_guard: Descriptor-Requested_Data_Version}
+                ),
+                Package = commit_package{
+                    branch_key: BranchKey,
+                    all_branches: [BranchKey],
+                    transaction_objects: TransactionObjects,
+                    operation: insert,
+                    branch_operations: [branch_operation{
+                                           branch_key: BranchKey,
+                                           doc_contract_pairs: Pairs,
+                                           delete_ids: [],
+                                           raw_docs: Docs
+                                       }],
+                    commit_info: Context.commit_info,
+                    options: Package_Options,
+                    graph_type: Graph_Type,
+                    reply_queue: ReplyQueue,
+                    request_id: RequestId
+                },
+                commit_queue:enqueue_commit(BranchKey, Package),
+                (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
+                ->  true
+                ;   Result = timeout
+                )
+            ),
+            catch(message_queue_destroy(ReplyQueue), _, true)
+        ),
+        (   Result = success(Meta_Data, Raw_Ids)
+        ->  meta_data_version(Transaction, Meta_Data, New_Data_Version),
+            Transaction_Meta_Data = Meta_Data,
+            compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+        ;   handle_commit_result(Result, RequestId, _Meta_Data, _Raw_Ids)
+        )
+    ;   % Non-branch descriptors (e.g. system_descriptor) have no advancing
+        % branch commit, so the commit queue cannot serialize them. Fall back
+        % to the synchronous path inside the already-open transaction.
+        stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
+        with_transaction(Context,
+                         (   set_stream_position(Stream, Pos),
+                             (   InputFormat = json
+                             ->  CoreStream = Stream
+                             ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, CoreStream)
+                             ),
+                             api_insert_documents_core(Transaction, CoreStream, Graph_Type, false, false,
+                                                       Doc_Merge, Overwrite, none, null, Raw_Ids),
+                             compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+                         ),
+                         Meta_Data,
+                         Guarded_Options),
+        meta_data_version(Transaction, Meta_Data, New_Data_Version),
+        Transaction_Meta_Data = Meta_Data
+    ).
+
+api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version,
+                             New_Data_Version, Transaction_Meta_Data, Ids, Options) :-
+    option(graph_type(Graph_Type), Options),
+    option_or_die(create(Create), Options),
+    option_or_die(author(Author), Options),
+    option_or_die(message(Message), Options),
+    option(merge_repeats(Doc_Merge), Options),
+    option(compress_ids(Compress_Ids), Options, true),
+    option(input_format(InputFormat), Options),
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    (   branch_descriptor{} :< Transaction.descriptor
+    ->  branch_key_from_transaction(Transaction, BranchKey),
+        stream_property(Stream, position(Pos)),
+        set_stream_position(Stream, Pos),
+        (   InputFormat = json
+        ->  ReplaceStream = Stream
+        ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
+        ),
+        stream_to_lazy_docs(ReplaceStream, LazyDocs),
+        collect_stream_docs(LazyDocs, Docs),
+        ElaborationOptions = [workers(4), wrap_api_errors(true)],
+        parallel_elaboration:elaborate_insert_request_db_with_contracts(Transaction, Docs, Pairs, ElaborationOptions),
+        query_context_transaction_objects(Context, TransactionObjects),
+        message_queue_create(ReplyQueue, []),
+        gensym(request, RequestId),
+        producer_timeout(ProducerTimeout),
+        setup_call_cleanup(
+            true,
+            (   (   Requested_Data_Version = no_data_version
+                ->  Package_Options = options{create: Create, merge_repeats: Doc_Merge}
+                ;   Package_Options = options{create: Create, merge_repeats: Doc_Merge,
+                                              data_version_guard: Descriptor-Requested_Data_Version}
+                ),
+                Package = commit_package{
+                    branch_key: BranchKey,
+                    all_branches: [BranchKey],
+                    transaction_objects: TransactionObjects,
+                    operation: replace,
+                    branch_operations: [branch_operation{
+                                           branch_key: BranchKey,
+                                           doc_contract_pairs: Pairs,
+                                           delete_ids: [],
+                                           raw_docs: Docs
+                                       }],
+                    commit_info: Context.commit_info,
+                    options: Package_Options,
+                    graph_type: Graph_Type,
+                    reply_queue: ReplyQueue,
+                    request_id: RequestId
+                },
+                commit_queue:enqueue_commit(BranchKey, Package),
+                (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
+                ->  true
+                ;   Result = timeout
+                )
+            ),
+            catch(message_queue_destroy(ReplyQueue), _, true)
+        ),
+        (   Result = success(Meta_Data, Raw_Ids)
+        ->  meta_data_version(Transaction, Meta_Data, New_Data_Version),
+            Transaction_Meta_Data = Meta_Data,
+            compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+        ;   handle_commit_result(Result, RequestId, _Meta_Data, _Raw_Ids)
+        )
+    ;   % Non-branch descriptors have no advancing branch commit; fall back to
+        % the synchronous path.
+        stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
+        with_transaction(Context,
+                         (   set_stream_position(Stream, Pos),
+                             (   InputFormat = json
+                             ->  CoreStream = Stream
+                             ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, CoreStream)
+                             ),
+                             api_replace_documents_core(Transaction, CoreStream, Graph_Type, false, Create,
+                                                       Doc_Merge, none, null, Raw_Ids),
+                             compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+                         ),
+                         Meta_Data,
+                         Guarded_Options),
+        meta_data_version(Transaction, Meta_Data, New_Data_Version),
+        Transaction_Meta_Data = Meta_Data
+    ).
+
+% The commit-queue acknowledgement timeout must be infinite in production:
+% once a package is enqueued the outcome is indeterminate if the producer
+% stops waiting, so a fired timeout can only report a 500 "may or may not
+% have been applied" (see api:CommitQueueTimeout). A finite value is a test
+% instrument only - it exists so tests and benchmarks can exercise the
+% timeout path (e.g. the test server sets it to 5 seconds). Worker health
+% is an operational concern, not something a client-facing timeout can
+% diagnose correctly.
+producer_timeout(Timeout) :-
+    (   getenv('TERMINUSDB_COMMIT_QUEUE_TIMEOUT', Value),
+        catch(atom_number(Value, Parsed), _, fail)
+    ->  (   Parsed > 0
+        ->  Timeout = Parsed
+        ;   Timeout = infinite
+        )
+    ;   Timeout = infinite
+    ).
+
+% Wait for the commit worker to reply on ReplyQueue. If Timeout is infinite,
+% block forever; otherwise use the supplied timeout. If the reply queue is
+% destroyed before a reply arrives (e.g. worker crash), treat it as a timeout.
+get_commit_result(ReplyQueue, RequestId, infinite, Result) :-
+    !,
+    catch(thread_get_message(ReplyQueue,
+                            commit_result(Result, RequestId)),
+          error(existence_error(message_queue, _), _),
+          (Result = timeout)).
+get_commit_result(ReplyQueue, RequestId, Timeout, Result) :-
+    catch(thread_get_message(ReplyQueue,
+                            commit_result(Result, RequestId),
+                            [timeout(Timeout)]),
+          error(existence_error(message_queue, _), _),
+          (Result = timeout)).
+
+handle_commit_result(success(Meta_Data, Ids), _RequestId, Meta_Data, Ids).
+handle_commit_result(reject(Reason), _RequestId, _Meta_Data, _Ids) :-
+    throw(error(commit_rejected(Reason), _)).
+handle_commit_result(error(Exception), _RequestId, _Meta_Data, _Ids) :-
+    (   Exception = error(_, _)
+    ->  throw(Exception)
+    ;   throw(error(Exception, _))
+    ).
+handle_commit_result(timeout, RequestId, _Meta_Data, _Ids) :-
+    throw(error(commit_queue_timeout(RequestId), _)).
+
+collect_stream_docs(LazyDocs, Docs) :-
+    (   get_attr(LazyDocs, 'util/lazy_docs', lazy_input(Stream, _))
+    ->  read_all_docs_from_stream(Stream, Docs)
+    ;   collect_stream_docs_(LazyDocs, Docs)
+    ).
+
+collect_stream_docs_([], []) :- !.
+collect_stream_docs_([Doc|Rest], [Doc|Docs]) :-
+    collect_stream_docs_(Rest, Docs).
+
+read_all_docs_from_stream(Stream, Docs) :-
+    read_all_docs_from_stream_(Stream, Docs).
+
+read_all_docs_from_stream_(Stream, Docs) :-
+    (   json_preserve:json_read_dict(Stream, Doc, [default_tag(json), end_of_file(eof)])
+    ->  (   Doc = eof
+        ->  Docs = []
+        ;   is_list(Doc)
+        ->  append(Doc, Rest, Docs),
+            read_all_docs_from_stream_(Stream, Rest)
+        ;   Docs = [Doc|Rest],
+            read_all_docs_from_stream_(Stream, Rest)
+        )
+    ;   Docs = []
+    ).
 
 api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version, Actual_Data_Version) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, _).
 
+format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Config, DataVersion) :-
+    database_context_object(Transaction, SchemaContext),
+    database_prefixes(Transaction, InternalPrefixes),
+    put_dict(schema_context, Config, SchemaContext, Config1),
+    put_dict(internal_prefixes, Config1, InternalPrefixes, Config2),
+    put_dict(transaction, Config2, Transaction, Config3),
+    % CGI headers are emitted lazily — at first body write or stream end —
+    % via this mutable flag cell shared with the stream write handlers,
+    % so lookup and conversion failures surface as real HTTP statuses
+    % instead of an embedded "Status:" block in a committed 200 body.
+    put_dict(stream_headers, Config3, headers(unsent), Config4),
+    put_dict(data_version, Config4, DataVersion, ConfigWithCtx),
 
+    document_stream_start(Format, ConfigWithCtx, StreamState),
+
+    % Body preamble (e.g. turtle @prefix block, rdfxml prolog) must be
+    % emitted after the CGI headers — writing it in document_stream_start
+    % would corrupt the response framing. Formats that define a preamble
+    % emit headers before it since a preamble is itself body output.
+    (   clause(document_stream_preamble(Format, _, _), true)
+    ->  ensure_document_stream_headers(Format, ConfigWithCtx)
+    ;   true
+    ),
+    ignore(document_stream_preamble(Format, ConfigWithCtx, StreamState)),
+
+    (   nonvar(Query)
+    ->  die_if(Graph_Type \= instance,
+               error(query_is_only_supported_for_instance_graphs, _)),
+        expand_query_document(Transaction, Type, Query, Query_Ex, Type_Ex),
+        forall(api_get_documents_by_query(Transaction, instance, Type_Ex, Query_Ex, ConfigWithCtx, Document),
+               document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ;   ground(Id)
+    ->  api_get_document(Graph_Type, Transaction, Id, ConfigWithCtx, Document),
+        document_stream_write(Format, ConfigWithCtx, StreamState, Document)
+    ;   ground(Ids)
+    ->  forall(
+            (   member(OneId, Ids),
+                api_get_document(Graph_Type, Transaction, OneId, ConfigWithCtx, Document)
+            ),
+            document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ;   get_dict(id_prefix, ConfigWithCtx, Id_Prefix),
+        ground(Id_Prefix)
+    ->  forall(
+            (   api_generate_document_ids_by_id_prefix(Graph_Type, Transaction, Type, Id_Prefix, ConfigWithCtx, Doc_Id),
+                api_get_document(Graph_Type, Transaction, Doc_Id, ConfigWithCtx, Document)),
+            document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ;   ground(Type)
+    ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, ConfigWithCtx, Document),
+               document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ;   forall(api_get_documents(Transaction, Graph_Type, ConfigWithCtx, Document),
+               document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ),
+
+    % Empty streams still get their CGI headers.
+    ensure_document_stream_headers(Format, ConfigWithCtx),
+    document_stream_end(Format, ConfigWithCtx).
+
+%% ensure_document_stream_headers(+Format, +Config) is det.
+%
+%  Emits the CGI headers the first time a stream handler produces body
+%  output. The headers flag is a mutable term carried in Config so all
+%  handlers of one request share it. Configs without the flag (e.g. the
+%  MCP document renderer capturing text via with_output_to/2) get no
+%  headers — they are not HTTP responses.
+ensure_document_stream_headers(Format, Config) :-
+    (   get_dict(stream_headers, Config, Headers)
+    ->  (   arg(1, Headers, sent)
+        ->  true
+        ;   nb_setarg(1, Headers, sent),
+            document_stream_headers(Format, Config.request,
+                                    Config.data_version)
+        )
+    ;   true
+    ).
+
+% Embedding helpers
+embedding_type_queries_from_transaction(Transaction, TypeQueries) :-
+    database_schema(Transaction, Schema),
+    findall(
+        Type-Query-Template,
+        (   xrdf(Schema, Type, sys:metadata, _),
+            schema_metadata_descriptor(Schema, Type, metadata(Metadata)),
+            get_dict(embedding, Metadata, Embedding),
+            get_dict(query, Embedding, Query),
+            (   get_dict(template, Embedding, Template)
+            ->  true
+            ;   Template = none)),
+        TypeQueries
+    ).
+
+% Normalize a document type IRI to the schema namespace.
+% Some instance documents store rdf:type with the @base prefix;
+% for matching against schema classes we need the @schema prefix.
+normalize_document_type(Transaction, DocType, Normalized) :-
+    database_prefixes(Transaction, Prefixes),
+    (   get_dict('@base', Prefixes, Base),
+        get_dict('@schema', Prefixes, Schema),
+        atom_concat(Base, Local, DocType)
+    ->  atom_concat(Schema, Local, Normalized)
+    ;   Normalized = DocType
+    ).
+
+embedding_document_types(Transaction, _Graph_Type, Id, Ids, Type, Query, DocTypes) :-
+    database_prefixes(Transaction, Prefixes),
+    (   nonvar(Query)
+    ->  expand_query_document(Transaction, Type, Query, _Query_Ex, Type_Ex),
+        (   ground(Type_Ex)
+        ->  prefix_expand(Type_Ex, Prefixes, Expanded),
+          findall(DT, (class_subsumed(Transaction, DT, Expanded),
+                       is_instance_class(Transaction, _, DT)),
+                  DocTypes)
+        ;   findall(DT, is_instance_class(Transaction, _, DT), DocTypes)
+        )
+    ;   ground(Id)
+    ->  findall(Norm,
+                (   ask(Transaction, t(Id, rdf:type, DT),
+                        [compress_prefixes(false)]),
+                    normalize_document_type(Transaction, DT, Norm)),
+                DocTypes)
+    ;   ground(Ids)
+    ->  findall(Norm,
+                (   member(OneId, Ids),
+                    ask(Transaction, t(OneId, rdf:type, DT),
+                        [compress_prefixes(false)]),
+                    normalize_document_type(Transaction, DT, Norm)),
+                DocTypes)
+    ;   ground(Type)
+    ->  prefix_expand(Type, Prefixes, Expanded),
+        findall(DT, (class_subsumed(Transaction, DT, Expanded),
+                     is_instance_class(Transaction, _, DT)),
+                DocTypes)
+    ;   findall(DT, is_instance_class(Transaction, _, DT), DocTypes)
+    ).
+
+% Embedding stream handlers
+document_stream_headers(embedding, Request, DataVersion) :-
+    routes:write_cors_headers(Request),
+    (   DataVersion \= no_data_version
+    ->  routes:write_data_version_header(DataVersion)
+    ;   true
+    ),
+    format("Transfer-Encoding: chunked~n"),
+    format("Content-type: text/plain; charset=UTF-8~n~n").
+
+document_stream_start(embedding, Config, StreamState) :-
+    System_DB = Config.system_db,
+    Transaction = Config.transaction,
+    (   Config.request = []
+    ->  GraphSpec = ''
+    ;   memberchk(path(Path), Config.request)
+    ->  atom_string(GraphSpec, Path)
+    ;   GraphSpec = ''
+    ),
+    embedding_type_queries_from_transaction(Transaction, TypeQueries),
+    (   TypeQueries = []
+    ->  EmbeddingContext = none,
+        TypeQueryMap = []
+    ;   maplist([Type-Query-_Template, Type-Query]>>true, TypeQueries, Queries),
+        convlist([Type-Query-Template, Type-Template]>>ground(Template),
+                 TypeQueries, Templates),
+        all_class_frames(Transaction, Frames,
+                         [compress_ids(true), expand_abstract(true), simple(true)]),
+        '$embedding':embedding_context(System_DB, Transaction, Templates, Queries,
+                                       Frames, EmbeddingContext),
+        findall(Type-Query-Template,
+                member(Type-Query-Template, TypeQueries),
+                TypeQueryMap)
+    ),
+    StreamState = state(System_DB, Transaction, EmbeddingContext, GraphSpec, TypeQueryMap).
+
+document_stream_write(embedding, Config, StreamState, Document) :-
+    StreamState = state(System_DB, Transaction, EmbeddingContext, GraphSpec, TypeQueryMap),
+    database_prefixes(Transaction, Prefixes),
+    (   get_dict('@type', Document, Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   get_dict('@id', Document, Id),
+        prefix_expand(Id, Prefixes, Id_Ex),
+        ask(Transaction, t(Id_Ex, rdf:type, Type_Ex), [compress_prefixes(false)])
+    ->  true
+    ;   Type_Ex = 'http://terminusdb.com/schema/sys#JSONDocument'
+    ),
+    get_dict('@id', Document, Id),
+    prefix_expand(Id, Prefixes, Id_Ex),
+    (   EmbeddingContext \= none,
+        member(Type_Ex-_Query-_Template, TypeQueryMap)
+    ->  '$embedding':embedding_string_for(System_DB, Transaction, EmbeddingContext,
+                                           Type_Ex, Id_Ex, EmbeddingString)
+    ;   plugins:embedding_for_type(GraphSpec, Type_Ex, Document, EmbeddingString)
+    ->  true
+    ;   plugins:embedding_for_type(Type_Ex, Document, EmbeddingString)
+    ->  true
+    ;   EmbeddingString = ''
+    ),
+    ensure_document_stream_headers(embedding, Config),
+    format("~w~n", [EmbeddingString]).
+
+document_stream_end(embedding, _Config).
+
+% Markdown stream handlers — strip @id/@type, convert JSON to markdown via json2markdown
+document_stream_headers(markdown, Request, DataVersion) :-
+    routes:write_cors_headers(Request),
+    (   DataVersion \= no_data_version
+    ->  routes:write_data_version_header(DataVersion)
+    ;   true
+    ),
+    format("Transfer-Encoding: chunked~n"),
+    format("Content-type: text/markdown; charset=UTF-8~n~n").
+
+document_stream_start(markdown, _Config, StreamState) :-
+    StreamState = state.
+
+document_stream_write(markdown, Config, state, Document) :-
+    strip_metadata_fields(Document, Cleaned),
+    json2markdown:json_to_markdown(Cleaned, Markdown),
+    ensure_document_stream_headers(markdown, Config),
+    format("~w~n", [Markdown]).
+
+document_stream_end(markdown, _Config).
+
+%% strip_metadata_fields(+Document, -Cleaned) is det.
+%
+%  Recursively removes @id and @type keys from a JSON dict, including
+%  nested dicts and lists. Returns the cleaned structure.
+strip_metadata_fields(Dict, Cleaned) :-
+    is_dict(Dict),
+    !,
+    dict_pairs(Dict, Tag, Pairs),
+    exclude(at_metadata_pair, Pairs, ContentPairs),
+    maplist([K-V, K-VC]>>strip_metadata_fields(V, VC), ContentPairs, CleanedPairs),
+    dict_pairs(Cleaned, Tag, CleanedPairs).
+strip_metadata_fields(List, Cleaned) :-
+    is_list(List),
+    !,
+    maplist([V, VC]>>strip_metadata_fields(V, VC), List, Cleaned).
+strip_metadata_fields(Scalar, Scalar).
+
+at_metadata_pair(Key-_Value) :-
+    atom(Key),
+    (   Key == '@id'
+    ;   Key == '@type'
+    ).
+
+%% embedding_has_query_for_type(+TypeQueryMap, +Type_Ex) is semidet.
+%%
+%%  True if the type has an embedding query defined in the schema metadata.
+embedding_has_query_for_type(TypeQueryMap, Type_Ex) :-
+    member(Type_Ex-_Query-_Template, TypeQueryMap),
+    !.
+
+% Embedding selector with full pre-flight
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
+                           Query, Config, Requested_Data_Version,
+                           Actual_Data_Version, Initial_Goal) :-
+    get_dict(counted, Config, true),
+    !,
+    die_if((nonvar(Id) ; nonvar(Ids) ; nonvar(Query)),
+           error(counted_not_supported_for_selector, _)),
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type,
+                            Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
+                Transaction),
+    api_count_documents(Transaction, Graph_Type, Type, Config, Count),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
+    json_write_dict(current_output,
+                    _{'@type':'api:DocumentCountResponse',
+                      'api:count':Count},
+                    []),
+    nl.
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
+                           Query, Config, Requested_Data_Version,
+                           Actual_Data_Version, _Initial_Goal) :-
+    get_dict(format, Config, embedding),
+    !,
+    die_if(Graph_Type \= instance,
+           error(embedding_only_supported_for_instance_graphs, _)),
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type,
+                            Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
+                Transaction),
+    % Embedding type detection and the write path both consume the
+    % document's @id, so fetch raw documents with it regardless of the
+    % request's raw_id default.
+    put_dict(_{system_db: System_DB, raw_id: true}, Config, ConfigWithSystem),
+    embedding_type_queries_from_transaction(Transaction, TypeQueries),
+    (   TypeQueries = []
+    ->  (   ground(Id),
+            api_get_document(Graph_Type, Transaction, Id, ConfigWithSystem, Document),
+            (   plugins:embedding_for_type(_, _, Document, _)
+            ;   plugins:embedding_for_type(_, Document, _)
+            )
+        ->  true
+        ;   throw(error(no_embedding_queries_defined, _))
+        )
+    ;   true
+    ),
+    embedding_document_types(Transaction, Graph_Type, Id, Ids, Type, Query,
+                             DocTypes),
+    list_to_set(DocTypes, _UniqueTypes),
+    format_read_documents(embedding, Transaction, Graph_Type, Id, Ids, Type,
+                        Query, ConfigWithSystem, Actual_Data_Version).
+
+% Markdown selector — uses json2markdown directly, no embedding pipeline needed
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
+                           Query, Config, Requested_Data_Version,
+                           Actual_Data_Version, _Initial_Goal) :-
+    get_dict(format, Config, markdown),
+    !,
+    die_if(Graph_Type \= instance,
+           error(embedding_only_supported_for_instance_graphs, _)),
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type,
+                            Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
+                Transaction),
+    embedding_document_types(Transaction, Graph_Type, Id, Ids, Type, Query,
+                             DocTypes),
+    list_to_set(DocTypes, _UniqueTypes),
+    put_dict(system_db, Config, System_DB, ConfigWithSystem),
+    format_read_documents(markdown, Transaction, Graph_Type, Id, Ids, Type,
+                        Query, ConfigWithSystem, Actual_Data_Version).
+
+% ids format — stream the matching document ids instead of the documents
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    get_dict(format, Config, ids),
+    !,
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
+    json_stream_start(Config, Stream_Started),
+    api_print_document_ids(Graph_Type, Transaction, Id, Ids, Type, Query, Config, Stream_Started),
+    json_stream_end(Config).
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,1).
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, _Initial_Goal) :-
+    get_dict(format, Config, Format),
+    Format \= json,
+    !,
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Config, Actual_Data_Version).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     nonvar(Query),
     !,
@@ -589,13 +2530,53 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Ids, _Type, _
     !,
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
-    do_or_die(api_document_exists(Graph_Type, Transaction, Id),
-              error(document_not_found(Id), _)),
     get_dict(as_list, Config, As_List),
-    call(Initial_Goal, As_List),
-    json_stream_start(Config, Stream_Started),
-    api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started),
-    json_stream_end(Config).
+    (   As_List = true
+    ->  % as_list mode: return empty array if document doesn't exist
+        % (handles TOCTOU race with cascade deletes in pre_commit_hook)
+        % Write Link header if schema @context has a string URI
+        (   catch(
+                (   get_schema_document(Transaction, '@context', ContextDoc),
+                    get_dict('@context', ContextDoc, ContextURI),
+                    (atom(ContextURI) ; string(ContextURI))
+                ),
+                _,
+                fail
+            )
+        ->  routes:write_json_ld_context_link_header(some(ContextURI))
+        ;   true
+        ),
+        call(Initial_Goal, true),
+        json_stream_start(Config, Stream_Started),
+        (   catch(
+                api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started),
+                error(document_not_found(_), _),
+                true  % Silently succeed — document was cascade-deleted
+            )
+        ->  true
+        ;   true
+        ),
+        json_stream_end(Config)
+    ;   % Non-as_list mode: standard 404 on missing document
+        do_or_die(api_document_exists(Graph_Type, Transaction, Id),
+                  error(document_not_found(Id), _)),
+        % Write Link header if schema @context has a string URI
+        (   catch(
+                (   get_schema_document(Transaction, '@context', ContextDoc),
+                    get_dict('@context', ContextDoc, ContextURI),
+                    (atom(ContextURI) ; string(ContextURI))
+                ),
+                _,
+                fail
+            )
+        ->  routes:write_json_ld_context_link_header(some(ContextURI))
+        ;   true
+        ),
+        call(Initial_Goal, false),
+        json_stream_start(Config, Stream_Started),
+        api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started),
+        json_stream_end(Config)
+    ).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Ids, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     ground(Ids),
     !,
@@ -618,7 +2599,10 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, _
     call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
-    (   ground(Type)
+    (   get_dict(id_prefix, Config, Id_Prefix),
+        ground(Id_Prefix)
+    ->  api_print_documents_by_id_prefix(Graph_Type, Transaction, Config, Id_Prefix, Type, Stream_Started)
+    ;   ground(Type)
     ->  api_print_documents_by_type(Graph_Type, Transaction, Config, Type, Stream_Started)
     ;   api_print_documents(Graph_Type, Transaction, Config, Stream_Started)
     ),
@@ -654,6 +2638,201 @@ default_schema_insert_options(Options) :-
                merge_repeats(false)
               ].
 
+% ---------------------------------------------------------------------------
+% Commit-queue worker support
+% ---------------------------------------------------------------------------
+
+:- dynamic execute_commit_package/2.
+:- dynamic commit_package_test_handler/1.
+
+run_commit_package(Package) :-
+    execute_commit_package(Package, Result),
+    deliver_commit_result(Package, Result).
+
+execute_commit_package(Package, Result) :-
+    commit_package_test_handler(Handler),
+    !,
+    once(call(Handler, Package, Result)).
+execute_commit_package(Package, Result) :-
+    Package.all_branches = [_BranchKey],
+    !,
+    [Transaction] = Package.transaction_objects,
+    transaction_object_database_key(Transaction, Key),
+    with_meta_commit_lock(
+        Key,
+        do_execute_commit_package(Package, Result)
+    ).
+execute_commit_package(_Package, Result) :-
+    Result = error(error(multi_branch_commit_not_implemented, _)).
+
+do_execute_commit_package(Package, Result) :-
+    reset_transaction_objects_graph_descriptors(Package.transaction_objects),
+    open_commit_windows_for_transactions(Package.transaction_objects, GuardIds),
+    (   catch(
+            (   apply_package_changes(Package, Ids),
+                run_transactions(Package.transaction_objects, _Witnesses, MetaData, Package.options),
+                Result = success(MetaData, Ids)
+            ),
+            Exception,
+            (   json_log_error_formatted("execute_commit_package caught exception for ~w: ~w", [Package.branch_key, Exception]),
+                (   Exception = fail_transaction
+                ->  catch(
+                        (   run_synchronous_reelaboration_and_commit(Package, Result)
+                        ->  true
+                        ;   json_log_error_formatted("run_synchronous_reelaboration_and_commit failed silently", []),
+                            fail
+                        ),
+                        SyncError,
+                        (   json_log_error_formatted("run_synchronous_reelaboration_and_commit error: ~w", [SyncError]),
+                            Result = error(SyncError)
+                        )
+                    )
+                ;   Exception = error(elaboration_stale(_), _)
+                ->  Result = reject(schema_changed)
+                ;   Result = error(Exception)
+                )
+            )
+        )
+    ->  true
+    ;   % Guarded package lost the label CAS: the client asked to commit
+        % onto a version that has moved, so the answer is a mismatch, not
+        % a merge. Re-elaboration cannot apply anyway (builders are spent).
+        get_dict(data_version_guard, Package.options, Guard_Descriptor-Guard_Requested)
+    ->  (   catch(
+                (   open_descriptor(Guard_Descriptor, Fresh_Transaction),
+                    transaction_data_version(Fresh_Transaction, Fresh_Actual),
+                    Fresh_Actual \= Guard_Requested
+                ->  Result = error(error(data_version_mismatch(Guard_Requested, Fresh_Actual), _))
+                ;   Result = error(unexpected_commit_failure)
+                ),
+                GuardError,
+                Result = error(GuardError)
+            )
+        )
+    ;   json_log_error_formatted("execute_commit_package catch block failed", []),
+        Result = error(unexpected_commit_failure)
+    ),
+    close_commit_windows(GuardIds),
+    (   Result = success(_, _),
+        schema_change_in_package(Package)
+    ->  commit_queue:invalidate_pending_after_schema_change(Package.branch_key)
+    ;   true
+    ).
+
+% run_synchronous_reelaboration_and_commit/2 is called from run_commit_package
+% when the worker already holds the branch lock, so it must NOT re-acquire it.
+run_synchronous_reelaboration_and_commit(Package, Result) :-
+    get_dict(branch_operations, Package, BranchOperations),
+    BranchOperations = [BranchOp],
+    get_dict(raw_docs, BranchOp, RawDocs),
+    get_dict(transaction_objects, Package, TransactionObjects),
+    [Transaction] = TransactionObjects,
+    get_dict(operation, Package, Operation),
+    get_dict(options, Package, Options),
+    get_dict(graph_type, Package, Graph_Type),
+    reset_transaction_objects_graph_descriptors(TransactionObjects),
+    parallel_elaboration:elaborate_insert_request_db_with_contracts(Transaction, RawDocs, NewPairs,
+                                                                    [workers(4), wrap_api_errors(true)]),
+    (   Operation = insert
+    ->  option(overwrite(Overwrite), Options, false),
+        option(merge_repeats(Doc_Merge), Options, false),
+        api_insert_documents_core(Transaction, pairs(NewPairs), Graph_Type, false, false, Doc_Merge, Overwrite, none, null, Ids)
+    ;   Operation = replace
+    ->  option(create(Create), Options, false),
+        option(merge_repeats(Doc_Merge), Options, false),
+        api_replace_documents_core(Transaction, pairs(NewPairs), Graph_Type, false, Create, Doc_Merge, none, null, Ids)
+    ),
+    run_transactions([Transaction], _Witnesses, MetaData, Options),
+    Result = success(MetaData, Ids).
+
+apply_package_changes(Package, Ids) :-
+    get_dict(operation, Package, Operation),
+    get_dict(transaction_objects, Package, TransactionObjects),
+    get_dict(branch_operations, Package, BranchOperations),
+    get_dict(options, Package, Options),
+    get_dict(graph_type, Package, Graph_Type),
+    put_dict(_{graph_type: Graph_Type}, Options, BranchOptions),
+    [Transaction] = TransactionObjects,
+    BranchOperations = [BranchOperation],
+    get_dict(doc_contract_pairs, BranchOperation, Pairs),
+    get_dict(delete_ids, BranchOperation, DeleteIds),
+    apply_branch_operation(Operation, Transaction, Pairs, DeleteIds, BranchOptions, Ids).
+
+apply_branch_operation(insert, Transaction, Pairs, [], Options, Ids) :- !,
+    option(graph_type(Graph_Type), Options),
+    option(overwrite(Overwrite), Options, false),
+    option(merge_repeats(Doc_Merge), Options, false),
+    enrich_pairs_for_operation(Pairs, insert, EnrichedPairs),
+    api_insert_documents_core(Transaction, pairs(EnrichedPairs), Graph_Type, false, false, Doc_Merge, Overwrite, none, null, Ids).
+apply_branch_operation(replace, Transaction, Pairs, [], Options, Ids) :- !,
+    option(graph_type(Graph_Type), Options),
+    option(create(Create), Options, false),
+    option(merge_repeats(Doc_Merge), Options, false),
+    enrich_pairs_for_operation(Pairs, replace, EnrichedPairs),
+    api_replace_documents_core(Transaction, pairs(EnrichedPairs), Graph_Type, false, Create, Doc_Merge, none, null, Ids).
+apply_branch_operation(delete, Transaction, [], DeleteIds, _Options, Ids) :- !,
+    findall(Id, (member(Id, DeleteIds), delete_document(Transaction, Id)), Ids).
+
+enrich_pairs_for_operation(Pairs, Operation, EnrichedPairs) :-
+    maplist({Operation}/[Doc-Contract, Doc-EnrichedContract]>>(
+                enrich_pair_for_operation(Operation, Contract, EnrichedContract)
+            ),
+            Pairs, EnrichedPairs).
+
+enrich_pair_for_operation(insert, Contract, EnrichedContract) :-
+    !,
+    contract_conflict_sets(insert, Contract, MustNotExist, MustExist),
+    EnrichedContract = Contract.put(_{must_exist: MustExist, must_not_exist: MustNotExist}).
+enrich_pair_for_operation(replace, Contract, EnrichedContract) :-
+    !,
+    contract_conflict_sets(replace, Contract, MustNotExist, MustExist),
+    EnrichedContract = Contract.put(_{must_exist: MustExist, must_not_exist: MustNotExist}).
+enrich_pair_for_operation(delete, Contract, Contract).
+
+contract_conflict_sets(insert, Contract, MustNotExist, []) :-
+    get_dict(id_pairs, Contract, IdPairs),
+    maplist([Id-_, Id]>>true, IdPairs, MustNotExist).
+contract_conflict_sets(replace, Contract, MustNotExist, MustExist) :-
+    get_dict(id_pairs, Contract, IdPairs),
+    include([_-normal]>>true, IdPairs, NormalPairs),
+    maplist([Id-_, Id]>>true, NormalPairs, MustExist),
+    created_ids(IdPairs, MustNotExist).
+contract_conflict_sets(delete, _Contract, [], []).
+
+created_ids(IdPairs, CreatedIds) :-
+    include([_-Variety]>>(member(Variety, [created, value_hash])), IdPairs, CreatedPairs),
+    maplist([Id-_, Id]>>true, CreatedPairs, CreatedIds).
+
+branch_transaction_object(TransactionObjects, BranchKey, Transaction) :-
+    member(Transaction, TransactionObjects),
+    branch_key_from_transaction(Transaction, BranchKey),
+    !.
+
+open_commit_windows_for_transactions([], []).
+open_commit_windows_for_transactions([Transaction|Rest], [GuardId|GuardIds]) :-
+    branch_key_from_transaction(Transaction, BranchKey),
+    pre_branch_commit_id(Transaction, CommitId),
+    parallel_elaboration:open_commit_window_for_branch_head(Transaction, BranchKey, CommitId, 200, GuardId),
+    open_commit_windows_for_transactions(Rest, GuardIds).
+
+close_commit_windows(GuardIds) :-
+    forall(member(GuardId, GuardIds),
+           catch('$change_window':close_commit_window(GuardId), _, true)).
+
+deliver_commit_result(Package, Result) :-
+    get_dict(reply_queue, Package, ReplyQueue),
+    get_dict(request_id, Package, RequestId),
+    !,
+    catch(thread_send_message(ReplyQueue,
+                             commit_result(Result, RequestId)),
+          error(existence_error(message_queue, _), _),
+          true).
+deliver_commit_result(_Package, _Result).
+
+schema_change_in_package(Package) :-
+    Package.graph_type = schema,
+    !.
+
 :- begin_tests(delete_document, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -671,7 +2850,7 @@ insert_some_cities(System, Path) :-
   "name" : "Utrecht" }',
                 Stream),
     default_insert_options(Options),
-    api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _Ids, Options).
+    api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _, _Ids, Options).
 
 test(delete_objects_with_stream,
      [setup((setup_temp_store(State),
@@ -689,7 +2868,7 @@ test(delete_objects_with_stream,
         message("message")
     ],
 
-    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _Ids, Options),
+    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _, _Ids, Options),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -697,7 +2876,6 @@ test(delete_objects_with_stream,
             (   get_document_uri(Context, true, Id),
                 compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
-
     Ids = ['City/Utrecht'].
 
 test(delete_objects_with_string,
@@ -714,7 +2892,7 @@ test(delete_objects_with_string,
         author("author"),
         message("message")
     ],
-    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _Ids, Options),
+    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _, _Ids, Options),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -738,7 +2916,7 @@ test(delete_objects_with_mixed_string_stream,
         author("author"),
         message("message")
     ],
-    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _Ids, Options),
+    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _, _Ids, Options),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -768,7 +2946,7 @@ insert_some_cities(System, Path) :-
   "name" : "Utrecht" }',
                 Stream),
     default_insert_options(Options),
-    api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _Ids, Options).
+    api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _, _Ids, Options).
 
 test(replace_objects_with_stream,
      [setup((setup_temp_store(State),
@@ -788,10 +2966,101 @@ test(replace_objects_with_stream,
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               create(false)],
-    api_replace_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, Ids, Options),
+               create(false),
+               compress_ids(false)],
+    api_replace_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _, Ids, Options),
 
     Ids = ['http://example.com/data/world/City/Dublin','http://example.com/data/world/City/Pretoria'].
+
+test(replace_duplicate_documents_with_merge_repeats,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin,foo))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    insert_some_cities(System, 'admin/foo'),
+
+    open_string('
+{ "@type": "City",
+  "@id" : "City/Dublin",
+  "name" : "Baile Atha Cliath" }
+{ "@type": "City",
+  "@id" : "City/Dublin",
+  "name" : "Baile Atha Cliath" }', Stream),
+    Options = [graph_type(instance),
+               author("author"),
+               message("message"),
+               create(false),
+               merge_repeats(true)],
+    api_replace_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _, Ids, Options),
+
+    length(Ids, 2).
+
+test(replace_duplicate_documents_without_merge_repeats,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin,foo))),
+      cleanup(teardown_temp_store(State)),
+      error(same_ids_in_one_transaction(_))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    insert_some_cities(System, 'admin/foo'),
+
+    open_string('
+{ "@type": "City",
+  "@id" : "City/Dublin",
+  "name" : "Baile Atha Cliath" }
+{ "@type": "City",
+  "@id" : "City/Dublin",
+  "name" : "Baile Atha Cliath" }', Stream),
+    Options = [graph_type(instance),
+               author("author"),
+               message("message"),
+               create(false)],
+    api_replace_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _, _Ids, Options).
+
+test(replace_document_with_explicit_id_for_no_key_class, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Simple",
+              name: "xsd:string"})
+    ),
+
+    open_string('{"@type":"Simple","@id":"Simple/doc1","name":"original"}', Stream_1),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    default_insert_options(Options),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version,
+                         _New_Data_Version_1, _, Ids, Options),
+    Ids = [Id],
+
+    atom_string(Id, Id_String),
+    format(string(Replace_JSON), '{"@type":"Simple","@id":"~s","name":"replaced"}', [Id_String]),
+    open_string(Replace_JSON, Stream_2),
+
+    Options1 = [graph_type(instance),
+                author("author"),
+                message("message"),
+                create(false)],
+    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version,
+                          _New_Data_Version_2, _, [Id], Options1),
+
+    open_descriptor(Desc, T),
+    get_document(T, Id, Doc),
+    get_dict(name, Doc, "replaced").
+
+test(explicit_id_document_is_parallel_eligible_for_replace) :-
+    Doc = json{'@id': "Simple/doc1", '@type': "Simple", name: "original"},
+    docs_parallel_eligible([Doc]).
 
 :- end_tests(replace_document).
 
@@ -800,6 +3069,7 @@ test(replace_objects_with_stream,
 
 :- use_module(core(util/test_utils)).
 :- use_module(core(document)).
+:- use_module(core(document/json), [insert_document_expanded/3]).
 :- use_module(core(api/api_error)).
 
 test(key_missing, [
@@ -854,6 +3124,68 @@ test(key_missing, [
              'api:message':"Schema check failure",
              'api:status':"api:failure"}.
 
+test(back_links_not_supported_in_replace, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "CycleDoc",
+              other: _{'@type': "Set",
+                       '@class': "CycleDoc"}})
+    ),
+
+    open_string('{"@type": "CycleDoc"}', Stream_1),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    default_insert_options(Options),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version,
+                         _New_Data_Version_1, _, Ids, Options),
+    Ids = [Id],
+
+    atom_string(Id, Id_String),
+    format(string(Replace_JSON), '[{"@type":"CycleDoc","@id":"~s","@linked-by":{"@id":"~s","@property":"other"}}]', [Id_String, Id_String]),
+    open_string(Replace_JSON, Stream_2),
+
+    catch(
+        api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version,
+                              _New_Data_Version_2, _, _, [graph_type(instance),
+                                                           author("author"),
+                                                           message("message"),
+                                                           create(false)]),
+        Error,
+        api_error_jsonld(replace_documents, Error, JSON)
+    ),
+
+    get_dict('@type', JSON, 'api:ReplaceDocumentErrorResponse'),
+    get_dict('api:error', JSON, ErrorDict),
+    get_dict('@type', ErrorDict, 'api:LinksInReplaceError'),
+    get_dict('api:status', JSON, "api:failure").
+
+test(invalid_id_type_raises_clear_error, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                write_schema_string('{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n{"@id":"Thing","@type":"Class","@key":{"@type":"Random"},"name":"xsd:string"}\n', Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(Desc, Context,
+        (   query_context_transaction_objects(Context, [Transaction]),
+            Elaborated = json{'@id': 123, '@type': 'Thing'},
+            catch(
+                insert_document_expanded(Transaction, Elaborated, _),
+                error(type_error(atom_or_string, 123), _),
+                true
+            )
+        )),
+    !.
+
 :- end_tests(document_error_reporting).
 :- begin_tests(document_id_capture, []).
 :- use_module(core(util/test_utils)).
@@ -897,7 +3229,7 @@ test(basic_capture, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
     default_insert_options(Options),
-    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _, _Ids, Options),
 
     open_descriptor(Desc, T),
     get_document(T, 'Person/Bert', Bert),
@@ -939,7 +3271,7 @@ test(capture_missing, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
     default_insert_options(Options),
-    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _, _Ids, Options).
 
 test(double_capture, [
          setup((setup_temp_store(State),
@@ -980,7 +3312,7 @@ test(double_capture, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
     default_insert_options(Options),
-    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _, _Ids, Options).
 
 test(basic_capture_list, [
          setup((setup_temp_store(State),
@@ -1019,7 +3351,7 @@ test(basic_capture_list, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
     default_insert_options(Options),
-    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _, _Ids, Options),
 
     open_descriptor(Desc, T),
     get_document(T, 'Person/Bert', Bert),
@@ -1062,7 +3394,7 @@ test(basic_capture_replace, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
     default_insert_options(Options),
-    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, _Ids_1, Options),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, _, _Ids_1, Options),
 
     open_string('
 { "@type": "Person",
@@ -1080,7 +3412,7 @@ test(basic_capture_replace, [
                 author("author"),
                 message("message"),
                 create(false)],
-    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version, _New_Data_Version_2, _Ids_2, Options1),
+    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version, _New_Data_Version_2, _, _Ids_2, Options1),
 
     open_descriptor(Desc, T),
     get_document(T, 'Person/Bert', Bert),
@@ -1124,7 +3456,7 @@ test(basic_capture_list_replace, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
     default_insert_options(Options),
-    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, _Ids_1, Options),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, _, _Ids_1, Options),
 
     open_string('
 [{ "@type": "Person",
@@ -1142,7 +3474,7 @@ test(basic_capture_list_replace, [
                 author("author"),
                 message("message"),
                 create(false)],
-    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version, _New_Data_Version_2, _Ids_2, Options1),
+    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version, _New_Data_Version_2, _, _Ids_2, Options1),
 
     open_descriptor(Desc, T),
     get_document(T, 'Person/Bert', Bert),
@@ -1189,7 +3521,7 @@ test(insert_subdocument_as_document, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
     default_insert_options(Options),
-    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _, _Ids, Options).
 
 test(replace_nonexisting_subdocument_as_document, [
          setup((setup_temp_store(State),
@@ -1223,7 +3555,7 @@ test(replace_nonexisting_subdocument_as_document, [
                author("author"),
                message("message"),
                create(true)],
-    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
+    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _, _Ids, Options).
 
 test(replace_existing_subdocument_as_document, [
          setup((setup_temp_store(State),
@@ -1272,7 +3604,7 @@ test(replace_existing_subdocument_as_document, [
     super_user_authority(Auth),
     Options = [author("author"),
                message("message")],
-    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, [Outer_Id], Options),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, _, [Outer_Id], Options),
 
     get_document(Desc, Outer_Id, Outer_Document),
     Id = (Outer_Document.thing.'@id'),
@@ -1286,7 +3618,7 @@ test(replace_existing_subdocument_as_document, [
                author("author"),
                message("message"),
                create(false)],
-    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version, _New_Data_Version_2, _Ids_2, Options),
+    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version, _New_Data_Version_2, _, _Ids_2, Options),
 
     get_document(Desc, Id, _Inner_Document).
 
@@ -1321,7 +3653,7 @@ test(full_replace_schema, [
                full_replace(true),
                graph_type(schema),
                message("test")],
-    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, _, Options),
 
     resolve_absolute_string_descriptor("admin/testdb", TestDB),
     open_descriptor(TestDB, T),
@@ -1343,7 +3675,7 @@ test(full_replace_instance, [
                graph_type(instance),
                full_replace(true),
                message("test")],
-    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, [Id], Options),
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, [Id], Options),
 
     resolve_absolute_string_descriptor("admin/testdb", TestDB),
     open_descriptor(TestDB, T),
@@ -1362,7 +3694,7 @@ test(full_replace_instance_no_author, [
 {"@type": "City", "name": "Utrecht"}
 ', Stream),
     Options = [],
-    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, [Id], Options),
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, [Id], Options),
 
     resolve_absolute_string_descriptor("admin/testdb", TestDB),
     open_descriptor(TestDB, T),
@@ -1371,3 +3703,1570 @@ test(full_replace_instance_no_author, [
     _{'@type': 'City', 'name': "Utrecht"} :< Document.
 :- end_tests(full_replace).
 
+:- begin_tests(document_format_detection).
+:- use_module(config(terminus_config)).
+
+test(detect_input_json) :-
+    detect_input_format('application/json', json).
+
+test(detect_input_json_with_charset) :-
+    detect_input_format('application/json; charset=UTF-8', json).
+
+test(detect_input_jsonld_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(jsonld), _)]) :-
+    detect_input_format('application/ld+json', _).
+
+test(detect_input_rdfxml_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(rdfxml), _)]) :-
+    detect_input_format('application/rdf+xml', _).
+
+test(detect_input_turtle_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(turtle), _)]) :-
+    detect_input_format('text/turtle', _).
+
+test(detect_input_unknown_rejects,
+     [error(bad_content_type('text/plain', 'application/json'), _)]) :-
+    detect_input_format('text/plain', _).
+
+test(detect_output_default_json) :-
+    detect_output_format([], [accept(accept(application/json))], json).
+
+test(detect_output_format_param_json) :-
+    detect_output_format([format=json], [], json).
+
+test(detect_output_format_param_jsonld_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(jsonld), _)]) :-
+    detect_output_format([format=jsonld], [], _).
+
+test(detect_output_format_param_rdfxml_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(rdfxml), _)]) :-
+    detect_output_format([format=rdfxml], [], _).
+
+test(detect_output_format_param_turtle_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(turtle), _)]) :-
+    detect_output_format([format=turtle], [], _).
+
+test(detect_output_format_param_unknown_rejects,
+     [error(unsupported_document_format(csv), _)]) :-
+    detect_output_format([format=csv], [], _).
+
+test(detect_output_no_accept_defaults_json) :-
+    detect_output_format([], [], json).
+
+test(document_input_format_json) :-
+    document_input_format(json).
+
+test(document_output_format_json) :-
+    document_output_format(json).
+
+test(document_output_format_embedding) :-
+    document_output_format(embedding).
+
+test(detect_output_format_param_embedding) :-
+    detect_output_format([format=embedding], [], embedding).
+
+test(accept_to_format_text_plain) :-
+    accept_to_format(text/plain, embedding).
+
+:- end_tests(document_format_detection).
+
+:- begin_tests(document_embedding, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(document)).
+:- use_module(core(query)).
+
+test(embedding_format_registered) :-
+    document_output_format(embedding).
+
+test(embedding_accept_header) :-
+    accept_to_format(text/plain, embedding).
+
+test(embedding_type_queries_from_transaction, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/world/",
+    "@schema": "http://example.com/schema/worldOntology#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Animal",
+    "@key": { "@type": "Lexical", "@fields": ["name"] },
+    "name": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Animal(id : $id) { name } }",
+        "template": "The animal is named {{name}}."
+      }
+    }
+  }
+]
+', Stream),
+    Options = [author("test"),
+               full_replace(true),
+               graph_type(schema),
+               message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, _, Options),
+
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, Transaction),
+
+    embedding_type_queries_from_transaction(Transaction, TypeQueries),
+    TypeQueries = [_Type-Query-Template],
+    Query = "query($id: ID){ Animal(id : $id) { name } }",
+    Template = "The animal is named {{name}}.".
+
+test(embedding_metadata_stored, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    % Insert a schema with embedding metadata
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/world/",
+    "@schema": "http://example.com/schema/worldOntology#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Animal",
+    "@key": { "@type": "Lexical", "@fields": ["name"] },
+    "name": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Animal(id : $id) { name } }",
+        "template": "The animal is named {{name}}."
+      }
+    }
+  }
+]
+', Stream),
+    Options = [author("test"),
+               full_replace(true),
+               graph_type(schema),
+               message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, _, Options),
+
+    % Get the transaction and check metadata is stored
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, Transaction),
+
+    % Check that @metadata is stored
+    ask(Transaction, t(_Animal, sys:metadata, _Metadata, schema)).
+
+test(embedding_type_queries_empty_when_no_embeddings, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    % Use the default test schema which has no embedding metadata
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, Transaction),
+
+    embedding_type_queries_from_transaction(Transaction, TypeQueries),
+    TypeQueries = [].
+
+test(embedding_document_types_single, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    % Insert a schema with embedding metadata
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/world/",
+    "@schema": "http://example.com/schema/worldOntology#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Animal",
+    "@key": { "@type": "Lexical", "@fields": ["name"] },
+    "name": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Animal(id : $id) { name } }",
+        "template": "The animal is named {{name}}."
+      }
+    }
+  }
+]
+', Stream),
+    Options = [author("test"),
+               full_replace(true),
+               graph_type(schema),
+               message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, _, Options),
+
+    % Insert an instance document
+    open_string('
+{
+  "@type": "Animal",
+  "name": "Plato"
+}
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                        graph_type(instance),
+                        message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id], InstanceOptions),
+
+    % Test embedding_document_types
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, Transaction),
+
+    embedding_document_types(Transaction, instance, Id, [], _Type, _Query, DocTypes),
+    % This should identify Animal as the document type
+    memberchk('http://example.com/schema/worldOntology#Animal', DocTypes).
+
+test(embedding_api_end_to_end, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+
+    % Insert schema with embedding metadata
+    open_string('
+{ "@type": "@context",
+  "@schema": "http://example.com/schema#",
+  "@base": "http://example.com/data/"
+}
+
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string",
+  "@metadata": {
+    "embedding": {
+      "query": "query($id: ID){ Animal(id: $id) { name } }",
+      "template": "The animal is named {{name}}."
+    }
+  }
+}', SchemaStream),
+    SchemaOptions = [author("test"),
+                     full_replace(true),
+                     graph_type(schema),
+                     message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _, SchemaOptions),
+
+    % Insert instance document
+    open_string('
+{ "@type": "Animal", "name": "Plato" }
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                       graph_type(instance),
+                       message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id], InstanceOptions),
+
+    % Call the API selector with format=embedding and capture output
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    with_output_to(
+        string(EmbeddingOutput),
+        (   document_stream_headers(embedding, [], no_data_version),
+            api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                       Id, [], _, _, Config,
+                                       no_data_version, _, _)
+        )
+    ),
+    % Verify the output contains the rendered template
+    once(sub_string(EmbeddingOutput, _, _, _, "The animal is named Plato.")).
+
+test(embedding_render_does_not_html_escape, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string",
+  "@metadata": {
+    "embedding": {
+      "query": "query($id: ID){ Animal(id: $id) { name } }",
+      "template": "The animal is named {{name}}."
+    }
+  }
+}', SchemaStream),
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _,
+                         [author("test"), graph_type(schema), message("test")]),
+    open_string('
+{ "@type": "Animal", "name": "x=y it''s \\\"quoted\\\"" }
+', InstanceStream),
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id],
+                         [author("test"), graph_type(instance), message("test")]),
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    with_output_to(
+        string(EmbeddingOutput),
+        (   document_stream_headers(embedding, [], no_data_version),
+            api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                       Id, [], _, _, Config,
+                                       no_data_version, _, _)
+        )
+    ),
+    once(sub_string(EmbeddingOutput, _, _, _, "x=y it's \"quoted\"")),
+    \+ sub_string(EmbeddingOutput, _, _, _, "&#").
+
+test(embedding_plugin_fallback_for_jsondocument, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+
+    % Insert a JSONDocument instance (no embedding query defined, raw_json bypasses schema check)
+    open_string('
+{ "title": "My Document",
+  "body": "This is the content",
+  "tags": ["alpha", "beta"],
+  "meta": { "author": "Alice", "year": 2024 }
+}
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                       graph_type(instance),
+                       raw_json(true),
+                       message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id], InstanceOptions),
+
+    % Call the API selector with format=embedding and capture output
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    with_output_to(
+        string(EmbeddingOutput),
+        (   document_stream_headers(embedding, [], no_data_version),
+            api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                       Id, [], _, _, Config,
+                                       no_data_version, _, _)
+        )
+    ),
+    % The output should not be empty — the json2markdown plugin should have produced markdown
+    EmbeddingOutput \= "",
+    % Verify key content appears in the markdown output
+    once(sub_string(EmbeddingOutput, _, _, _, "My Document")),
+    once(sub_string(EmbeddingOutput, _, _, _, "This is the content")),
+    once(sub_string(EmbeddingOutput, _, _, _, "alpha")),
+    once(sub_string(EmbeddingOutput, _, _, _, "beta")),
+    once(sub_string(EmbeddingOutput, _, _, _, "Alice")).
+
+test(embedding_rejects_schema_document_without_embedding_instructions, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+
+    % Insert a schema WITHOUT embedding metadata
+    open_string('
+{ "@type": "@context",
+  "@schema": "http://example.com/schema#",
+  "@base": "http://example.com/data/"
+}
+
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string"
+}
+', SchemaStream),
+    SchemaOptions = [author("test"),
+                     full_replace(true),
+                     graph_type(schema),
+                     message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _, SchemaOptions),
+
+    open_string('
+{ "@type": "Animal", "name": "Rex" }
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                       graph_type(instance),
+                       message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id], InstanceOptions),
+
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    catch(
+        with_output_to(
+            string(_),
+            (   document_stream_headers(embedding, [], no_data_version),
+                api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                           Id, [], _, _, Config,
+                                           no_data_version, _, _)
+            )
+        ),
+        error(no_embedding_queries_defined, _),
+        true
+    ).
+
+test(embedding_schema_query_takes_precedence_over_plugin, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+
+    % Insert schema WITH embedding metadata for Animal
+    open_string('
+{ "@type": "@context",
+  "@schema": "http://example.com/schema#",
+  "@base": "http://example.com/data/"
+}
+
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string",
+  "@metadata": {
+    "embedding": {
+      "query": "query($id: ID){ Animal(id: $id) { name } }",
+      "template": "The animal is named {{name}}."
+    }
+  }
+}
+', SchemaStream),
+    SchemaOptions = [author("test"),
+                     full_replace(true),
+                     graph_type(schema),
+                     message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _, SchemaOptions),
+
+    open_string('
+{ "@type": "Animal", "name": "Rex" }
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                       graph_type(instance),
+                       message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id], InstanceOptions),
+
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    with_output_to(
+        string(EmbeddingOutput),
+        (   document_stream_headers(embedding, [], no_data_version),
+            api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                       Id, [], _, _, Config,
+                                       no_data_version, _, _)
+        )
+    ),
+    % Schema query+template should take precedence — plugin should NOT be called
+    once(sub_string(EmbeddingOutput, _, _, _, "The animal is named Rex.")).
+
+:- end_tests(document_embedding).
+
+:- begin_tests(parallel_initial_writes, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(triple), [with_triple_store/2]).
+
+insert_and_report(Store, SystemDB, Auth, Path, Stream, Options, Queue) :-
+    catch(
+        (   with_triple_store(Store,
+                              api_insert_documents(SystemDB, Auth, Path, Stream, no_data_version, _New_Data_Version, _, Ids, Options))
+        ->  thread_send_message(Queue, done(Ids))
+        ;   thread_send_message(Queue, error(failure))
+        ),
+        Error,
+        thread_send_message(Queue, error(Error))
+    ).
+
+test(two_parallel_initial_writes_are_serialised, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema(admin, foo))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    State = Store-_,
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    default_insert_options(Options),
+    Doc1 = '{"@type":"City","name":"Alice"}',
+    Doc2 = '{"@type":"City","name":"Bob"}',
+    open_string(Doc1, Stream1),
+    open_string(Doc2, Stream2),
+    message_queue_create(Queue, []),
+    thread_create(insert_and_report(Store, SystemDB, Auth, 'admin/foo', Stream1, Options, Queue), Thread1),
+    thread_create(insert_and_report(Store, SystemDB, Auth, 'admin/foo', Stream2, Options, Queue), Thread2),
+    thread_get_message(Queue, Result1, [timeout(5)]),
+    thread_get_message(Queue, Result2, [timeout(5)]),
+    thread_join(Thread1, _),
+    thread_join(Thread2, _),
+    Result1 = done(Ids1),
+    Result2 = done(Ids2),
+    append(Ids1, Ids2, Ids),
+    length(Ids, 2),
+    with_triple_store(Store,
+                      (   resolve_absolute_string_descriptor('admin/foo', Desc),
+                          open_descriptor(Desc, T),
+                          forall(member(Id, Ids), get_document(T, Id, _))
+                      )),
+    Ids = [Id1, Id2],
+    Id1 \= Id2.
+
+:- end_tests(parallel_initial_writes).
+
+:- begin_tests(system_document_inserts, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(triple), [with_triple_store/2]).
+
+system_document_inserts_setup_low_retry_limit :-
+    nb_setval(test_old_max_retries, ''),
+    (   getenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', OldRetries)
+    ->  nb_setval(test_old_max_retries, OldRetries)
+    ;   true),
+    setenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', '2'),
+    abolish_table_subgoals(max_transaction_retries(_)).
+
+system_document_inserts_restore_retry_limit :-
+    nb_getval(test_old_max_retries, OldRetries),
+    (   OldRetries = ''
+    ->  unsetenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES')
+    ;   setenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', OldRetries)
+    ),
+    abolish_table_subgoals(max_transaction_retries(_)).
+
+% Regression test for the integration-test hang after the
+% "lists organization users" capability test. Sequential system
+% document inserts must not hold a commit-window guard across
+% transactions and must not exhaust the transaction retry budget.
+% We cap the retry budget to 2 so that a guard leak fails fast and
+% deterministically, instead of waiting for the default retry ceiling.
+test(sequential_system_document_inserts_release_commit_window_guard, [
+         setup((setup_temp_store(State),
+                system_document_inserts_setup_low_retry_limit)),
+         cleanup((system_document_inserts_restore_retry_limit,
+                  teardown_temp_store(State)))
+     ]) :-
+    State = Store-_,
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    default_insert_options(Options),
+    User1 = '{"@type":"User","name":"Alice"}',
+    User2 = '{"@type":"User","name":"Bob"}',
+    open_string(User1, Stream1),
+    open_string(User2, Stream2),
+    with_triple_store(Store,
+                      (   api_insert_documents(SystemDB, Auth, '_system', Stream1, no_data_version, _DV1, _, Ids1, Options),
+                          api_insert_documents(SystemDB, Auth, '_system', Stream2, no_data_version, _DV2, _, Ids2, Options)
+                      )),
+    append(Ids1, Ids2, Ids),
+    length(Ids, 2).
+
+:- end_tests(system_document_inserts).
+
+
+api_document_test_handler(P, success(test_meta, [test_id])) :-
+    get_dict(test_marker, P, true).
+api_document_test_handler(P, error(test_error)) :-
+    get_dict(test_marker_error, P, true).
+
+:- begin_tests(commit_queue_helpers, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+
+% Regression test: enrich_pairs_for_operation must preserve the elaborated
+% document in the output pair, not replace it with an anonymous variable.
+% Otherwise the worker-side insert path loses the document and returns no IDs.
+test(enrich_pairs_for_operation_preserves_doc) :-
+    Doc = json{'@id': "http://example.com/Person/1",
+               '@type': "Person",
+               'http://example.com/schema#name': "Alice"},
+    Contract = verification_contract{
+        submitted_id: "http://example.com/Person/1",
+        generated_id: "http://example.com/Person/1",
+        id_pairs: ["http://example.com/Person/1"-normal],
+        dependencies: [],
+        backlinks: [],
+        captures_out: t
+    },
+    Pairs = [Doc-Contract],
+    enrich_pairs_for_operation(Pairs, insert, EnrichedPairs),
+    EnrichedPairs = [OutDoc-OutContract],
+    OutDoc == Doc,
+    is_dict(OutContract, verification_contract),
+    get_dict(must_exist, OutContract, []),
+    get_dict(must_not_exist, OutContract, ["http://example.com/Person/1"]).
+
+test(enrich_pairs_for_operation_preserves_doc_replace) :-
+    Doc = json{'@id': "http://example.com/Person/1",
+               '@type': "Person",
+               'http://example.com/schema#name': "Alice"},
+    Contract = verification_contract{
+        submitted_id: "http://example.com/Person/1",
+        generated_id: "http://example.com/Person/1",
+        id_pairs: ["http://example.com/Person/1"-normal],
+        dependencies: [],
+        backlinks: [],
+        captures_out: t
+    },
+    Pairs = [Doc-Contract],
+    enrich_pairs_for_operation(Pairs, replace, EnrichedPairs),
+    EnrichedPairs = [OutDoc-OutContract],
+    OutDoc == Doc,
+    is_dict(OutContract, verification_contract),
+    get_dict(must_exist, OutContract, ["http://example.com/Person/1"]),
+    get_dict(must_not_exist, OutContract, []).
+
+test(contract_conflict_sets_insert) :-
+    Contract = verification_contract{
+        id_pairs: ["http://example.com/Person/1"-created,
+                   "http://example.com/Person/2"-normal,
+                   "http://example.com/Person/3"-value_hash]
+    },
+    contract_conflict_sets(insert, Contract, MustNotExist, MustExist),
+    MustNotExist = ["http://example.com/Person/1", "http://example.com/Person/2", "http://example.com/Person/3"],
+    MustExist = [].
+
+test(contract_conflict_sets_replace) :-
+    Contract = verification_contract{
+        id_pairs: ["http://example.com/Person/1"-normal,
+                   "http://example.com/Person/2"-created]
+    },
+    contract_conflict_sets(replace, Contract, MustNotExist, MustExist),
+    MustExist = ["http://example.com/Person/1"],
+    MustNotExist = ["http://example.com/Person/2"].
+
+test(collect_stream_docs_preserves_nested_list) :-
+    JSON = '{"@type":"Group","@id":"Group/0","people":[{"@type":"Person","name":"Immanuel Kant","age":"79","order":"3"},{"@type":"Person","name":"Karl Popper","age":"92","order":"5"}]}',
+    open_string(JSON, Stream),
+    stream_to_lazy_docs(Stream, LazyDocs),
+    collect_stream_docs(LazyDocs, Docs),
+    Docs = [Doc],
+    get_dict(people, Doc, People),
+    People = [Person1, Person2],
+    get_dict(name, Person1, "Immanuel Kant"),
+    get_dict(name, Person2, "Karl Popper"),
+    \+ contains_ineligible_marker(People).
+
+test(collect_stream_docs_handles_empty_object) :-
+    JSON = '{}',
+    open_string(JSON, Stream),
+    stream_to_lazy_docs(Stream, LazyDocs),
+    collect_stream_docs(LazyDocs, Docs),
+    Docs = [Doc],
+    is_dict(Doc, json).
+
+test(collect_stream_docs_handles_empty_stream) :-
+    open_string('', Stream),
+    stream_to_lazy_docs(Stream, LazyDocs),
+    collect_stream_docs(LazyDocs, Docs),
+    Docs = [].
+
+test(apply_package_changes_empty_pairs, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                write_schema_string('{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n{"@id":"Thing","@type":"Class"}\n', Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, Transaction),
+    create_context(Transaction, commit_info{author: "test", message: "test"}, Context),
+    query_context_transaction_objects(Context, TransactionObjects),
+    Package = commit_package{
+        branch_key: "test_branch",
+        all_branches: ["test_branch"],
+        transaction_objects: TransactionObjects,
+        operation: insert,
+        branch_operations: [branch_operation{
+            branch_key: "test_branch",
+            doc_contract_pairs: [],
+            delete_ids: [],
+            raw_docs: []
+        }],
+        commit_info: Context.commit_info,
+        options: options{overwrite: false, merge_repeats: false},
+        graph_type: instance,
+        reply_queue: _,
+        request_id: empty_test
+    },
+    apply_package_changes(Package, Ids),
+    Ids = [].
+
+test(apply_package_changes_duplicate_ids, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                write_schema_string('{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n{"@id":"Thing","@type":"Class","@key":{"@type":"Lexical","@fields":["name"]},"name":"xsd:string"}\n', Desc),
+                open_descriptor(Desc, Transaction),
+                create_context(Transaction, commit_info{author: "test", message: "test"}, Context),
+                query_context_transaction_objects(Context, TransactionObjects),
+                Doc = _{'@type':'Thing', name:"A"},
+                parallel_elaboration:json_elaborate_with_contract(Transaction, Doc, Elaborated, Contract),
+                Pairs = [Elaborated-Contract, Elaborated-Contract])),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Package = commit_package{
+        branch_key: "test_branch",
+        all_branches: ["test_branch"],
+        transaction_objects: TransactionObjects,
+        operation: insert,
+        branch_operations: [branch_operation{
+            branch_key: "test_branch",
+            doc_contract_pairs: Pairs,
+            delete_ids: [],
+            raw_docs: [Doc, Doc]
+        }],
+        commit_info: Context.commit_info,
+        options: options{overwrite: false, merge_repeats: false},
+        graph_type: instance,
+        reply_queue: _,
+        request_id: duplicate_test
+    },
+    catch(
+        apply_package_changes(Package, _),
+        error(same_ids_in_one_transaction([DuplicateId]), _),
+        true
+    ),
+    DuplicateId = 'terminusdb:///data/Thing/A'.
+
+test(collect_stream_docs_preserves_simple_string_names, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                write_schema_string('{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n{"@id":"Simple","@type":"Class","name":"xsd:string"}\n', Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    JSON = '[{"@type":"Simple","@id":"Simple/w0-d0-abc123","name":"Simple/w0-d0-abc123-xyz456"}]',
+    open_string(JSON, Stream),
+    stream_to_lazy_docs(Stream, LazyDocs),
+    collect_stream_docs(LazyDocs, Docs),
+    Docs = [Doc],
+    get_dict(name, Doc, Name),
+    string(Name),
+    Name = "Simple/w0-d0-abc123-xyz456".
+
+% run_commit_package/1 tests. These verify that the package is routed to a
+% handler and that the result is delivered to the reply queue, without
+% requiring a real transaction commit.
+
+test(run_commit_package_delivers_success, [
+         setup(asserta(api_document:commit_package_test_handler(api_document:api_document_test_handler))),
+         cleanup(retractall(api_document:commit_package_test_handler(_)))
+     ]) :-
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: "test_branch",
+        all_branches: ["test_branch"],
+        reply_queue: ReplyQueue,
+        request_id: req_success,
+        test_marker: true
+    },
+    run_commit_package(Package),
+    thread_get_message(ReplyQueue, commit_result(success(test_meta, [test_id]), req_success), [timeout(1)]),
+    message_queue_destroy(ReplyQueue).
+
+test(run_commit_package_delivers_error, [
+         setup(asserta(api_document:commit_package_test_handler(api_document:api_document_test_handler))),
+         cleanup(retractall(api_document:commit_package_test_handler(_)))
+     ]) :-
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: "test_branch",
+        all_branches: ["test_branch"],
+        reply_queue: ReplyQueue,
+        request_id: req_error,
+        test_marker_error: true
+    },
+    run_commit_package(Package),
+    thread_get_message(ReplyQueue, commit_result(error(test_error), req_error), [timeout(1)]),
+    message_queue_destroy(ReplyQueue).
+
+test(execute_commit_package_default_rejects_multi_branch) :-
+    Package = commit_package{
+        branch_key: "test_branch",
+        all_branches: ["branch1", "branch2"],
+        reply_queue: _,
+        request_id: req_multi
+    },
+    execute_commit_package(Package, Result),
+    Result = error(error(multi_branch_commit_not_implemented, _)).
+
+test(deliver_commit_result_ignores_missing_reply_queue) :-
+    Package = commit_package{
+        reply_queue: missing_reply_queue,
+        request_id: req_missing
+    },
+    deliver_commit_result(Package, success(test_meta, [test_id])).
+
+test(handle_commit_result_timeout_carries_request_id,
+     [throws(error(commit_queue_timeout(req_abc), _))]) :-
+    % A producer that gives up waiting for the commit-queue ack throws a
+    % timeout that identifies the exact request, so the API error
+    % response can correlate it.
+    handle_commit_result(timeout, req_abc, _Meta_Data, _Ids).
+
+:- end_tests(commit_queue_helpers).
+
+:- begin_tests(verify_contracts_batch, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(document/parallel_elaboration)).
+:- use_module(core(document/json)).
+
+batch_test_schema_string(Schema) :-
+    atomics_to_string(
+        [ '{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n',
+          '{"@id":"Person","@type":"Class","@key":{"@type":"Random"},"name":"xsd:string","age":"xsd:integer"}\n' ],
+        Schema).
+
+batch_docs(Count, Docs) :-
+    findall(
+        _{ '@type': 'Person', name: Name, age: Age },
+        (   between(1, Count, I),
+            format(atom(Name), 'Person~|~`0t~d~4+', [I]),
+            Age is 20 + (I mod 60)
+        ),
+        Docs
+    ).
+
+test(verify_contracts_returns_ok_for_batch, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                batch_test_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    batch_docs(1000, Docs),
+    open_descriptor(Desc, DB),
+    elaborate_insert_request_db_with_contracts(DB, Docs, Pairs, [workers(4)]),
+    length(Pairs, 1000),
+    pairs_values(Pairs, Contracts),
+    verify_contracts(DB, Contracts, ok), !.
+
+test(verify_contracts_succeeds_for_empty_batch) :-
+    verify_contracts(_{}, [], ok).
+
+test(verify_contracts_succeeds_for_empty_batch_wrapper) :-
+    verify_contracts(_{}, []).
+
+test(verify_contracts_detects_schema_layer_change, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                batch_test_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    batch_docs(1, [Doc]),
+    open_descriptor(Desc, DB),
+    elaborate_insert_request_db_with_contracts(DB, [Doc], [_-Contract0], [workers(4)]),
+    % Forge a schema-layer mismatch so the test does not depend on the exact
+    % timing of real schema-layer updates.
+    FakeContract = Contract0.put(_{pre_schema_layer_id: "stale_layer_id"}),
+    catch(
+        verify_contracts(DB, [FakeContract]),
+        error(elaboration_stale(schema_layer_changed), _),
+        true
+    ), !.
+
+test(verify_contracts_detects_conflicting_commit, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                batch_test_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Doc = json{'@type':'Person', '@id':'Person/conflict', name:'Conflict', age:30},
+    % Commit the document so the change window records it.
+    with_test_transaction(Desc, C1,
+        (   query_default_collection(C1, TO1),
+            elaborate_insert_request_db(TO1, [Doc], [Elaborated], [workers(4)]),
+            insert_document_expanded(TO1, Elaborated, _)
+        )),
+    % Now elaborate the same document again. The contract will have the post-
+    % commit branch id as its pre_branch_commit_id, so force it back to 'none'
+    % to simulate a concurrent transaction that lost the race.
+    open_descriptor(Desc, DB2),
+    elaborate_insert_request_db_with_contracts(DB2, [Doc], [_-Contract0], [workers(4)]),
+    enrich_pair_for_operation(insert, Contract0, Contract1),
+    FakeContract = Contract1.put(_{pre_branch_commit_id: none}),
+    catch(
+        verify_contracts(DB2, [FakeContract]),
+        fail_transaction,
+        true
+    ), !.
+
+test(verify_contracts_skips_checks_for_contracts_without_pre_ids, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                batch_test_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Doc = json{'@type':'Person', name:'NoPreIds', age:30},
+    open_descriptor(Desc, DB),
+    json_elaborate_with_contract(DB, Doc, _Elaborated, Contract),
+    %  Contracts produced by json_elaborate_with_contract/4 do not carry the
+    %  pre-branch/pre-schema snapshot ids. Verification must treat the batch as
+    %  safe rather than failing on missing dict keys.
+    verify_contracts(DB, [Contract], ok), !.
+
+:- end_tests(verify_contracts_batch).
+
+:- begin_tests(raw_id, []).
+:- use_module(core(util/test_utils)).
+
+raw_id_test_db(System, Auth) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('{"name": "internal-mechanics-hidden"}', Stream),
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, _Ids,
+                         [author("t"), message("t"), raw_json(true)]).
+
+raw_id_test_config(Raw_Id, Config) :-
+    Base = config{compress: true,
+                  unfold: true,
+                  skip: 0,
+                  count: unlimited,
+                  as_list: false,
+                  minimized: true,
+                  request: [] },
+    (   Raw_Id = unbound
+    ->  Config = Base
+    ;   put_dict(raw_id, Base, Raw_Id, Config)).
+
+test(raw_id_false_omits_id_and_type,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    raw_id_test_db(System, Auth),
+    raw_id_test_config(false, Config),
+    with_output_to(
+        string(Out),
+        api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                   _Id, _Ids, _Type, _Query, Config,
+                                   no_data_version, _, [_]>>true)),
+    atom_json_dict(Out, Doc, []),
+    \+ get_dict('@id', Doc, _),
+    \+ get_dict('@type', Doc, _),
+    "internal-mechanics-hidden" = Doc.name.
+
+test(raw_id_default_omits_id,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    % 12.1 default: raw JSON documents read back verbatim, no injected @id.
+    raw_id_test_db(System, Auth),
+    raw_id_test_config(unbound, Config),
+    with_output_to(
+        string(Out),
+        api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                   _Id, _Ids, _Type, _Query, Config,
+                                   no_data_version, _, [_]>>true)),
+    atom_json_dict(Out, Doc, []),
+    \+ get_dict('@id', Doc, _),
+    \+ get_dict('@type', Doc, _),
+    "internal-mechanics-hidden" = Doc.name.
+
+test(raw_id_false_omits_id_in_list,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    raw_id_test_db(System, Auth),
+    raw_id_test_config(false, Config0),
+    Config = Config0.put(as_list, true),
+    with_output_to(
+        string(Out),
+        api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                   _Id, _Ids, _Type, _Query, Config,
+                                   no_data_version, _, [_]>>true)),
+    atom_json_dict(Out, [Doc], []),
+    \+ get_dict('@id', Doc, _),
+    "internal-mechanics-hidden" = Doc.name.
+
+:- end_tests(raw_id).
+
+:- begin_tests(check_documents, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+
+check_insert_body(Stream, Graph_Type, Body) :-
+    Body = [Transaction, Extra]>>(
+             api_insert_documents_core(Transaction, Stream, Graph_Type,
+                                       false, false, false, false,
+                                       none, null, Ids),
+             Extra = _{ids:Ids}).
+
+check_delete_bulk_body(Graph_Type, Ids, Body) :-
+    Body = [Transaction, Extra]>>(
+             api_delete_documents_bulk_(Graph_Type, Transaction, Ids),
+             Extra = _{ids:Ids}).
+
+checked_head(_System, Path, Version) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    open_descriptor(Descriptor, Transaction),
+    transaction_data_version(Transaction, Version).
+
+test(check_valid_insert_leaves_no_side_effects,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb",
+    checked_head(System, Path, Before),
+    open_string('{ "@type": "City", "name": "Checktown" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['City'], options{}, Result),
+    get_dict('api:valid', Result, true),
+    once(member(Id, Result.get('api:extra').ids)),
+    once(sub_string(Id, _, _, _, "City/")),
+    checked_head(System, Path, Before).
+
+test(check_invalid_insert_reports_witnesses,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb2))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb2",
+    checked_head(System, Path, Before),
+    % City inherits "name" from Named — a document without it is invalid.
+    open_string('{ "@type": "City" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['City'], options{}, Result),
+    get_dict('api:valid', Result, false),
+    Result.'api:witnesses' \= [],
+    checked_head(System, Path, Before).
+
+test(check_delete_of_referenced_document_fails,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb3))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb3",
+    % Person.parent is an Optional link to Person — deleting a parent
+    % that is still referenced must fail the referential check.
+    open_string('{ "@type": "Person", "name": "Parent", "@id": "Person/P", "address": "A Street" }
+{ "@type": "Person", "name": "Child", "@id": "Person/C", "address": "B Street", "parent": "Person/P" }',
+                Stream),
+    Options = [graph_type(instance), author("a"), message("m")],
+    api_insert_documents(System, Auth, Path, Stream, no_data_version,
+                         _DV, _MD, _Ids, Options),
+    check_delete_bulk_body(instance, ["Person/P"], Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, [], options{}, Result),
+    get_dict('api:valid', Result, false).
+
+test(check_embedding_report_unmarked_class_is_irrelevant,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb4))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Relevance belongs to the touched classes, not the engine: City has
+    % no @metadata.embedding, so the report must not mention indexer
+    % configuration at all — that warning only makes sense when a class
+    % actually asks to be embedded.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('{ "@type": "City", "name": "Checktown" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, "admin/checkdb4", instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['City'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "no touched class")),
+    \+ sub_string(Reason, _, _, _, "indexer").
+
+test(check_embedding_report_unmarked_class_with_backend_still_irrelevant,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb4b),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % A configured backend does not make an unmarked class relevant —
+    % the report is identical to the no-backend case.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('{ "@type": "City", "name": "Checktown" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, "admin/checkdb4b", instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['City'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false),
+    get_dict('api:reason', Embedding, Reason),
+    \+ sub_string(Reason, _, _, _, "indexer").
+
+test(check_body_failure_still_reports_embedding_block,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb5))),
+      cleanup(teardown_temp_store(State))]) :-
+    % A body that fails outright (rather than throwing a schema error)
+    % must still carry api:embedding — callers read api:will_embed
+    % unconditionally on every verdict
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    api_check_documents(System, Auth, "admin/checkdb5", instance,
+                        "checker", "dry run", no_data_version,
+                        [_Transaction, _Extra]>>fail, [], options{}, Result),
+    get_dict('api:valid', Result, false),
+    get_dict('api:embedding', Result, Embedding),
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false).
+
+test(check_bad_path_throws,
+     [setup(setup_temp_store(State)),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('{ "@type": "City", "name": "Nowhere" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    catch(api_check_documents(System, Auth, "admin/nonexistent", instance,
+                              "checker", "dry run", no_data_version,
+                              Body, [], options{}, _Result),
+          error(_, _), true).
+
+test(check_valid_delete_result_is_fully_bound,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb5))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb5",
+    open_string('{ "@type": "City", "name": "Delville", "@id": "City/Delville" }', Insert_Stream),
+    Options = [graph_type(instance), author("a"), message("m")],
+    api_insert_documents(System, Auth, Path, Insert_Stream, no_data_version,
+                         _DV, _MD, _Ids, Options),
+    api_check_delete_body(id("City/Delville"), instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, [], options{}, Result),
+    get_dict('api:valid', Result, true),
+    % An unbound value in Result makes json_write_dict raise
+    % instantiation_error — the HTTP reply would be a truncated 500.
+    atom_json_dict(_, Result, []).
+
+test(check_passes_migration_options_to_inference,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb6))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb6",
+    open_string('{ "@type": "Person", "name": "P", "address": "Main St", "@id": "Person/P" }', Insert_Stream),
+    Options = [graph_type(instance), author("a"), message("m")],
+    api_insert_documents(System, Auth, Path, Insert_Stream, no_data_version,
+                         _DV, _MD, _Ids, Options),
+    % address xsd:string -> xsd:integer is not weakening-inferrable:
+    % with require_migration:true inference must hard-fail like a
+    % commit would, not fall back to plain validation witnesses.
+    open_string('{ "@id": "Person", "@type": "Class", "@inherits": "Named", "address": "xsd:integer", "parent": { "@type": "Optional", "@class": "Person" }, "birthday": { "@type": "Optional", "@class": "xsd:dateTime" } }', Stream),
+    Body_Options = options{raw_json:false, create:false, merge_repeats:false},
+    api_check_replace_body(Stream, schema, Body_Options, Body),
+    api_check_documents(System, Auth, Path, schema,
+                        "checker", "dry run", no_data_version,
+                        Body, [], options{require_migration:true}, Result),
+    get_dict('api:valid', Result, false),
+    once(sub_string(Result.get('api:error').get('api:message'),
+                    _, _, _, "no_inferrable_migration")).
+
+test(check_embedding_report_covers_embedded_class,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb7),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb7",
+    % The class carries @metadata.embedding — the same shape
+    % inject_embedding_metadata produces for schema writes.
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, true),
+    get_dict('api:relevant', Embedding, true).
+
+test(check_embedding_report_marked_class_no_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb8),
+             unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               clear_indexer_backend_config))]) :-
+    % The marked class asks to be embedded but no indexer backend is
+    % configured — now the backend warning is the point of the report,
+    % and it names the class that misses out.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb8",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "indexer backend is none or not configured")),
+    once(sub_string(Reason, _, _, _, "EmbedMe")).
+
+test(check_embedding_report_mixed_touched_names_unmarked,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb9),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % With a backend configured and a mixed touched set, the report is
+    % relevant and names exactly the classes that will not be embedded.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb9",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }
+{ "@id": "PlainDoc", "@type": "Class", "name": "xsd:string" }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe', 'PlainDoc'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "PlainDoc")),
+    \+ sub_string(Reason, _, _, _, "indexer backend is none").
+
+test(check_embedding_report_template_only_no_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb11),
+             unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               clear_indexer_backend_config))]) :-
+    % A template without a query still marks the class — the report
+    % fires even though nothing could ever embed.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb11",
+    open_string('{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "Templated", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['Templated'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    once(sub_string(Embedding.get('api:reason'), _, _, _, "Templated")).
+
+test(check_embedding_report_template_only_with_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb12),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % With a backend the template-only class is marked but cannot
+    % embed — the reason must say the query is missing, not that the
+    % metadata is missing.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb12",
+    open_string('{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "Templated", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['Templated'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "template but no query")),
+    once(sub_string(Reason, _, _, _, "Templated")),
+    \+ sub_string(Reason, _, _, _, "without embedding metadata").
+
+test(check_embedding_report_mixed_marks_with_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb13),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % One query-marked, one template-only, one unmarked class touched:
+    % the reason names each failure group with its own cause.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb13",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }
+{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }
+{ "@id": "PlainDoc", "@type": "Class", "name": "xsd:string" }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe', 'Templated', 'PlainDoc'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "PlainDoc")),
+    once(sub_string(Reason, _, _, _, "template but no query: Templated")).
+
+test(check_embedding_report_no_touched_types,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb10))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Deletes and other bodies that touch no class report a stable,
+    % irrelevant embedding block.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    api_check_documents(System, Auth, "admin/checkdb10", instance,
+                        "checker", "dry run", no_data_version,
+                        [_Transaction, Extra]>>(Extra = _{ids:[]}), [],
+                        options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false).
+
+:- end_tests(check_documents).
+:- begin_tests(document_count, []).
+:- use_module(core(util/test_utils)).
+
+counted_test_schema(System, Auth) :-
+    open_string('
+{ "@type": "@context",
+  "@schema": "http://example.com/schema#",
+  "@base": "http://example.com/data/"
+}
+
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string" }
+
+{ "@type": "Class",
+  "@id": "Dog",
+  "@inherits": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string" }
+
+{ "@type": "Class",
+  "@id": "Person",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string",
+  "pet": { "@type": "Optional", "@class": "Pet" } }
+
+{ "@type": "Class",
+  "@id": "Pet",
+  "@subdocument": [],
+  "@key": { "@type": "Random" },
+  "name": "xsd:string" }', SchemaStream),
+    SchemaOptions = [author("test"),
+                     full_replace(true),
+                     graph_type(schema),
+                     message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _, SchemaOptions),
+
+    open_string('
+{ "@type": "Animal", "name": "Plato" }
+{ "@type": "Animal", "name": "Socrates" }
+{ "@type": "Dog", "name": "Rex" }
+{ "@type": "Person", "name": "Ada", "pet": { "@type": "Pet", "name": "Mouse" } }
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                       graph_type(instance),
+                       message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, _, InstanceOptions).
+
+counted_config(Unfold, Config) :-
+    Config = config{ format: json,
+                     compress: true,
+                     unfold: Unfold,
+                     skip: 0,
+                     count: unlimited,
+                     counted: true,
+                     as_list: false,
+                     minimized: true,
+                     request: [] }.
+
+counted_response(System, Auth, Graph_Type, Type, Unfold, Count) :-
+    counted_config(Unfold, Config),
+    with_output_to(
+        string(Output),
+        api_read_document_selector(System, Auth, "admin/testdb", Graph_Type,
+                                   _Id, _Ids, Type, _Query, Config,
+                                   no_data_version, _, [_]>>true)),
+    atom_json_dict(Output, JSON, [value_string_as(atom)]),
+    assertion(JSON.'@type' == 'api:DocumentCountResponse'),
+    Count = JSON.'api:count'.
+
+test(counted_by_type_includes_subclasses, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    counted_test_schema(System, Auth),
+
+    counted_response(System, Auth, instance, 'Animal', true, Animal_Count),
+    assertion(Animal_Count =:= 3),
+    counted_response(System, Auth, instance, 'Person', true, Person_Count),
+    assertion(Person_Count =:= 1),
+    % by-type counting includes subdocuments, as does the listing
+    counted_response(System, Auth, instance, 'Pet', true, Pet_Count),
+    assertion(Pet_Count =:= 1).
+
+test(counted_all_documents, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    counted_test_schema(System, Auth),
+
+    % unfold = true excludes subdocuments, mirroring get_document_uri/3
+    counted_response(System, Auth, instance, _, true, Unfolded_Count),
+    assertion(Unfolded_Count =:= 4),
+    counted_response(System, Auth, instance, _, false, All_Count),
+    assertion(All_Count =:= 5).
+
+test(counted_schema_documents, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    counted_test_schema(System, Auth),
+
+    % '@context' plus four frame classes (Animal, Dog, Person, Pet)
+    counted_response(System, Auth, schema, _, true, Schema_Count),
+    assertion(Schema_Count =:= 5),
+    counted_response(System, Auth, schema, 'sys:Class', true, Class_Count),
+    assertion(Class_Count =:= 4).
+
+test(counted_rejects_id_selector, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    counted_test_schema(System, Auth),
+
+    counted_config(true, Config),
+    catch(api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                     'Animal/Plato', _, _, _,
+                                     Config, no_data_version, _, [_]>>true),
+          Error_Id,
+          true),
+    assertion(nonvar(Error_Id)),
+    assertion(Error_Id = error(counted_not_supported_for_selector, _)),
+    catch(api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                     _, ['Animal/Plato'], _, _,
+                                     Config, no_data_version, _, [_]>>true),
+          Error_Ids,
+          true),
+    assertion(nonvar(Error_Ids)),
+    assertion(Error_Ids = error(counted_not_supported_for_selector, _)),
+    catch(api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                     _, _, _,
+                                     _{'@type':'Animal', name:'Plato'},
+                                     Config, no_data_version, _, [_]>>true),
+          Error_Query,
+          true),
+    assertion(nonvar(Error_Query)),
+    assertion(Error_Query = error(counted_not_supported_for_selector, _)).
+
+:- end_tests(document_count).

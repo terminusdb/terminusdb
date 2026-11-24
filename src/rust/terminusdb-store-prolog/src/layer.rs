@@ -2,7 +2,10 @@ use super::value::*;
 use crate::store::*;
 use std::io::{self, Write};
 use std::iter::Peekable;
+use std::str::FromStr;
 use swipl::prelude::*;
+use tdb_succinct::tfc::lexical_interval::{entry_relation_bounds, AllenRelation};
+use tdb_succinct::TypedDictEntry;
 use terminus_store::layer::{IdTriple, ObjectType};
 use terminus_store::storage::{name_to_string, string_to_name};
 use terminus_store::store::sync::*;
@@ -40,6 +43,25 @@ predicates! {
         match layer.id_subject(id) {
             Some(subject) => subject_term.unify(subject),
             None => Err(PrologError::Failure)
+        }
+    }
+
+    pub nondet fn subject_with_prefix<Peekable<Box<dyn Iterator<Item=(u64,String)>+Send>>>(context, layer_term, prefix_term, id_term, subject_term) {
+        setup => {
+            let layer: WrappedLayer = layer_term.get_ex()?;
+            let prefix: PrologText = prefix_term.get_ex()?;
+            let iter = layer.subjects_with_prefix(&*prefix).peekable();
+            Ok(Some(iter))
+        },
+        call(iter) => {
+            if let Some((id, name)) = iter.next() {
+                id_term.unify(id)?;
+                subject_term.unify(name)?;
+                Ok(iter.peek().is_some())
+            }
+            else {
+                Err(PrologError::Failure)
+            }
         }
     }
 
@@ -119,14 +141,14 @@ predicates! {
     pub semidet fn squash(context, layer_term, squashed_layer_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let squashed = context.try_or_die(layer.squash())?;
-        squashed_layer_term.unify(&WrappedLayer(squashed))
+        squashed_layer_term.unify(WrappedLayer(squashed))
     }
 
     pub semidet fn squash_upto(context, layer_term, upto_term, squashed_layer_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let upto: WrappedLayer = upto_term.get_ex()?;
         let squashed = context.try_or_die(layer.squash_upto(&upto))?;
-        squashed_layer_term.unify(&WrappedLayer(squashed))
+        squashed_layer_term.unify(WrappedLayer(squashed))
     }
 
     pub semidet fn rollup(context, layer_term) {
@@ -195,7 +217,7 @@ predicates! {
             let name = context.try_or_die(string_to_name(&id))?;
 
             match context.try_or_die(store.get_layer_from_id(name))? {
-                Some(layer) => layer_term.unify(&WrappedLayer(layer)),
+                Some(layer) => layer_term.unify(WrappedLayer(layer)),
                 None => Err(PrologError::Failure)
             }
         }
@@ -285,8 +307,7 @@ predicates! {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let subject_id: u64 = subject_id_term.get_ex()?;
         let predicate_id: u64 = predicate_id_term.get_ex()?;
-        let iter = layer.triples_sp(subject_id, predicate_id);
-        let count = iter.count() as u64;
+        let count = layer.count_triples(Some(subject_id), Some(predicate_id), None) as u64;
         count_term.unify(count)
     }
 
@@ -294,9 +315,47 @@ predicates! {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let object_id: u64 = object_id_term.get_ex()?;
         let predicate_id: u64 = predicate_id_term.get_ex()?;
-        let count = layer.triples_o(object_id)
-            .filter(|t| t.predicate == predicate_id)
-            .count() as u64;
+        let count = layer.count_triples(None, Some(predicate_id), Some(object_id)) as u64;
+        count_term.unify(count)
+    }
+
+    pub semidet fn id_triple_count(_context, layer_term, subject_id_term, predicate_id_term, object_id_term, count_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let subject_id = attempt_opt(subject_id_term.get::<u64>())?;
+        let predicate_id = attempt_opt(predicate_id_term.get::<u64>())?;
+        let object_id = attempt_opt(object_id_term.get::<u64>())?;
+        let count = layer.count_triples(subject_id, predicate_id, object_id) as u64;
+        count_term.unify(count)
+    }
+
+    pub semidet fn id_triple_value_range_count(context, layer_term, low_term, high_term, subject_id_term, predicate_id_term, count_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+
+        let low_inner = context.new_term_ref();
+        let low_ty = context.new_term_ref();
+        let low_entry;
+        if attempt(low_term.unify(term!{context: value(#&low_inner, #&low_ty)}?))? {
+            low_entry = make_entry_from_term(context, &low_inner, &low_ty)?;
+        } else if attempt(low_term.unify(term!{context: lang(#&low_inner, #&low_ty)}?))? {
+            low_entry = make_entry_from_lang_term(context, &low_inner, &low_ty)?;
+        } else {
+            return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #low_term), _)}?);
+        }
+
+        let high_inner = context.new_term_ref();
+        let high_ty = context.new_term_ref();
+        let high_entry;
+        if attempt(high_term.unify(term!{context: value(#&high_inner, #&high_ty)}?))? {
+            high_entry = make_entry_from_term(context, &high_inner, &high_ty)?;
+        } else if attempt(high_term.unify(term!{context: lang(#&high_inner, #&high_ty)}?))? {
+            high_entry = make_entry_from_lang_term(context, &high_inner, &high_ty)?;
+        } else {
+            return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #high_term), _)}?);
+        }
+
+        let subject_id = attempt_opt(subject_id_term.get::<u64>())?;
+        let predicate_id = attempt_opt(predicate_id_term.get::<u64>())?;
+        let count = layer.count_triples_value_range(subject_id, predicate_id, &low_entry, &high_entry) as u64;
         count_term.unify(count)
     }
 
@@ -448,6 +507,222 @@ predicates! {
         }
     }
 
+    pub nondet fn id_triple_value_range<Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>>(context, layer_term, low_term, high_term, subject_id_term, predicate_id_term, object_id_term) {
+        setup => {
+            let layer: WrappedLayer = layer_term.get_ex()?;
+
+            let low_inner = context.new_term_ref();
+            let low_ty = context.new_term_ref();
+            let low_entry;
+            if attempt(low_term.unify(term!{context: value(#&low_inner, #&low_ty)}?))? {
+                low_entry = make_entry_from_term(context, &low_inner, &low_ty)?;
+            } else if attempt(low_term.unify(term!{context: lang(#&low_inner, #&low_ty)}?))? {
+                low_entry = make_entry_from_lang_term(context, &low_inner, &low_ty)?;
+            } else {
+                return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #low_term), _)}?);
+            }
+
+            let high_inner = context.new_term_ref();
+            let high_ty = context.new_term_ref();
+            let high_entry;
+            if attempt(high_term.unify(term!{context: value(#&high_inner, #&high_ty)}?))? {
+                high_entry = make_entry_from_term(context, &high_inner, &high_ty)?;
+            } else if attempt(high_term.unify(term!{context: lang(#&high_inner, #&high_ty)}?))? {
+                high_entry = make_entry_from_lang_term(context, &high_inner, &high_ty)?;
+            } else {
+                return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #high_term), _)}?);
+            }
+
+            let iter = layer.triples_value_range(&low_entry, &high_entry).peekable();
+
+            Ok(Some(iter))
+        },
+        call(iter) => {
+            if let Some(triple) = iter.next() {
+                subject_id_term.unify(triple.subject)?;
+                predicate_id_term.unify(triple.predicate)?;
+                object_id_term.unify(triple.object)?;
+
+                Ok(iter.peek().is_some())
+            }
+            else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
+
+    pub nondet fn id_triple_value_range_rev<Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>>(context, layer_term, low_term, high_term, subject_id_term, predicate_id_term, object_id_term) {
+        setup => {
+            let layer: WrappedLayer = layer_term.get_ex()?;
+
+            let low_inner = context.new_term_ref();
+            let low_ty = context.new_term_ref();
+            let low_entry;
+            if attempt(low_term.unify(term!{context: value(#&low_inner, #&low_ty)}?))? {
+                low_entry = make_entry_from_term(context, &low_inner, &low_ty)?;
+            } else if attempt(low_term.unify(term!{context: lang(#&low_inner, #&low_ty)}?))? {
+                low_entry = make_entry_from_lang_term(context, &low_inner, &low_ty)?;
+            } else {
+                return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #low_term), _)}?);
+            }
+
+            let high_inner = context.new_term_ref();
+            let high_ty = context.new_term_ref();
+            let high_entry;
+            if attempt(high_term.unify(term!{context: value(#&high_inner, #&high_ty)}?))? {
+                high_entry = make_entry_from_term(context, &high_inner, &high_ty)?;
+            } else if attempt(high_term.unify(term!{context: lang(#&high_inner, #&high_ty)}?))? {
+                high_entry = make_entry_from_lang_term(context, &high_inner, &high_ty)?;
+            } else {
+                return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #high_term), _)}?);
+            }
+
+            let iter = layer.triples_value_range_rev(&low_entry, &high_entry).peekable();
+
+            Ok(Some(iter))
+        },
+        call(iter) => {
+            if let Some(triple) = iter.next() {
+                subject_id_term.unify(triple.subject)?;
+                predicate_id_term.unify(triple.predicate)?;
+                object_id_term.unify(triple.object)?;
+
+                Ok(iter.peek().is_some())
+            }
+            else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
+
+    pub nondet fn id_triple_interval_relation<Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>>(context, layer_term, rel_term, ref_term, subject_id_term, predicate_id_term, object_id_term) {
+        setup => {
+            let layer: WrappedLayer = layer_term.get_ex()?;
+
+            let rel_inner = context.new_term_ref();
+            let rel_name: String = if attempt(rel_term.unify(term!{context: value(#&rel_inner, _)}?))? {
+                let s: PrologText = rel_inner.get_ex()?;
+                s.into_inner()
+            } else {
+                rel_term.get_ex()?
+            };
+            let rel = match AllenRelation::from_str(&rel_name) {
+                Ok(r) => r,
+                Err(_) => {
+                    return context.raise_exception(&term!{context: error(domain_error(allen_relation, #rel_term), _)}?)
+                }
+            };
+
+            let ref_inner = context.new_term_ref();
+            let ref_ty = context.new_term_ref();
+            let ref_entry;
+            if attempt(ref_term.unify(term!{context: value(#&ref_inner, #&ref_ty)}?))? {
+                ref_entry = make_entry_from_term(context, &ref_inner, &ref_ty)?;
+            } else {
+                return context.raise_exception(&term!{context: error(domain_error(value(), #ref_term), _)}?);
+            }
+
+            let Some(reference) = entry_relation_bounds(&ref_entry) else {
+                // a reference with no interval reading satisfies nothing
+                return Err(PrologError::Failure);
+            };
+
+            let iter = layer.triples_interval_relation(rel, &reference).peekable();
+
+            Ok(Some(iter))
+        },
+        call(iter) => {
+            if let Some(triple) = iter.next() {
+                subject_id_term.unify(triple.subject)?;
+                predicate_id_term.unify(triple.predicate)?;
+                object_id_term.unify(triple.object)?;
+
+                Ok(iter.peek().is_some())
+            }
+            else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
+
+    pub semidet fn id_triple_sp_value_next(context, layer_term, subject_id_term, predicate_id_term, reference_term, result_object_id_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let subject: u64 = subject_id_term.get_ex()?;
+        let predicate: u64 = predicate_id_term.get_ex()?;
+
+        let ref_inner = context.new_term_ref();
+        let ref_ty = context.new_term_ref();
+        let reference;
+        if attempt(reference_term.unify(term!{context: value(#&ref_inner, #&ref_ty)}?))? {
+            reference = make_entry_from_term(context, &ref_inner, &ref_ty)?;
+        } else if attempt(reference_term.unify(term!{context: lang(#&ref_inner, #&ref_ty)}?))? {
+            reference = make_entry_from_lang_term(context, &ref_inner, &ref_ty)?;
+        } else {
+            return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #reference_term), _)}?);
+        }
+
+        let ref_dt = reference.datatype();
+        let mut best: Option<(u64, TypedDictEntry)> = None;
+
+        for triple in layer.triples_sp(subject, predicate) {
+            if let Some(ObjectType::Value(entry)) = layer.id_object(triple.object) {
+                if entry.datatype() == ref_dt && entry > reference {
+                    if let Some((_, ref best_entry)) = best {
+                        if entry < *best_entry {
+                            best = Some((triple.object, entry));
+                        }
+                    } else {
+                        best = Some((triple.object, entry));
+                    }
+                }
+            }
+        }
+
+        match best {
+            Some((oid, _)) => result_object_id_term.unify(oid),
+            None => Err(PrologError::Failure),
+        }
+    }
+
+    pub semidet fn id_triple_sp_value_previous(context, layer_term, subject_id_term, predicate_id_term, reference_term, result_object_id_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let subject: u64 = subject_id_term.get_ex()?;
+        let predicate: u64 = predicate_id_term.get_ex()?;
+
+        let ref_inner = context.new_term_ref();
+        let ref_ty = context.new_term_ref();
+        let reference;
+        if attempt(reference_term.unify(term!{context: value(#&ref_inner, #&ref_ty)}?))? {
+            reference = make_entry_from_term(context, &ref_inner, &ref_ty)?;
+        } else if attempt(reference_term.unify(term!{context: lang(#&ref_inner, #&ref_ty)}?))? {
+            reference = make_entry_from_lang_term(context, &ref_inner, &ref_ty)?;
+        } else {
+            return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #reference_term), _)}?);
+        }
+
+        let ref_dt = reference.datatype();
+        let mut best: Option<(u64, TypedDictEntry)> = None;
+
+        for triple in layer.triples_sp(subject, predicate) {
+            if let Some(ObjectType::Value(entry)) = layer.id_object(triple.object) {
+                if entry.datatype() == ref_dt && entry < reference {
+                    if let Some((_, ref best_entry)) = best {
+                        if entry > *best_entry {
+                            best = Some((triple.object, entry));
+                        }
+                    } else {
+                        best = Some((triple.object, entry));
+                    }
+                }
+            }
+        }
+
+        match best {
+            Some((oid, _)) => result_object_id_term.unify(oid),
+            None => Err(PrologError::Failure),
+        }
+    }
+
     pub semidet fn retrieve_layer_stack_names(context, layer_term, layer_stack_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
 
@@ -457,6 +732,12 @@ predicates! {
             .collect();
 
         layer_stack_term.unify(name_strings.as_slice())
+    }
+
+    pub semidet fn layer_stored_size(_context, layer_term, size_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let size = layer.stored_size();
+        size_term.unify(size as u64)
     }
 
     pub semidet fn layer_equals(_context, layer1_term, layer2_term) {

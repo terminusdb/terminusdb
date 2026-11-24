@@ -1,0 +1,18 @@
+# Test-runner image: the image under test plus Node.js, so the mocha
+# suites execute inside one container instead of going through
+# `docker exec` per CLI invocation. Built from the loaded server image:
+#
+#   docker build -f tests/Dockerfile.test -t terminusdb-test:local .
+#
+# tests/ is bind-mounted at run time, so no test code is baked in.
+
+ARG TERMINUSDB_IMAGE=terminusdb/terminusdb-server:local
+FROM ${TERMINUSDB_IMAGE}
+
+# node:22-slim keeps its toolchain under /usr/local; Debian bases match.
+COPY --from=node:22-slim /usr/local /usr/local
+
+# procps: ps-tree (used to stop test servers) spawns `ps`, absent in slim.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends procps && \
+    rm -rf /var/lib/apt/lists/*

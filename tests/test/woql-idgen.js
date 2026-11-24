@@ -550,4 +550,108 @@ describe('woql-idgen', function () {
       expect(r.body['api:error']).to.have.property('@type').that.includes('Error')
     })
   })
+
+  describe('UuidV7', function () {
+    const UUID_V7_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+    it('generates unique UUID v7 IDs', async function () {
+      const query = {
+        '@type': 'And',
+        and: [
+          {
+            '@type': 'UuidV7',
+            base: {
+              '@type': 'DataValue',
+              data: { '@type': 'xsd:string', '@value': 'terminusdb:///data/uuid_' },
+            },
+            uri: { '@type': 'NodeValue', variable: 'ID1' },
+          },
+          {
+            '@type': 'UuidV7',
+            base: {
+              '@type': 'DataValue',
+              data: { '@type': 'xsd:string', '@value': 'terminusdb:///data/uuid_' },
+            },
+            uri: { '@type': 'NodeValue', variable: 'ID2' },
+          },
+        ],
+      }
+
+      const result = await woql.post(agent, query)
+      const bindings = result.body.bindings
+
+      expect(bindings).to.have.length(1)
+      expect(bindings[0].ID1).to.exist
+      expect(bindings[0].ID2).to.exist
+      expect(bindings[0].ID1).to.not.equal(bindings[0].ID2)
+
+      expect(bindings[0].ID1).to.include('uuid_')
+      expect(bindings[0].ID2).to.include('uuid_')
+
+      const id1Suffix = bindings[0].ID1.split('uuid_')[1]
+      const id2Suffix = bindings[0].ID2.split('uuid_')[1]
+      expect(id1Suffix).to.match(UUID_V7_RE)
+      expect(id2Suffix).to.match(UUID_V7_RE)
+    })
+
+    it('generates different IDs on multiple executions', async function () {
+      const query = {
+        '@type': 'UuidV7',
+        base: {
+          '@type': 'DataValue',
+          data: { '@type': 'xsd:string', '@value': 'terminusdb:///data/test_' },
+        },
+        uri: { '@type': 'NodeValue', variable: 'ID' },
+      }
+
+      const ids = new Set()
+
+      for (let i = 0; i < 10; i++) {
+        const result = await woql.post(agent, query)
+        ids.add(result.body.bindings[0].ID)
+      }
+
+      expect(ids.size).to.equal(10)
+    })
+
+    it('generates time-ordered IDs', async function () {
+      const query = {
+        '@type': 'UuidV7',
+        base: {
+          '@type': 'DataValue',
+          data: { '@type': 'xsd:string', '@value': 'terminusdb:///data/test_' },
+        },
+        uri: { '@type': 'NodeValue', variable: 'ID' },
+      }
+
+      const result1 = await woql.post(agent, query)
+      const result2 = await woql.post(agent, query)
+
+      // UUID v7 is lexicographically sortable by creation time
+      expect(result2.body.bindings[0].ID > result1.body.bindings[0].ID).to.be.true
+    })
+
+    it('fails with missing base', async function () {
+      const query = {
+        '@type': 'UuidV7',
+        uri: { '@type': 'NodeValue', variable: 'ID' },
+      }
+
+      const r = await woql.post(agent, query).fails()
+      expect(r.body['api:error']).to.have.property('@type').that.includes('Error')
+    })
+
+    it('fails with missing uri', async function () {
+      const query = {
+        '@type': 'UuidV7',
+        base: {
+          '@type': 'DataValue',
+          data: { '@type': 'xsd:string', '@value': 'terminusdb:///data/test_' },
+        },
+      }
+
+      const r = await woql.post(agent, query).fails()
+      expect(r.body['api:error']).to.have.property('@type').that.includes('Error')
+    })
+  })
 })

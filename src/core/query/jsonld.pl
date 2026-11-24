@@ -26,7 +26,8 @@
 :- use_module(core(util)).
 :- use_module(core(util/syntax)).
 :- use_module(core(triple)).
-:- use_module(core(triple/literals), [object_storage/2]).
+:- use_module(core(document/schema), [schema_read_layer/2]).
+:- use_module(core(triple/literals), [object_storage/2, expanded_name_datatype/1]).
 :- use_module(core(transaction/descriptor), [collection_descriptor_prefixes/2]).
 :- use_module(core(document)).
 
@@ -37,7 +38,7 @@
 :- use_module(library(plunit)).
 :- use_module(library(pcre), [re_match/2]).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 % sgml for xsd dates.
 %:- use_module(library(sgml), [xsd_time_string/3]).
@@ -85,6 +86,15 @@ expand(json{'@type' : Type, '@value' : Value}, Context, JSON) :-
 expand(json{'@language' : Lang, '@value' : Value}, _Context, JSON) :-
     !,
     JSON = json{'@language' : Lang, '@value' : Value}.
+expand(JSON_LD, Context, JSON) :-
+    % Skip recursive expansion for sys:JSON objects - they contain arbitrary JSON data
+    is_dict(JSON_LD),
+    get_dict('@type', JSON_LD, Type),
+    (Type = "sys:JSON" ; Type = 'http://terminusdb.com/schema/sys#JSON'),
+    !,
+    % Just expand the @type key, leave the rest as-is
+    prefix_expand(Type, Context, TypeX),
+    put_dict('@type', JSON_LD, TypeX, JSON).
 expand(JSON_LD, Context, JSON) :-
     is_dict(JSON_LD),
     !,
@@ -169,7 +179,21 @@ expand_value(V,Key_Ctx,_Ctx,_Value) :-
     throw(error(unknown_key_context(Key_Ctx,V))).
 
 has_at(K) :-
-    re_match('^@.*',K).
+    sub_atom(K, 0, 1, _, '@'),
+    !.
+has_at(K) :-
+    % Also match expanded @-prefixed keys like terminusdb:///schema#@version
+    % (an '@' with no '/' after it). Plain sub_atom scans: ~5x faster than
+    % regex and suffix enumeration on the per-key, per-document hot path.
+    atom(K),
+    sub_atom(K, Pos, 1, _, '@'),
+    Pos > 0,
+    succ(Pos, Start),
+    sub_atom(K, Start, _, 0, Tail),
+    % Keep enumerating '@' positions while a '/' follows, commit on success.
+    (   sub_atom(Tail, _, _, _, '/')
+    ->  fail
+    ;   ! ).
 
 context_prefix_expand(K,Context,Key) :-
     %   Already qualified
@@ -207,26 +231,20 @@ prefix_expand('',_,_) :-
     throw(error(empty_key, _)).
 prefix_expand("",_,_) :-
     throw(error(empty_key, _)).
-prefix_expand(K,Context,Key) :-
-    %   Is already qualified
-    (   uri_has_protocol(K)
-    ->  K = Key
-    %   Is prefixed (but does not check for protocol)
-    ;   uri_has_prefix_unsafe(K, Groups)
-    ->  atom_string(Prefix, Groups.prefix),
-        (   get_dict(Prefix,Context,Expanded)
-        ->  atom_concat(Expanded,(Groups.suffix),Key)
-        ;   throw(error(key_has_unknown_prefix(K), _)))
-    ;   is_at(K)
-    ->  K = Key
-    ;   (   get_dict('@base', Context, Base)
-        ->  true
-        ;   Base = ''),
-        (   get_dict('@vocab', Context, Vocab)
-        ->  true
-        ;   Vocab = ''),
-        atomic_list_concat([Base,Vocab,K],Key)
-    ).
+
+prefix_expand(K, Context, Key) :-
+    is_dict(Context),
+    !,
+    '$doc':rust_expand_prefix(Context, K, Key).
+prefix_expand(K, Layer, Key) :-
+    blob(Layer, layer),
+    !,
+    '$doc':rust_expand_prefix_layer(Layer, K, Key).
+prefix_expand(K, Schema, Key) :-
+    is_list(Schema),
+    schema_read_layer(Schema, Layer),
+    !,
+    '$doc':rust_expand_prefix_layer(Layer, K, Key).
 
 /*
  * expand_context(+Context,-Context_Expanded) is det.
@@ -303,6 +321,19 @@ test(expand_prefix_with_colon, []) :-
     prefix_expand("@schema:foo:bar", Prefixes, 'terminusdb:///schema#foo:bar'),
     prefix_expand("a:foo:bar", Prefixes, 'http://example.org/a/foo:bar').
 
+test(expand_hyphenated_prefix, []) :-
+    Prefixes = _{'dfrnt-bom': "https://example.com/dfrnt-bom/"},
+    prefix_expand("dfrnt-bom:Item", Prefixes, 'https://example.com/dfrnt-bom/Item'),
+    prefix_expand("dfrnt-bom:instance/123", Prefixes, 'https://example.com/dfrnt-bom/instance/123').
+
+test(expand_hyphenated_prefix_with_colon_in_local, []) :-
+    Prefixes = _{'dfrnt-bom': "https://example.com/dfrnt-bom/"},
+    prefix_expand("dfrnt-bom:Foo:Bar", Prefixes, 'https://example.com/dfrnt-bom/Foo:Bar').
+
+test(expand_hyphenated_scheme_unchanged, []) :-
+    Prefixes = _{},
+    prefix_expand('dfrnt-bom:///schema#BomClass', Prefixes, 'dfrnt-bom:///schema#BomClass').
+
 :- end_tests(jsonld_expand).
 
 /*
@@ -328,11 +359,25 @@ compress_uri(URI, Key, Prefix, Comp) :-
     atomic_list_concat([Key,':',Rest], Comp).
 
 compress_pairs_uri(URI, Pairs, Folded_URI) :-
-    (   member(Prefix-Expanded, Pairs),
-        compress_uri(URI, Prefix, Expanded, Folded_URI)
-    ->  true
-    ;   URI = Folded_URI).
+    % Among all context entries whose expansion is a prefix of URI, the
+    % longest expansion wins; ties keep the first in context order, as
+    % before.
+    findall(Len-RevIdx-Folded,
+            (   nth0(Idx, Pairs, Prefix-Expanded),
+                compress_uri(URI, Prefix, Expanded, Folded),
+                atom_string(Expanded_A, Expanded),
+                atom_length(Expanded_A, Len),
+                RevIdx is -Idx),
+            Candidates),
+    (   Candidates = []
+    ->  URI = Folded_URI
+    ;   msort(Candidates, Sorted),
+        last(Sorted, _Len-_RevIdx-Folded_URI)
+    ).
 
+compress_dict_uri(URI, Dict, Folded_URI) :-
+    '$doc':rust_compress_uri(Dict, URI, Folded_URI),
+    !.
 compress_dict_uri(URI, Dict, Folded_URI) :-
     dict_pairs(Dict, _, Pairs),
     exclude([_-B]>>is_dict(B), Pairs, Filtered),
@@ -420,7 +465,182 @@ test(compress_base, [])
 
     json{'@type':'scm:Fact','scm:your_face':json{'@id':'is_ugly'}} :< Compressed.
 
+test(compress_hyphenated_prefix, [])
+:-
+    Context = json{ 'dfrnt-bom' : "https://example.com/dfrnt-bom/"},
+    Document = json{ '@type' : "https://example.com/dfrnt-bom/Item",
+                     '@id' : "https://example.com/dfrnt-bom/instance/123"},
+    compress(Document, Context, Compressed),
+
+    json{'@type':'dfrnt-bom:Item','@id':'dfrnt-bom:instance/123'} :< Compressed.
+
+test(compress_hyphenated_prefix_property, [])
+:-
+    Context = json{ 'dfrnt-bom' : "https://example.com/dfrnt-bom/"},
+    Document = json{ 'https://example.com/dfrnt-bom/weight' : 42},
+    compress(Document, Context, Compressed),
+
+    json{'dfrnt-bom:weight':42} :< Compressed.
+
+% When one prefix URI is a string-extension of another, the longest
+% matching URI must win, regardless of prefix order in the context.
+test(compress_longest_prefix_wins, [])
+:-
+    Context = json{ 'xbrl'  : "https://xbrl.org/PWD/2026-09-01",
+                    'xbrla' : "https://xbrl.org/PWD/2026-09-01/accounting"},
+    Document = json{ 'https://xbrl.org/PWD/2026-09-01/accountingbalance' : "debit"},
+    compress(Document, Context, Compressed),
+
+    json{'xbrla:balance':"debit"} :< Compressed.
+
+test(compress_longest_prefix_wins_reversed_order, [])
+:-
+    Context = json{ 'xbrla' : "https://xbrl.org/PWD/2026-09-01/accounting",
+                    'xbrl'  : "https://xbrl.org/PWD/2026-09-01"},
+    Document = json{ 'https://xbrl.org/PWD/2026-09-01/accountingbalance' : "debit",
+                     'https://xbrl.org/PWD/2026-09-01unit' : "iso4217:USD"},
+    compress(Document, Context, Compressed),
+
+    json{'xbrla:balance':"debit", 'xbrl:unit':"iso4217:USD"} :< Compressed.
+
+test(compress_passthrough_unbound_uri, [])
+:-
+    Context = json{ eg : "http://example.org/ns#" },
+    compress_dict_uri('http://unbound.example/thing', Context, 'http://unbound.example/thing').
+
+test(compress_at_vocab_key_skipped, [])
+:-
+    Context = json{ '@vocab' : "http://example.org/voc/" },
+    compress_dict_uri('http://example.org/voc/x', Context, 'http://example.org/voc/x').
+
+test(compress_at_schema_key_compresses, [])
+:-
+    Context = json{ '@schema' : "http://example.com/schema#" },
+    compress_dict_uri('http://example.com/schema#name', Context, '@schema:name').
+
+test(compress_dict_valued_entry_skipped, [])
+:-
+    Context = json{ typed : json{ '@id' : "http://example.org/" },
+                    eg : "http://e/" },
+    compress_dict_uri('http://e/x', Context, 'eg:x'),
+    compress_dict_uri('http://example.org/x', Context, 'http://example.org/x').
+
+% An expansion may match anywhere in the URI, not only at the start.
+% The first occurrence decides the cut point: the compressed local name
+% is the slice between len(expansion) and len(URI)-B where B is the
+% match position — for 'xxabcZZabc'/'abc' that is URI[3..8].
+test(compress_interior_match, [])
+:-
+    compress_dict_uri('xxabcZZabc', _{eg:'abc'}, 'eg:bcZZa').
+
+% Folded results are atoms even when the input URI is a string, matching
+% atomic_list_concat/sub_atom output types.
+test(compress_string_input_compresses_to_atom, [])
+:-
+    Context = json{ eg : "http://e/" },
+    compress_dict_uri("http://e/x", Context, Compressed),
+    Compressed = 'eg:x',
+    atom(Compressed).
+
+test(compress_string_passthrough_preserves_type, [])
+:-
+    Context = json{ eg : "http://e/" },
+    compress_dict_uri("http://unbound.example/x", Context, Compressed),
+    Compressed = "http://unbound.example/x",
+    string(Compressed).
+
+% '@base' and '@schema' share the expansion here, so the tie resolves in
+% dict_pairs order and '@base' strips to the bare local name.  The dict's
+% internal argument order places @-keys last — iterating it directly would
+% flip the tie to '@schema'.
+test(compress_base_schema_tie_resolves_to_base, [])
+:-
+    compress_dict_uri('http://s#X', _{'@schema':'http://s#','@base':'http://s#'}, 'X').
+
+% Numbers are not URIs: `sub_atom` coerces them to text for matching,
+% finds nothing, and the input passes through verbatim — the FFI fast
+% path must not turn them into "".
+test(compress_numeric_uri_passthrough, [])
+:-
+    compress_dict_uri(2, _{eg:'http://e/'}, 2),
+    compress_dict_uri(2.5, _{eg:'http://e/'}, 2.5).
+
+test(compress_compound_uri_type_error,
+     [throws(error(type_error(_,foo(bar)),_))])
+:-
+    compress_dict_uri(foo(bar), _{eg:'http://e/'}, _).
+
+test(compress_ffi_dict_path, [])
+:-
+    Context = json{ '@base' : "http://example.com/data/",
+                    '@schema' : "http://example.com/schema#",
+                    eg : "http://e/" },
+    '$doc':rust_compress_uri(Context, 'http://example.com/data/Person/abc', 'Person/abc'),
+    '$doc':rust_compress_uri(Context, 'http://example.com/schema#name', '@schema:name'),
+    '$doc':rust_compress_uri(Context, 'http://unbound.example/x', 'http://unbound.example/x').
+
+test(compress_layer_uri, [])
+:-
+    make_compress_test_layer(Layer),
+    '$doc':rust_compress_uri_layer(Layer, 'http://example.com/data/Person/abc', 'Person/abc'),
+    '$doc':rust_compress_uri_layer(Layer, 'http://example.com/schema#name', '@schema:name'),
+    '$doc':rust_compress_uri_layer(Layer, 'http://www.w3.org/2001/XMLSchema#string', 'xsd:string'),
+    '$doc':rust_compress_uri_layer(Layer, 'http://unbound.example/x', 'http://unbound.example/x').
+
 :- end_tests(jsonld_compress).
+
+% Builds a one-layer memory store holding the same context triples that
+% database prefixes resolve to: '@base', '@schema' and prefix pairs.
+make_compress_test_layer(Layer) :-
+    terminus_store:open_memory_store(Store),
+    terminus_store:open_write(Store, Builder),
+    Context = 'terminusdb://context',
+    SysBase = 'http://terminusdb.com/schema/sys#base',
+    SysSchema = 'http://terminusdb.com/schema/sys#schema',
+    SysPrefixPair = 'http://terminusdb.com/schema/sys#prefix_pair',
+    SysPrefix = 'http://terminusdb.com/schema/sys#prefix',
+    SysUrl = 'http://terminusdb.com/schema/sys#url',
+    XSDString = 'http://www.w3.org/2001/XMLSchema#string',
+    terminus_store:nb_add_triple(Builder, Context, SysBase, value('http://example.com/data/', XSDString)),
+    terminus_store:nb_add_triple(Builder, Context, SysSchema, value('http://example.com/schema#', XSDString)),
+    compress_test_prefix_pair(Builder, Context, SysPrefixPair, SysPrefix, SysUrl, XSDString, 'eg', 'http://example.org/ns#'),
+    compress_test_prefix_pair(Builder, Context, SysPrefixPair, SysPrefix, SysUrl, XSDString, 'xbrl', 'https://xbrl.org/2021'),
+    compress_test_prefix_pair(Builder, Context, SysPrefixPair, SysPrefix, SysUrl, XSDString, 'xbrla', 'https://xbrl.org/2021/accounting'),
+    terminus_store:nb_commit(Builder, Layer).
+
+compress_test_prefix_pair(Builder, Context, SysPrefixPair, SysPrefix, SysUrl, XSDString, Name, Url) :-
+    atom_concat('pp_', Name, PairNode),
+    terminus_store:nb_add_triple(Builder, Context, SysPrefixPair, node(PairNode)),
+    terminus_store:nb_add_triple(Builder, PairNode, SysPrefix, value(Name, XSDString)),
+    terminus_store:nb_add_triple(Builder, PairNode, SysUrl, value(Url, XSDString)).
+
+:- begin_tests(has_at).
+
+test(has_at_leading_at, []) :-
+    has_at('@type').
+
+test(has_at_bare_at, []) :-
+    has_at('@').
+
+test(has_at_expanded_at_property, []) :-
+    has_at('terminusdb:///schema#@version').
+
+test(has_at_at_after_last_slash, []) :-
+    has_at('a/b@c').
+
+test(has_at_later_at_after_slash, []) :-
+    has_at('x@y/z@w').
+
+test(has_at_no_at, [fail]) :-
+    has_at(name).
+
+test(has_at_at_before_slash, [fail]) :-
+    has_at('foo@bar/baz').
+
+test(has_at_at_not_in_last_segment, [fail]) :-
+    has_at('a/b@/c').
+
+:- end_tests(has_at).
 
 /*
  *
@@ -498,9 +718,12 @@ value_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
         ->  V is truncate(D)
         ;   V = D
         )
+    ;   expanded_name_datatype(T)
+    ->  % Expanded names render as prefix:local via the active map
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', V^^_)
     ;   compound(D)
     ->  % Other compound types: convert to string
-        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', V^^_)
     ;   % Simple values: use as-is
         D=V
     ),
@@ -524,7 +747,7 @@ term_jsonld(Term,JSON) :-
     maplist([A=B,A-JSON_B]>>term_jsonld(B,JSON_B), Term, JSON_List),
     % We are a dictionary not a list.
     !,
-    dict_pairs(JSON, _, JSON_List).
+    dict_pairs(JSON, json, JSON_List).
 term_jsonld(Term,JSON) :-
     is_list(Term),
     !,
@@ -609,9 +832,12 @@ term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
         ->  V is truncate(D)
         ;   V = D
         )
+    ;   expanded_name_datatype(T)
+    ->  % Expanded names render as prefix:local via the query context map
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [prefixes(Prefixes)], V^^_)
     ;   compound(D)
     ->  % Other compound types: convert to string
-        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', V^^_)
     ;   % Simple values: use as-is
         D=V
     ),
@@ -631,7 +857,7 @@ term_jsonld(JSON,Prefixes,JSON_Compressed) :-
                 term_jsonld(Key,Prefixes,Compressed_Key),
                 term_jsonld(Value,Prefixes,Compressed_Value)
             ), Pairs, New_Pairs),
-    dict_create(JSON_Compressed, _, New_Pairs).
+    dict_create(JSON_Compressed, json, New_Pairs).
 term_jsonld(URI,Prefixes,URI_Compressed) :-
     compress_dict_uri(URI, Prefixes, URI_Compressed).
 

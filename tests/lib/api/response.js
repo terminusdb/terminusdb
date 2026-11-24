@@ -14,7 +14,7 @@ function verify (params) {
   params.assertEmpty()
 
   return function (r) {
-    expect(r).to.have.property('status', expected.status)
+    expect(r, `Expected status ${expected.status}, got ${r.status}. Body: ${JSON.stringify(r.body, null, 2)}`).to.have.property('status', expected.status)
 
     if (util.isDefined(expected.body)) {
       const entries1 = Object.entries(expected.body)

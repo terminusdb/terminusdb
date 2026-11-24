@@ -21,10 +21,14 @@
               collection_descriptor_prefixes/2,
               collection_descriptor_default_write_graph/2,
               descriptor_to_loggable/2,
+              branch_key_from_descriptor/2,
               ensure_transaction_has_builder/2,
               ensure_transaction_schema_written/1,
               should_retain_layers_for_descriptor/1,
-              retain_descriptor_layers/2
+              retain_descriptor_layers/2,
+              db_creation_bypass/2,
+              db_currently_creating/2,
+              db_failed/3
           ]).
 
 /** <module> Descriptor Manipulation
@@ -160,11 +164,25 @@
 :- use_module(repo_entity).
 :- use_module(ref_entity).
 :- use_module(layer_entity).
+:- use_module(system_entity, [database_exists/3, database_finalized/3]).
+:- thread_local db_creation_bypass/2.
+:- dynamic db_currently_creating/2.
+
+% Databases that exist in the system graph but whose graphs currently
+% fail to open. The first failed open asserts db_unservable_loading/3
+% and one detached thread runs a single open attempt; requests meanwhile
+% wait out the 30s grace window, then answer a retryable 503 instead of
+% a phantom not-found. A failed attempt asserts db_failed/3 — requests
+% then answer 500 until the mark expires after 30 minutes, after which
+% the next request clears it and re-enters the whole load cycle.
+:- dynamic db_unservable_loading/3.
+:- dynamic db_failed/3.
 
 
 :- use_module(core(util)).
 :- use_module(core(triple)).
 :- use_module(core(query)).
+:- use_module(core(query/resolve_query_resource), [resolve_absolute_string_descriptor/2]).
 :- use_module(config(terminus_config)).
 
 :- use_module(library(terminus_store)).
@@ -322,10 +340,11 @@ open_read_write_obj(Descriptor,
     open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
     Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
                              variety: repository_descriptor },
-    (   branch_head_commit(Repo, Branch_Name, Commit_Uri)
-    ->  commit_type(Repo, Commit_Uri, Commit_Type),
-        ignore((layer_uri_for_commit(Repo, Commit_Uri, Type, Layer_Uri),
-                layer_id_uri(Repo, Layer_Id, Layer_Uri),
+    create_context(Repo, Repo_Context),
+    (   branch_head_commit(Repo_Context, Branch_Name, Commit_Uri)
+    ->  commit_type(Repo_Context, Commit_Uri, Commit_Type),
+        ignore((layer_uri_for_commit(Repo_Context, Commit_Uri, Type, Layer_Uri),
+                layer_id_uri(Repo_Context, Layer_Id, Layer_Uri),
                 storage(Store),
                 store_id_layer(Store, Layer_Id, Layer)))
     ;   Layer = _),
@@ -350,10 +369,10 @@ open_read_write_obj(Descriptor,
     open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
     Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
                              variety: repository_descriptor },
-
-    (   commit_id_uri(Repo, Commit_Id, Commit_Uri),
-        layer_uri_for_commit(Repo, Commit_Uri, Type, Layer_Uri),
-        layer_id_uri(Repo, Layer_Id, Layer_Uri),
+    create_context(Repo, Repo_Context),
+    (   commit_id_uri(Repo_Context, Commit_Id, Commit_Uri),
+        layer_uri_for_commit(Repo_Context, Commit_Uri, Type, Layer_Uri),
+        layer_id_uri(Repo_Context, Layer_Id, Layer_Uri),
         storage(Store),
         store_id_layer(Store, Layer_Id, Layer)
     ->  true
@@ -545,15 +564,48 @@ open_descriptor_(Descriptor, _Commit_Info, Transaction_Object, Map,
     } = Descriptor,
     !,
 
-    Repository_Ontology_Graph = repo_graph{ organization_name: Organization_Name,
-                                            database_name: Database_Name,
-                                            type: schema },
+    % Gate: reject databases in 'creating' state unless creation bypass is active.
+    % db_currently_creating/2 is a cheap O(1) first filter. Only when a name
+    % matches do we verify against the current store's system graph, so isolated
+    % test stores and concurrent threads are handled correctly.
+    (   db_creation_bypass(Organization_Name, Database_Name)
+    ->  true
+    ;   db_currently_creating(Organization_Name, Database_Name),
+        database_exists(system_descriptor{}, Organization_Name, Database_Name),
+        \+ database_finalized(system_descriptor{}, Organization_Name, Database_Name)
+    ->  await_database_finalized(Organization_Name, Database_Name)
+    ;   db_failed(Organization_Name, Database_Name, Failed_Since)
+    ->  (   get_time(Now), Now - Failed_Since < 1800
+        ->  throw(error(database_unservable(Organization_Name, Database_Name), _))
+        ;   % The 500 mark expired — retract it and fall through to a fresh
+            % open attempt, which re-enters the whole load cycle on failure.
+            retractall(db_failed(Organization_Name, Database_Name, _)))
+    ;   db_unservable_loading(Organization_Name, Database_Name, _)
+    ->  await_database_load(Organization_Name, Database_Name)
+    ;   true
+    ),
 
-    open_read_write_obj(Repository_Ontology_Graph, Repository_Ontology_Object, Map, Map_1),
-    Instance_Graph = repo_graph{ organization_name: Organization_Name,
-                                 database_name: Database_Name,
-                                 type: instance },
-    open_read_write_obj(Instance_Graph, Instance_Object, Map_1, Map_2),
+    (   open_user_database_graphs(Organization_Name, Database_Name,
+                                  Map, Map_2,
+                                  Repository_Ontology_Object, Instance_Object)
+    ->  true
+    ;   db_creation_bypass(Organization_Name, Database_Name)
+    ->  fail
+    ;   db_currently_creating(Organization_Name, Database_Name)
+    ->  fail
+    ;   \+ database_exists(system_descriptor{}, Organization_Name, Database_Name)
+    ->  fail
+    ;   % The database record exists but its graphs will not open — a still-
+        % loading store or real damage. Never answer not-found for committed
+        % data: mark it loading, spawn the background reload, and wait on it.
+        % await_database_load then answers 503 (still loading past the wait)
+        % or 500 (load exhausted) — or returns so the re-open below serves.
+        mark_database_loading(Organization_Name, Database_Name),
+        await_database_load(Organization_Name, Database_Name),
+        open_user_database_graphs(Organization_Name, Database_Name,
+                                  Map, Map_2,
+                                  Repository_Ontology_Object, Instance_Object)
+    ),
 
     Transaction_Object = transaction_object{
                              descriptor : Descriptor,
@@ -708,6 +760,111 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
 open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
 
+%% open_user_database_graphs(+Organization_Name, +Database_Name,
+%%                           +Map, -Map_Out, -Schema_Object, -Instance_Object) is semidet.
+%
+%  Open the two repo graphs a database descriptor serves on — the load a
+%  database request needs and the probe a background reload uses. Fails
+%  when the backing store cannot supply either graph.
+open_user_database_graphs(Organization_Name, Database_Name, Map, Map_Out,
+                          Repository_Ontology_Object, Instance_Object) :-
+    Repository_Ontology_Graph = repo_graph{ organization_name: Organization_Name,
+                                            database_name: Database_Name,
+                                            type: schema },
+    open_read_write_obj(Repository_Ontology_Graph, Repository_Ontology_Object, Map, Map_1),
+    Instance_Graph = repo_graph{ organization_name: Organization_Name,
+                                 database_name: Database_Name,
+                                 type: instance },
+    open_read_write_obj(Instance_Graph, Instance_Object, Map_1, Map_Out).
+
+%% mark_database_loading(+Organization_Name, +Database_Name) is det.
+%
+%  Record that a database is being loaded and spawn the single background
+%  attempt — one try per request-triggered failure, running as long as
+%  the store's own open takes. The attempt's outcome is what requests
+%  then wait on: success retracts the loading mark, failure asserts
+%  db_failed/3.
+mark_database_loading(Organization_Name, Database_Name) :-
+    with_mutex(db_unservable_load,
+        (   db_unservable_loading(Organization_Name, Database_Name, _)
+        ->  true
+        ;   retractall(db_failed(Organization_Name, Database_Name, _)),
+            get_time(Now),
+            assertz(db_unservable_loading(Organization_Name, Database_Name, Now)),
+            json_log_warning_formatted('database ~s/~s failed to open; loading in background', [Organization_Name, Database_Name]),
+            (   catch(thread_create(
+                          reload_database_graphs(Organization_Name, Database_Name),
+                          _, [detached(true)]),
+                      _, fail)
+            ->  true
+            ;   % No loader, no waiting: a spawned thread that never starts
+                % would leave the loading mark up forever and 503 for good.
+                assertz(db_failed(Organization_Name, Database_Name, Now)),
+                retractall(db_unservable_loading(Organization_Name, Database_Name, _))))).
+
+%% await_database_load(+Organization_Name, +Database_Name) is det.
+%
+%  Wait out the remainder of the loading grace window: while the
+%  background attempt is young the request blocks for it, so a database
+%  that finishes loading mid-request serves real data instead of an
+%  error. Past the window (or once the attempt failed) the request
+%  answers instead of holding — 503 while the load still runs, 500 once
+%  it has given up.
+await_database_load(Organization_Name, Database_Name) :-
+    (   db_unservable_loading(Organization_Name, Database_Name, Since)
+    ->  db_load_wait(Seconds),
+        get_time(Now),
+        Polls is max(0, ceil((Seconds - (Now - Since)) * 2)),
+        (   retry_startup(Polls, (\+ db_unservable_loading(Organization_Name, Database_Name, _)))
+        ->  true
+        ;   throw(error(database_loading(Organization_Name, Database_Name), _)))
+    ;   true),
+    (   db_failed(Organization_Name, Database_Name, _)
+    ->  throw(error(database_unservable(Organization_Name, Database_Name), _))
+    ;   true).
+
+%% await_database_finalized(+Organization_Name, +Database_Name) is det.
+%
+%  Wait out the remainder of a database creation: while its creating
+%  flag is asserted the request blocks for it, so an open that lands
+%  inside create_db's finalize window serves the finished database
+%  instead of database_not_finalized. Creation concluding without the
+%  flag still asserted past the wait answers database_not_finalized —
+%  the same error an instant answer gave before, just slower to give up.
+await_database_finalized(Organization_Name, Database_Name) :-
+    db_load_wait(Seconds),
+    Polls is max(1, ceil(Seconds * 2)),
+    await_database_finalized(Organization_Name, Database_Name, Polls).
+
+await_database_finalized(Organization_Name, Database_Name, Polls) :-
+    (   retry_startup(Polls, (\+ db_currently_creating(Organization_Name, Database_Name)))
+    ->  true
+    ;   throw(error(database_not_finalized(Organization_Name, Database_Name), _))
+    ).
+
+%% db_load_wait(-Seconds) is det.
+%
+%  How long a request may wait on an in-flight database load before
+%  answering 503. TERMINUSDB_DB_LOAD_WAIT overrides the 30s default.
+db_load_wait(Seconds) :-
+    getenv_default_number('TERMINUSDB_DB_LOAD_WAIT', 30, Seconds).
+
+%% reload_database_graphs(+Organization_Name, +Database_Name) is det.
+%
+%  The one background try: open the database's graphs once, letting the
+%  store take whatever time it takes. Success clears the loading mark so
+%  the next request serves; failure records db_failed/3 so requests
+%  answer 500 until the mark expires and a retry is allowed.
+reload_database_graphs(Organization_Name, Database_Name) :-
+    (   catch(open_user_database_graphs(Organization_Name, Database_Name,
+                                        [], _Map, _Schema, _Instance),
+              _Error, fail)
+    ->  json_log_info_formatted('database ~s/~s loaded; resuming service', [Organization_Name, Database_Name])
+    ;   get_time(Now),
+        assertz(db_failed(Organization_Name, Database_Name, Now)),
+        json_log_error_formatted('database ~s/~s could not be loaded; answering errors until the mark expires', [Organization_Name, Database_Name])),
+    retractall(db_unservable_loading(Organization_Name, Database_Name, _)).
+
 should_retain_layers_for_descriptor(system_descriptor{}) :-
     !.
 should_retain_layers_for_descriptor(D) :-
@@ -847,6 +1004,7 @@ descriptor_to_loggable(Descriptor, Loggable) :-
                     database: Database,
                     repository: Repository,
                     branch: Branch}.
+
 descriptor_to_loggable(Descriptor, Loggable) :-
     commit_descriptor{
         repository_descriptor:
@@ -861,6 +1019,17 @@ descriptor_to_loggable(Descriptor, Loggable) :-
                     database: Database,
                     repository: Repository,
                     commit: Commit}.
+
+%! branch_key_from_descriptor(+Descriptor, -BranchKey) is det.
+% Builds a stable string key for a descriptor. Branch descriptors use the
+% descriptor path so the key is human-readable and stable; other descriptors
+% fall back to term_string.
+branch_key_from_descriptor(Descriptor, BranchKey) :-
+    (   branch_descriptor{} :< Descriptor
+    ->  resolve_absolute_string_descriptor(BranchKey0, Descriptor)
+    ;   term_string(Descriptor, BranchKey0)
+    ),
+    atom_string(BranchKey0, BranchKey).
 
 graph_descriptor_find_read_write_object(_, [], _) :-
         !,
@@ -1463,6 +1632,28 @@ test(open_commit_descriptor_with_nonexistent, [
           true),
 
     E = commit_does_not_exist(_).
+
+test(await_database_finalized_returns_when_not_creating) :-
+    await_database_finalized("admin", "never-created").
+
+test(await_database_finalized_waits_out_creation, [
+         setup(assert(descriptor:db_currently_creating("admin", "creating-db"))),
+         cleanup(retractall(descriptor:db_currently_creating("admin", "creating-db")))
+     ])
+:-
+    thread_create(
+        (sleep(1), retractall(descriptor:db_currently_creating("admin", "creating-db"))),
+        _,
+        [detached(true)]),
+    await_database_finalized("admin", "creating-db").
+
+test(await_database_finalized_times_out_creation, [
+         setup(assert(descriptor:db_currently_creating("admin", "stuck-db"))),
+         cleanup(retractall(descriptor:db_currently_creating("admin", "stuck-db"))),
+         throws(error(database_not_finalized("admin", "stuck-db"), _))
+     ])
+:-
+    await_database_finalized("admin", "stuck-db", 2).
 
 
 :- end_tests(open_descriptor).

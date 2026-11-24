@@ -1,0 +1,158 @@
+# syntax=docker/dockerfile:1.4
+
+ARG SWIPL_VERSION=10.0.2
+ARG DIST=community
+ARG SKIP_TESTS=false
+# No defaults: the UI pins live in UI_VERSIONS and are passed via --build-arg
+# by 'make docker-debug' and CI.
+ARG TDB_ADMIN_VERSION
+ARG TDB_DATA_VERSION
+
+# Minimal SWI-Prolog
+FROM swipl:${SWIPL_VERSION} AS swipl_minimal
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates
+
+# Install the SWI-Prolog pack dependencies.
+FROM swipl_minimal AS pack_installer
+RUN set -eux; \
+    BUILD_DEPS="git curl build-essential make libssl-dev pkg-config \
+    clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app/pack
+COPY distribution/Makefile.deps Makefile
+RUN make
+
+# Install Rust. Prepare to build the Rust code.
+FROM swipl_minimal AS rust_builder_base
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
+RUN set -eux; \
+    BUILD_DEPS="git build-essential curl clang ca-certificates m4 libgmp-dev \
+    protobuf-compiler libprotobuf-dev"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
+    rm -rf /var/lib/apt/lists/*
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal
+ENV PATH="/root/.cargo/bin:${PATH}"
+# Initialize the crates.io index git repo to cache it.
+RUN (cargo install lazy_static 2> /dev/null || true) && (cargo install cargo-swipl || true)
+WORKDIR /app/rust
+COPY distribution/Makefile.rust Makefile
+COPY src/rust src/rust/
+COPY --from=swipl-rs / /app/swipl-rs
+RUN sed -i '/^#.*swipl = {/d; s|^swipl = {.*}|swipl = {path="/app/swipl-rs/swipl"}|' src/rust/Cargo.toml
+
+# Build the community dylib.
+FROM rust_builder_base AS rust_builder_community
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
+ARG SKIP_TESTS=false
+RUN make DIST=community && ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && cargo swipl test --release))
+
+# Build the enterprise dylib.
+FROM rust_builder_base AS rust_builder_enterprise
+COPY terminusdb-enterprise/rust terminusdb-enterprise/rust/
+RUN make DIST=enterprise
+
+# Build the ${DIST} dylib.
+FROM rust_builder_${DIST} AS rust_builder
+
+# Build the dashboard (converts openapi.yaml to openapi.json)
+FROM node:22-slim AS dashboard_build
+WORKDIR /app/dashboard
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci --omit=dev
+COPY dashboard/build.js .
+COPY docs/openapi.yaml ../docs/openapi.yaml
+RUN node build.js
+
+# Download the pre-built tdb-admin dist package from GitHub releases.
+FROM alpine:latest AS admin_dist
+ARG TDB_ADMIN_VERSION
+RUN : "${TDB_ADMIN_VERSION:?TDB_ADMIN_VERSION build-arg required — pin lives in UI_VERSIONS (use 'make docker-debug')}"
+RUN apk add --no-cache curl tar
+RUN TDB_ADMIN_VER="${TDB_ADMIN_VERSION#v}" && \
+    mkdir -p /admin/dist && \
+    curl -fsSL "https://github.com/terminusdb-org/tdb-admin/releases/download/${TDB_ADMIN_VERSION}/tdb-admin-${TDB_ADMIN_VER}.tar.gz" \
+    | tar xzf - -C /admin/dist
+
+# Download the pre-built tdb-data dist package from GitHub releases.
+FROM alpine:latest AS data_dist
+ARG TDB_DATA_VERSION
+RUN : "${TDB_DATA_VERSION:?TDB_DATA_VERSION build-arg required — pin lives in UI_VERSIONS (use 'make docker-debug')}"
+RUN apk add --no-cache curl tar
+RUN TDB_DATA_VER="${TDB_DATA_VERSION#v}" && \
+    mkdir -p /data/dist && \
+    curl -fsSL "https://github.com/terminusdb-org/tdb-data/releases/download/${TDB_DATA_VERSION}/tdb-data-${TDB_DATA_VER}.tar.gz" \
+    | tar xzf - -C /data/dist
+
+# Copy the packs and dylib. Prepare to build the Prolog code.
+FROM pack_installer AS base
+RUN set -eux; \
+    RUNTIME_DEPS="make openssl binutils ca-certificates"; \
+    apt-get update; \
+    apt-get upgrade -y; \
+    apt-get install -y --no-install-recommends ${RUNTIME_DEPS}; \
+    rm -rf /var/cache/apt/*; \
+    rm -rf /var/lib/apt/lists/*
+ARG TERMINUSDB_GIT_HASH=null
+ENV TERMINUSDB_GIT_HASH=${TERMINUSDB_GIT_HASH}
+ARG TERMINUSDB_JWT_ENABLED=true
+ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
+WORKDIR /app/terminusdb
+COPY distribution/init_docker.sh distribution/
+COPY distribution/Makefile.prolog Makefile
+COPY src src/
+COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
+
+# Build the community executable.
+FROM base AS base_community
+ARG SKIP_TESTS=false
+COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
+RUN set -eux; \
+    make DIST=community; \
+    [ "$SKIP_TESTS" = "true" ] || make test
+
+# Build the enterprise executable.
+FROM base AS base_enterprise
+ARG SKIP_TESTS=false
+COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
+COPY terminusdb-enterprise/prolog terminusdb-enterprise/prolog/
+RUN set -eux; \
+    make DIST=enterprise; \
+    [ "$SKIP_TESTS" = "true" ] || make test
+
+FROM swipl_minimal AS min_community
+COPY --from=base_community /app/terminusdb/terminusdb app/terminusdb/
+
+FROM swipl_minimal AS min_enterprise
+COPY --from=base_enterprise /app/terminusdb/terminusdb app/terminusdb/
+
+# Build the ${DIST} executable. Set the default command.
+FROM min_${DIST}
+COPY --from=base /app/terminusdb/distribution/init_docker.sh app/terminusdb/
+RUN set -eux; \
+    RUNTIME_DEPS="make openssl binutils ca-certificates"; \
+    apt-get update; \
+    apt-get upgrade -y; \
+    apt-get install -y --no-install-recommends ${RUNTIME_DEPS}; \
+    rm -rf /var/cache/apt/*; \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=pack_installer /usr/share/swi-prolog/pack/tus /usr/share/swi-prolog/pack/tus
+
+WORKDIR /app/terminusdb
+RUN mkdir -p storage \
+    && chown -R 1000:1000 storage
+ENV TERMINUSDB_PLUGINS_PATH=${TERMINUSDB_PLUGINS_PATH:-/plugins}
+ENV TERMINUSDB_LISTEN_ADDRESS=0.0.0.0
+ENV TERMINUSDB_BUILTIN_PLUGINS_PATH=${TERMINUSDB_BUILTIN_PLUGINS_PATH:-/builtin_plugins}
+COPY builtin_plugins/ ${TERMINUSDB_BUILTIN_PLUGINS_PATH}/
+RUN mkdir -p /app/terminusdb/dashboard/src/assets
+COPY dashboard/src/index.html dashboard/src/api.html /app/terminusdb/dashboard/src/
+COPY dashboard/src/output.css /app/terminusdb/dashboard/src/assets/
+COPY dashboard/src/assets/scalar-init.js /app/terminusdb/dashboard/src/assets/
+COPY --from=dashboard_build /app/dashboard/src/assets/openapi.json /app/terminusdb/dashboard/src/assets/
+COPY --from=admin_dist /admin/dist /app/terminusdb/app/admin/dist
+COPY --from=data_dist /data/dist /app/terminusdb/app/data/dist
+CMD ["/app/terminusdb/init_docker.sh"]

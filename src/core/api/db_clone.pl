@@ -7,12 +7,15 @@
 :- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
+:- use_module(core(document)).
 :- use_module(db_create).
 :- use_module(db_delete).
 :- use_module(db_fetch).
 :- use_module(db_fast_forward).
 :- use_module(api_remote).
+:- use_module(core(plugins)).
 
+:- meta_predicate clone_(+,+,+,+,+,+,+,+,+,3,-).
 :- meta_predicate clone(+,+,+,+,+,+,+,+,+,3,-).
 clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predicate,Meta_Data) :-
     setup_call_catcher_cleanup(
@@ -63,21 +66,155 @@ do_clone_(Auth,Account,DB,Remote,Source, Fetch_Predicate,Meta_Data) :-
     % Fast forward commits from master in remote to master in local
     fast_forward_branch(To_Branch_Descriptor, From_Branch_Descriptor, Applied_Commits),
 
+    % The local branch was created empty before the fetched commits
+    % arrived — its origin is the source it was created to follow.
+    (   remote_path(Source, db(Remote_Organization, Remote_Database))
+    ->  atomic_list_concat([Remote_Organization, Remote_Database,
+                            "local", "branch", "main"], '/', Source_Spec)
+    ;   Source_Spec = Source
+    ),
+    To_Repo_Descriptor = (To_Branch_Descriptor.repository_descriptor),
+    create_context(To_Repo_Descriptor, To_Repo_Context),
+    with_transaction(To_Repo_Context,
+                     (   branch_name_uri(To_Repo_Context, "main", To_Branch_Uri),
+                         get_document(To_Repo_Context, To_Branch_Uri, Branch_Doc),
+                         (   branch_head_commit(To_Repo_Context, "main", Head_Uri)
+                         ->  Origin = _{commit: Head_Uri, source: Source_Spec}
+                         ;   Origin = _{source: Source_Spec}),
+                         put_dict(created_from, Branch_Doc, Origin, Updated_Doc),
+                         replace_document(To_Repo_Context, Updated_Doc, _)
+                     ->  true
+                     ;   true),
+                     _),
+
     Meta_Data = _{ applied_commits : Applied_Commits }.
 
 
-:- meta_predicate clone_(+,+,+,+,+,+,+,+,+,3,-).
 clone_(System_DB,Auth,Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predicate,Meta_Data) :-
     % Create DB
     create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, false, Public, _{'@base' : 'http://example.com/', '@schema' : 'http://example.com#'}, Db_Uri),
 
-    catch_with_backtrace(do_clone_(Auth,Account,DB,Remote,Source,Fetch_Predicate,Meta_Data),
-                         Error,
-                         true),
+    text_to_string(Account, Account_String),
+    text_to_string(DB, DB_String),
+    % Mark as creating so other threads are blocked by the gate in open_descriptor.
+    % Wrapped in setup_call_cleanup to guarantee retraction even if finalize_db throws.
+    setup_call_cleanup(
+        assert(db_currently_creating(Account_String, DB_String)),
+        (   setup_call_cleanup(
+                assert(db_creation_bypass(Account_String, DB_String)),
+                catch_with_backtrace(do_clone_(Auth,Account,DB,Remote,Source,Fetch_Predicate,Meta_Data),
+                                     Error,
+                                     true),
+                retract(db_creation_bypass(Account_String, DB_String))
+            ),
+            (   var(Error)
+            ->  finalize_db(Db_Uri)
+            ;   force_delete_db(Account, DB),
+                throw(Error)
+            )
+        ),
+        ignore(retract(db_currently_creating(Account_String, DB_String)))
+    ),
 
-    (   var(Error)
-    ->  finalize_db(Db_Uri)
-    ;   force_delete_db(Account, DB),
-        throw(Error)).
+    % The fast-forward applied commits without passing through the
+    % transaction commit path — fire the hook only after finalize_db and
+    % the creation gate have lifted, so consumers calling back into
+    % open_descriptor (e.g. the indexer) see a finished database.
+    (   get_dict(applied_commits, Meta_Data, Applied_Commits),
+        Applied_Commits \== []
+    ->  resolve_absolute_descriptor([Account, DB, "local", "branch", "main"],
+                                    Cloned_Branch_Descriptor),
+        ignore(forall(post_fast_forward_hook(Cloned_Branch_Descriptor,
+                                             Applied_Commits),
+                      true))
+    ;   true).
 
+
+:- begin_tests(clone_indexer_hook, [concurrent(false)]).
+
+:- use_module(library(yall)).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(triple)).
+:- use_module(core(query)).
+:- use_module(core(document)).
+:- use_module(core(plugins)).
+:- use_module(library(yall)).
+
+:- dynamic ff_hook_clause_ref/1.
+
+% The recorder clause records into the global recorded database — test
+% block code does not live in the module, so a qualified call back into
+% db_clone would not resolve at run time.
+install_ff_hook_recorder :-
+    assertz(plugins:(post_fast_forward_hook(D, I) :-
+                     recordz(clone_ff_hook_call, D-I)),
+            Ref),
+    assertz(ff_hook_clause_ref(Ref)).
+
+uninstall_ff_hook_recorder :-
+    forall(ff_hook_clause_ref(Ref), erase(Ref)),
+    retractall(ff_hook_clause_ref(_)),
+    forall(recorded(clone_ff_hook_call, _, Ref2), erase(Ref2)).
+
+test("clone fires post_fast_forward_hook for the cloned branch",
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffsrc"),
+             install_ff_hook_recorder)),
+      cleanup((uninstall_ff_hook_recorder,
+               teardown_temp_store(State)))
+     ]) :-
+    % Commit a triple on the source so there is history to apply.
+    resolve_absolute_string_descriptor("admin/ffsrc", Src_Branch),
+    create_context(Src_Branch,
+                   commit_info{author:"test", message:"test"},
+                   Src_Context),
+    with_transaction(Src_Context,
+                     ask(Src_Context, insert(a,b,c)),
+                     _),
+
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    clone(System, Auth, "admin", "ffdest", "label", "comment", false,
+          "origin", "admin/ffsrc", [_U,_H,_P]>>fail, Meta_Data),
+
+    get_dict(applied_commits, Meta_Data, Applied_Commits),
+    assertion(Applied_Commits \== []),
+    once(recorded(clone_ff_hook_call, Descriptor-Commit_Ids)),
+    assertion(Commit_Ids == Applied_Commits),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    assertion(Path == 'admin/ffdest/local/branch/main').
+
+test("clone records the source head as created_from",
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffsrc"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/ffsrc", Src_Branch),
+    create_context(Src_Branch,
+                   commit_info{author:"test", message:"test"},
+                   Src_Context),
+    with_transaction(Src_Context,
+                     ask(Src_Context, insert(a,b,c)),
+                     _),
+
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    clone(System, Auth, "admin", "ffdest", "label", "comment", false,
+          "origin", "admin/ffsrc", [_U,_H,_P]>>fail, _Meta_Data),
+
+    % The cloned branch existed empty before the fetched commits arrived —
+    % its origin is the source head it was created to follow, and the
+    % source spec names the repository it was cloned from.
+    resolve_absolute_string_descriptor("admin/ffdest/local/branch/main", Dest_Branch),
+    Repo_Descriptor = (Dest_Branch.repository_descriptor),
+    branch_head_commit(Repo_Descriptor, "main", Head_Uri),
+    branch_name_uri(Repo_Descriptor, "main", Branch_Uri),
+    create_context(Repo_Descriptor, Repo_Ctx),
+    get_document(Repo_Ctx, Branch_Uri, Branch_Doc),
+    get_dict(created_from, Branch_Doc, Origin),
+    get_dict(commit, Origin, Head_Uri),
+    get_dict(source, Origin, "admin/ffsrc/local/branch/main").
+
+:- end_tests(clone_indexer_hook).
 
