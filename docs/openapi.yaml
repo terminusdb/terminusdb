@@ -2984,12 +2984,17 @@ paths:
                   default: squash
                   enum: [squash]
                   description: "Variety of commit to create (currently only squash)"
+                "graph_type":
+                  type: string
+                  default: both
+                  enum: [both, schema, instance]
+                  description: "Graphs to apply. Schema writes require schema write access and a recorded migration that does not rewrite instances. Instance-only apply validates against the existing target schema."
                 "match_final_state":
                   type: boolean
                   default: true
-                  description: "Allow conflicting patch to apply if it would yield the same final state"
+                  description: "Allow conflicting changes already present on the target. An already-present schema change requires no schema write access."
                 "conflict_resolution":
-                  description: "How to resolve conflicts: a winner string (\"error\" reports, \"ours\" keeps the target state, \"theirs\" applies the incoming state), or an object with a `default` winner and a `documents` map from winner to a list of document ids for per-document overrides. Document ids may be @base-compressed, prefixed, or absolute IRIs."
+                  description: "How to resolve instance conflicts: a winner string (\"error\" reports, \"ours\" keeps the target state, \"theirs\" applies the incoming state), or an object with a `default` winner and a `documents` map from winner to a list of document ids for per-document overrides. Document ids may be @base-compressed, prefixed, or absolute IRIs."
                   oneOf:
                     - type: string
                       enum: [error, ours, theirs]
@@ -3021,7 +3026,7 @@ paths:
                 type: object
                 example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
         400:
-          description: "Bad apply type (only squash is supported) or malformed conflict_resolution"
+          description: "Invalid apply type, graph selection, conflict resolution, or unsupported schema change"
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
         403:

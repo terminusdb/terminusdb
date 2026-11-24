@@ -488,6 +488,9 @@ no_schema_changes(Validations) :-
         no_schema_changes_for_validation(Validation)
     ).
 
+infer_migrations_for_commit(Validations,Validations,_{},Options) :-
+    option(skip_migration_inference(true), Options),
+    !.
 infer_migrations_for_commit(Validations,Validations,_{},_Options) :-
     no_schema_changes(Validations),
     !.

@@ -1,6 +1,9 @@
 :- module('document/migration', [
               perform_instance_migration/5,
               perform_instance_migration_on_transaction/4,
+              create_class_dictionary/2,
+              plan_schema_migration/4,
+              stage_schema_migration/4,
               infer_weakening_migration/3,
               infer_arbitrary_migration/3,
               operations_are_weakening/1,
@@ -1211,6 +1214,50 @@ schema_inference_rule(weakening, Before, After, Operations) :-
 schema_inference_rule(strengthening, Before, After, Operations) :-
     schema_strengthening(Before, After, Operations).
 
+plan_schema_migration(Before, After, Recorded, Operations) :-
+    once((
+        (   schema_inference_rule(weakening, Before, After, Terms),
+            migration_terms_json(Terms, After, Candidate)
+        ;   Recorded \= [],
+            Candidate = Recorded,
+            migration_list_to_ast_list(Candidate, Terms)
+        ;   catch(schema_inference_rule(strengthening, Before, After, Terms),
+                  error(weakening_failure(_), _), fail),
+            migration_terms_json(Terms, After, Candidate)
+        ),
+        Terms \= [],
+        catch(interpret_schema_operations(Terms, Before, Expected),
+              error(schema_operation_failed(_, _), _), fail),
+        Expected =@= After,
+        Operations = Candidate
+    )).
+
+migration_terms_json(Terms, Schema, Operations) :-
+    migration_list_to_ast_list(Expanded, Terms),
+    (   get_dict('@context', Schema, Context)
+    ->  context_prefixes(Context, Prefixes, _),
+        maplist({Prefixes}/[Ex, C]>>contract_operation_json(Ex, Prefixes, C),
+                Expanded, Operations)
+    ;   Expanded = Operations
+    ).
+
+stage_schema_migration(Before, Operations, Expected, After) :-
+    perform_instance_migration_on_transaction(
+        Before, Operations, Staged, Result, [dry_run(true)]),
+    Before.instance_objects = [Before_Instance],
+    Staged.instance_objects = [After_Instance],
+    do_or_die(
+        (   Result.instance_operations =:= 0,
+            After_Instance.force_write == false
+        ),
+        error(apply_migration_rewrites_instances, _)),
+    do_or_die(
+        (   create_class_dictionary(Staged, Actual),
+            Actual =@= Expected
+        ),
+        error(apply_unsupported_schema_migration, _)),
+    put_dict(instance_objects, Staged, [Before_Instance.put(write, _)], After).
+
 perform_migration_rule(weakening,_Before, After, Operations_List, Validation_Out, Meta_Data) :-
     transaction_objects_to_validation_objects([After], [Validation]),
     length(Operations_List, Schema_Operations),
@@ -1250,16 +1297,10 @@ infer_migration(Rule, [Validation], [New_Validation], Meta_Data) :-
     create_class_dictionary(Before_Transaction, Before),
     create_class_dictionary(After_Transaction, After),
     schema_inference_rule(Rule, Before, After, Operations),
-    migration_list_to_ast_list(Operations_List_Ex, Operations),
     /* Ops re-expand under the new context when replayed, so contract
      * under it here: the record stays portable and the perform path
      * sees the same vocabulary a user would submit. */
-    (   get_dict('@context', After, After_Context)
-    ->  context_prefixes(After_Context, Op_Prefixes, _Op_Defaults),
-        maplist({Op_Prefixes}/[Op_Ex, Op_C]>>contract_operation_json(Op_Ex, Op_Prefixes, Op_C),
-                Operations_List_Ex, Operations_List)
-    ;   Operations_List = Operations_List_Ex
-    ),
+    migration_terms_json(Operations, After, Operations_List),
     !,
     perform_migration_rule(Rule, Before_Transaction, After_Transaction, Operations_List, Validation0, Meta_Data),
     atom_json_dict(Migration, Operations_List, [default_tag(json), width(0)]),
