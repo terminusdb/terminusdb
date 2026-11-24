@@ -6,7 +6,8 @@
               api_diff_id_document/8,
               api_diff_all_documents/7,
               api_apply_squash_commit/7,
-              api_check_apply_squash_commit/8
+              api_check_apply_squash_commit/8,
+              squash_apply_access/5
           ]).
 
 :- use_module(core(util)).
