@@ -46,8 +46,7 @@
                api_get_documents_by_query/6]).
 :- use_module(core(api/api_jsonschema)).
 :- use_module(core(api/api_patch), [api_patch_resource/7,
-                                   api_apply_squash_commit/7,
-                                   squash_apply_access/5]).
+                                   api_merge_squash_commit/7]).
 :- use_module(core(api/api_log), [api_log/5]).
 :- use_module(core(api/api_reset), [api_reset/4]).
 :- use_module(core(api/api_squash), [api_squash/6]).
@@ -371,6 +370,8 @@ mcp_error_hint(error(schema_check_failure(_), _),
                'Read each witness: `property` names the offending class member, `class` the range it wanted. Remember every non-@ member of a Class document is a property slot — "comment"/"description"/"title" are not annotations; valid type spellings come from schema action `datatypes`.').
 mcp_error_hint(error(apply_partial_recorded_migration(_, _), _),
                'Part of the source schema change is already on the target. Review the remaining changes and apply an explicit migration; merge does not replay a subset of recorded operations.').
+mcp_error_hint(error(squash_source_history_changed(_), _),
+               'The source branch no longer descends from a revision merged for this graph. Review its history and use /api/apply with explicit before and after commits.').
 mcp_error_hint(error(resource_not_found(Path), _),
                Hint) :-
     format(string(Hint),
@@ -2040,58 +2041,38 @@ require_confirm(Args, Template, Name) :-
         throw(mcp_tool_error(confirmation_required(Expected), Hint))).
 
 %% git_merge(+Auth, +System_DB, +Path, +Source, +Commit_Info, +Graph_Type, -Result) is det.
-%
-%  Merge Source (branch or commit path) into the branch at Path. The
-%  true common ancestor is computed — never caller-supplied — so the
-%  three-way apply sees real conflicts instead of silently discarding
-%  either side.
 git_merge(Auth, System_DB, Path, Source, Commit_Info, Graph_Type, Result) :-
-    squash_apply_access(Graph_Type, System_DB, Auth, Path, Branch_Desc),
-    do_or_die(
-        branch_descriptor{repository_descriptor: Our_Repo} :< Branch_Desc,
-        error(not_a_branch_descriptor(Branch_Desc), _)),
-    create_context(Our_Repo, Our_Ctx),
-    descriptor_commit_id_uri(Our_Ctx, Branch_Desc, Our_Id, _Our_Uri),
-
     do_or_die(
         resolve_absolute_string_descriptor(Source, Source_Desc),
         error(invalid_absolute_path(Source), _)),
-    do_or_die(
-        Source_Desc.repository_descriptor = Our_Repo,
-        error(mcp_cross_repository_merge(Source), _)),
-    descriptor_commit_id_uri(Our_Ctx, Source_Desc, Their_Id, _Their_Uri),
-
-    ref_entity:most_recent_common_ancestor(
-        Our_Ctx, Our_Ctx, Our_Id, Their_Id,
-        Common_Option, _Our_Path, _Their_Path),
-    (   Common_Option = some(Common_Id)
-    ->  true
-    ;   throw(mcp_tool_error(
-                  no_common_ancestor(Path, Source),
-                  'histories share no commit — git action `reset` to a known commit, or admin `export`/`import` instead'))),
-    format(atom(Before_A), 'commit:~w', [Common_Id]),
-    atom_string(Before, Before_A),
-    format(atom(After_A), 'commit:~w', [Their_Id]),
-    atom_string(After, After_A),
     catch(
-        api_patch:api_apply_squash_commit(
-            System_DB, Auth, Path, Commit_Info,
-            Before, After, [graph_type(Graph_Type), conflict_incoming(true),
-                            % both sides resolving to the same value is
-                            % convergence, not a conflict
-                            match_final_state(true)]),
-        error(apply_squash_witnesses(Witnesses)),
-        (   format(string(Merge_Hint),
-                   'changes to the same fields conflict — decide the correct value per document (witnesses show @expected ancestor, @found yours, @incoming theirs), then `write` the resolved documents on ~w: that commit completes the merge manually (retrying `merge` re-reports the same conflict)',
-                   [Path]),
-            throw(mcp_tool_error(
-                      merge_conflict(Witnesses), Merge_Hint)))),
+        api_merge_squash_commit(System_DB, Auth, Path, Commit_Info, Source_Desc, Graph_Type, Common_Id),
+        Error,
+        git_merge_error(Error, Path, Source)),
+    resolve_absolute_string_descriptor(Path, Branch_Desc),
     before_read(Branch_Desc, no_data_version, Actual_Version, _),
     serialize_data_version(Actual_Version, Data_Version),
-    Result = _{'_text':"merge committed",
+    Result = _{'_text':"merge complete",
                merged_from:Source,
                common_ancestor:Common_Id,
                data_version:Data_Version}.
+
+git_merge_error(error(no_squash_common_ancestor, _), Path, Source) :-
+    !,
+    throw(mcp_tool_error(
+              no_common_ancestor(Path, Source),
+              'histories share no commit — git action `reset` to a known commit, or admin `export`/`import` instead')).
+git_merge_error(error(mcp_cross_repository_merge(_), Context), _, Source) :-
+    !,
+    throw(error(mcp_cross_repository_merge(Source), Context)).
+git_merge_error(error(apply_squash_witnesses(Witnesses)), Path, _) :-
+    !,
+    format(string(Hint),
+           'changes to the same fields conflict — decide the correct value per document (witnesses show @expected ancestor, @found yours, @incoming theirs), then `write` the resolved documents on ~w: that commit completes the merge manually (retrying `merge` re-reports the same conflict)',
+           [Path]),
+    throw(mcp_tool_error(merge_conflict(Witnesses), Hint)).
+git_merge_error(Error, _, _) :-
+    throw(Error).
 
 % ==========================================================================
 % plugins tool — extension namespace

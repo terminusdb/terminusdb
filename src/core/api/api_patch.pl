@@ -7,7 +7,7 @@
               api_diff_all_documents/7,
               api_apply_squash_commit/7,
               api_check_apply_squash_commit/8,
-              squash_apply_access/5
+              api_merge_squash_commit/7
           ]).
 
 :- use_module(core(util)).
@@ -311,18 +311,111 @@ api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Dif
 
 api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, After_Version, Options) :-
     squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
-                       After_Version, Options, Context, Source, Mode, Merged_Options),
+                       After_Version, Options, Context, Sources, Mode, Merged_Options),
     with_transaction(
         Context,
-        (   squash_merge_witnesses(System_DB, Auth, Path, Context, Source,
-                                   Mode, Merged_Options, Witnesses),
-            (   Witnesses = []
-            ->  true
-            ;   throw(error(apply_squash_witnesses(Witnesses)))
-            )
+        squash_merge_or_throw(System_DB, Auth, Path, Context, Sources, Mode, Merged_Options),
+        _,
+        [skip_migration_inference(true)]
+    ).
+
+api_merge_squash_commit(System_DB, Auth, Path, Commit_Info, Source_Descriptor, Mode, Common_Id) :-
+    squash_apply_access(Mode, System_DB, Auth, Path, Branch_Descriptor),
+    do_or_die(is_dict(Branch_Descriptor, branch_descriptor),
+              error(not_a_branch_descriptor(Branch_Descriptor), _)),
+    do_or_die(Source_Descriptor.repository_descriptor == Branch_Descriptor.repository_descriptor,
+              error(mcp_cross_repository_merge(Source_Descriptor), _)),
+    squash_merge_options([conflict_incoming(true)], Options),
+    create_context(Branch_Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        (   squash_merge_sources(System_DB, Auth, Context, Source_Descriptor, Mode,
+                                 Sources, Provenance, Common_Id),
+            b_set_dict(commit_info, Context, Commit_Info.put(merge_source, Provenance)),
+            squash_merge_or_throw(System_DB, Auth, Path, Context, Sources, Mode, Options)
         ),
         _,
         [skip_migration_inference(true)]
+    ).
+
+squash_merge_or_throw(System_DB, Auth, Path, Context, Sources, Mode, Options) :-
+    squash_merge_witnesses(System_DB, Auth, Path, Context, Sources, Mode, Options, Witnesses),
+    (   Witnesses = []
+    ->  true
+    ;   throw(error(apply_squash_witnesses(Witnesses)))
+    ).
+
+squash_merge_sources(System_DB, Auth, Context, Source_Descriptor, Mode, Sources, Provenance, Common) :-
+    Branch = Context.default_collection,
+    query_default_collection(Context, Target),
+    create_context(Target.parent, Repo),
+    descriptor_commit_id_uri(Repo, Branch, Ours, _),
+    descriptor_commit_id_uri(Repo, Source_Descriptor, Theirs, Theirs_Uri),
+    once(open_apply_commit(System_DB, Auth, Branch, Theirs, After)),
+    do_or_die(
+        most_recent_common_ancestor(Repo, Repo, Ours, Theirs, some(Common), Our_Path, Their_Path),
+        error(no_squash_common_ancestor, _)),
+    squash_checkpoints(Repo, Our_Path, Checkpoints),
+    reverse(Their_Path, Their_Newest_First),
+    Checkpoint0 = _{graph_type:Mode},
+    (   get_dict(branch_name, Source_Descriptor, Source_Branch)
+    ->  Checkpoint = Checkpoint0.put(source_branch, Source_Branch)
+    ;   Source_Branch = none,
+        Checkpoint = Checkpoint0
+    ),
+    Provenance = _{operation:apply, commits:[Theirs_Uri], squash_checkpoint:Checkpoint},
+    findall(Graph, squash_selected_graph(Mode, Graph), Graphs),
+    maplist({Repo, Source_Branch, Common, Their_Newest_First, Checkpoints, System_DB,
+             Auth, Branch, Theirs, After}/[Graph, Graph-Range]>>(
+                squash_graph_base(Repo, Graph, Source_Branch, Common, Their_Newest_First,
+                                  Checkpoints, Base),
+                once(open_apply_commit(System_DB, Auth, Branch, Base, Before)),
+                Range = source{before_id:Base, after_id:Theirs, before:Before, after:After}
+            ), Graphs, Pairs),
+    dict_pairs(Sources, sources, Pairs).
+
+squash_selected_graph(both, schema).
+squash_selected_graph(both, instance).
+squash_selected_graph(schema, schema).
+squash_selected_graph(instance, instance).
+
+squash_checkpoints(Repo, Our_Path, Checkpoints) :-
+    reverse(Our_Path, Our_Newest_First),
+    findall(checkpoint(Mode, Branch, Source_Id),
+            (   member(Id, Our_Newest_First),
+                commit_id_uri(Repo, Id, Uri),
+                ask(Repo, (t(Uri, merge_source, Merge),
+                           t(Merge, squash_checkpoint, _))),
+                get_document(Repo, Merge, Source),
+                _{operation:apply, commits:[Source_IRI], squash_checkpoint:Checkpoint} :< Source,
+                Mode = Checkpoint.graph_type,
+                Branch = Checkpoint.get(source_branch, none),
+                atom_string(Source_Uri, Source_IRI),
+                % A cross-repository copy can contain the provenance but not its source commit.
+                commit_id_uri(Repo, Source_Id, Source_Uri)
+            ),
+            Checkpoints).
+
+checkpoint_covers_graph(Graph, checkpoint(Mode, _, _)) :-
+    squash_selected_graph(Mode, Graph).
+
+squash_graph_base(Repo, Graph, Branch, Common, Their_Newest_First, Checkpoints, Base) :-
+    include(checkpoint_covers_graph(Graph), Checkpoints, For_Graph),
+    (   Branch \== none,
+        memberchk(checkpoint(_, Branch, Previous), For_Graph)
+    ->  do_or_die(
+            (   memberchk(Previous, Their_Newest_First)
+            ;   Previous == Common
+            ;   most_recent_common_ancestor(Repo, Repo, Previous, Common, some(Previous), [], _)
+            ),
+            error(squash_source_history_changed(Graph), _))
+    ;   true
+    ),
+    % Only source ancestors qualify; target parent history alone misses squash reversions.
+    (   once((member(Candidate, Their_Newest_First),
+              memberchk(checkpoint(_, _, Candidate), For_Graph)))
+    ->  Base = Candidate
+    ;   Base = Common
     ).
 
 /* api_check_apply_squash_commit — dry-run for POST /api/apply.
@@ -334,13 +427,13 @@ api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, Afte
  */
 api_check_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, After_Version, Options, Result) :-
     squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
-                       After_Version, Options, Context, Source, Mode, Merged_Options),
+                       After_Version, Options, Context, Sources, Mode, Merged_Options),
     once(query_context_transaction_objects(Context, [Transaction])),
     database_prefixes(Transaction, Prefixes),
     setup_call_cleanup(
         pre_transaction_tabling,
         once(catch(
-            (   squash_merge_witnesses(System_DB, Auth, Path, Context, Source, Mode,
+            (   squash_merge_witnesses(System_DB, Auth, Path, Context, Sources, Mode,
                                        Merged_Options.put(_{dry_run:true}),
                                        Merge_Witnesses),
                 check_validation_witnesses(Context, [skip_migration_inference(true)|Options],
@@ -366,7 +459,7 @@ check_apply_result(Witnesses, Result) :-
                       'api:witnesses':Witnesses}).
 
 squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
-                   After_Version, Options, Context, Source, Mode, Merged_Options) :-
+                   After_Version, Options, Context, Sources, Mode, Merged_Options) :-
     option(type(Type), Options, squash),
     do_or_die(Type = squash,
               error(bad_apply_type(Type), _)),
@@ -388,6 +481,10 @@ squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
     once(open_apply_commit(System_DB, Auth, Branch_Descriptor, After_Commit_Id, After)),
     Source = source{before_id:Before_Commit_Id, after_id:After_Commit_Id,
                     before:Before, after:After},
+    Sources = sources{schema:Source, instance:Source},
+    squash_merge_options(Options, Merged_Options).
+
+squash_merge_options(Options, Merged_Options) :-
     merge_options(Options, options{keep:json{'@id':true, '@type':true},
                                    count:inf,
                                    start:0,
@@ -415,21 +512,23 @@ same_apply_layer(Graph, Before, After) :-
     ;   var(Before_Object.read), var(After_Object.read)
     ).
 
-squash_merge_witnesses(System_DB, Auth, Path, Context, Source, Mode, Options, Witnesses) :-
+squash_merge_witnesses(System_DB, Auth, Path, Context, Sources, Mode, Options, Witnesses) :-
     (   Mode \== schema,
-        \+ same_apply_layer(instance_objects, Source.before, Source.after)
+        Instance = Sources.instance,
+        \+ same_apply_layer(instance_objects, Instance.before, Instance.after)
     ->  resolve_descriptor_auth(write, System_DB, Auth, Path, instance, _),
         Apply_Instances = true
     ;   Apply_Instances = false
     ),
     (   Mode \== instance,
-        \+ same_apply_layer(schema_objects, Source.before, Source.after)
-    ->  squash_apply_schema(System_DB, Auth, Path, Context, Source, Options)
+        Schema = Sources.schema,
+        \+ same_apply_layer(schema_objects, Schema.before, Schema.after)
+    ->  squash_apply_schema(System_DB, Auth, Path, Context, Schema, Options)
     ;   true
     ),
     normalize_conflict_resolution(Options.conflict_resolution, Context, Resolution),
     (   Apply_Instances = true
-    ->  squash_instance_witnesses(Context, Source, Resolution, Options, Witnesses)
+    ->  squash_instance_witnesses(Context, Instance, Resolution, Options, Witnesses)
     ;   Witnesses = []
     ).
 
