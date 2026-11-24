@@ -2068,7 +2068,7 @@ git_merge_error(error(mcp_cross_repository_merge(_), Context), _, Source) :-
 git_merge_error(error(apply_squash_witnesses(Witnesses)), Path, _) :-
     !,
     format(string(Hint),
-           'changes to the same fields conflict — decide the correct value per document (witnesses show @expected ancestor, @found yours, @incoming theirs), then `write` the resolved documents on ~w: that commit completes the merge manually (retrying `merge` re-reports the same conflict)',
+           'changes to the same fields conflict — witnesses show @expected base, @found yours, and @incoming theirs. Use `write` on ~w to resolve the documents. A manual write does not record a merge checkpoint.',
            [Path]),
     throw(mcp_tool_error(merge_conflict(Witnesses), Hint)).
 git_merge_error(Error, _, _) :-
