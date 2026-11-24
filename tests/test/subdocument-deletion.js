@@ -766,4 +766,116 @@ describe('subdocument-deletion', function () {
       expect(doc2Full.body.child.value).to.equal('shared-value')
     })
   })
+
+  describe('value hash subdocuments', function () {
+    const dbName = 'subdoc_value_hash_shared'
+
+    before(async function () {
+      agent.dbName = dbName
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@id': 'Parent',
+          '@type': 'Class',
+          '@key': { '@type': 'Lexical', '@fields': ['name'] },
+          name: 'xsd:string',
+          child: { '@class': 'Child', '@type': 'Optional' },
+        },
+        {
+          '@id': 'Child',
+          '@type': 'Class',
+          '@subdocument': [],
+          '@key': { '@type': 'ValueHash' },
+          value: 'xsd:string',
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    const parent = (name, value) => ({
+      '@type': 'Parent',
+      name,
+      ...(value && { child: { '@type': 'Child', value } }),
+    })
+
+    beforeEach(async function () {
+      await document.insert(agent, { instance: parent('one', 'same') })
+      await document.insert(agent, { instance: parent('two', 'same') })
+    })
+
+    async function instanceTriples () {
+      const result = await woql.post(agent, {
+        '@type': 'Triple',
+        subject: { '@type': 'NodeValue', variable: 'Subject' },
+        predicate: { '@type': 'NodeValue', variable: 'Predicate' },
+        object: { '@type': 'Value', variable: 'Object' },
+      })
+      return result.body.bindings
+    }
+
+    async function childValues () {
+      const triples = await instanceTriples()
+      return triples
+        .filter((triple) => triple.Predicate === '@schema:value')
+        .map((triple) => triple.Object['@value'])
+        .sort()
+    }
+
+    afterEach(async function () {
+      const parents = await document.get(agent, { query: { type: 'Parent', as_list: true } })
+      if (parents.body.length > 0) {
+        await document.delete(agent, { body: parents.body.map((doc) => doc['@id']) })
+      }
+      expect(await instanceTriples()).to.have.lengthOf(0)
+    })
+
+    it('keeps a shared value hash child until the last parent is deleted', async function () {
+      await document.delete(agent, { body: ['Parent/one'] })
+
+      const remaining = await document.get(agent, { query: { id: 'Parent/two' } })
+      expect(remaining.body.child.value).to.equal('same')
+
+      await document.delete(agent, { body: ['Parent/two'] })
+
+      expect(await instanceTriples()).to.have.lengthOf(0)
+    })
+
+    it('deletes a shared value hash child when all parents are deleted together', async function () {
+      await document.delete(agent, { body: ['Parent/one', 'Parent/two'] })
+
+      expect(await instanceTriples()).to.have.lengthOf(0)
+    })
+
+    it('deletes a shared value hash child when one query deletes each parent', async function () {
+      await woql.post(agent, {
+        '@type': 'And',
+        and: ['Parent/one', 'Parent/two'].map((node) => ({
+          '@type': 'DeleteDocument',
+          identifier: { '@type': 'NodeValue', node },
+        })),
+      })
+
+      expect(await instanceTriples()).to.have.lengthOf(0)
+    })
+
+    it('keeps a shared value hash child until the last parent drops it', async function () {
+      await document.replace(agent, { instance: { '@id': 'Parent/one', ...parent('one') } })
+      expect(await childValues()).to.deep.equal(['same'])
+
+      await document.replace(agent, { instance: { '@id': 'Parent/two', ...parent('two') } })
+      expect(await childValues()).to.deep.equal([])
+    })
+
+    it('keeps a shared value hash child when one parent takes another child', async function () {
+      await document.replace(agent, { instance: { '@id': 'Parent/one', ...parent('one', 'other') } })
+
+      expect(await childValues()).to.deep.equal(['other', 'same'])
+    })
+  })
 })
