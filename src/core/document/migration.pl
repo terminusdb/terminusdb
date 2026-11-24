@@ -1835,7 +1835,9 @@ delete_value(_, Before, Value) =>
 
 create_class_property_default_operation(Class, Property, Type, Default, After, Count) :-
     (   is_dict(Type),
-        get_dict('@type', Type, "List")
+        get_dict('@type', Type, FamilyElt),
+        atom_string(Family, FamilyElt),
+        Family = 'List'
     ->  database_and_default_prefixes(After, Prefixes),
         get_dict('@class', Type, List_Class),
         prefix_expand_schema(List_Class, Prefixes, List_Class_Ex),
@@ -2150,7 +2152,14 @@ interpret_instance_operation_(upcast_class_property(Class, Property, New_Type_Ca
     ;   New_Type = New_Type_Candidate
     ),
 
-    (   extract_simple_type(New_Type, Simple_Type)
+    (   is_dict(New_Type),
+        get_dict('@type', New_Type, Family),
+        atom_string(Family_Name, Family),
+        Family_Name = 'List'
+    ->  % Upcasts to List only arise within the List family, which shares
+        % one representation, so no instance rewrite is needed.
+        Count = 0
+    ;   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
             (   default_prefixes(Prefixes),
                 prefix_expand_schema(Simple_Type, Prefixes, Simple_Type_Ex),
@@ -3500,6 +3509,17 @@ before_refs('
 
 ').
 
+before_mandatory_list('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Tgt",
+  "tags" : { "@type" : "List", "@class" : "xsd:string", "@mandatory" : [] } }
+
+').
+
 before_ccp('
 { "@base": "terminusdb:///data/",
   "@schema": "terminusdb:///schema#",
@@ -4088,6 +4108,30 @@ test(create_class_property_list_leaves_existing_documents_unset,
 
     get_document(Descriptor, 'Tgt/1', Doc),
     \+ get_dict(tags, Doc, _).
+
+test(upcast_list_leaves_instances_unchanged,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_mandatory_list,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@type' : "Tgt", '@id' : 'Tgt/1', tags : ["a","b"] }, _)),
+
+    Term_Ops = [
+        upcast_class_property("Tgt", "tags", _{ '@type' : "List", '@class' : "xsd:string"})
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'Tgt/1', Doc),
+    get_dict(tags, Doc, ["a","b"]).
 
 test(create_class_property_mandatory_spec,
      [setup((setup_temp_store(State),
