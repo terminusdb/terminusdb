@@ -381,13 +381,10 @@ squash_selected_graph(instance, instance).
 
 squash_checkpoints(Repo, Our_Path, Checkpoints) :-
     reverse(Our_Path, Our_Newest_First),
-    findall(checkpoint(Mode, Branch, Source_Id),
+    findall(checkpoint(Mode, Branch, Source_Id, Origin),
             (   member(Id, Our_Newest_First),
                 commit_id_uri(Repo, Id, Uri),
-                ask(Repo, (t(Uri, merge_source, Merge),
-                           t(Merge, squash_checkpoint, _))),
-                get_document(Repo, Merge, Source),
-                _{operation:apply, commits:[Source_IRI], squash_checkpoint:Checkpoint} :< Source,
+                squash_checkpoint_origin(Repo, Uri, [], Origin, Source_IRI, Checkpoint),
                 Mode = Checkpoint.graph_type,
                 Branch = Checkpoint.get(source_branch, none),
                 atom_string(Source_Uri, Source_IRI),
@@ -396,13 +393,25 @@ squash_checkpoints(Repo, Our_Path, Checkpoints) :-
             ),
             Checkpoints).
 
-checkpoint_covers_graph(Graph, checkpoint(Mode, _, _)) :-
+squash_checkpoint_origin(Repo, Uri, Seen, Origin, Source_IRI, Checkpoint) :-
+    ask(Repo, t(Uri, merge_source, Merge)),
+    get_document(Repo, Merge, Provenance),
+    (   _{operation:apply, commits:[Source_IRI], squash_checkpoint:Checkpoint} :< Provenance
+    ->  Origin = direct
+    ;   _{operation:rebase, commits:[Original_IRI]} :< Provenance,
+        atom_string(Original_Uri, Original_IRI),
+        \+ memberchk(Original_Uri, [Uri|Seen]),
+        squash_checkpoint_origin(Repo, Original_Uri, [Uri|Seen], _, Source_IRI, Checkpoint),
+        Origin = rebased
+    ).
+
+checkpoint_covers_graph(Graph, checkpoint(Mode, _, _, _)) :-
     squash_selected_graph(Mode, Graph).
 
 squash_graph_base(Repo, Graph, Branch, Common, Their_Newest_First, Checkpoints, Base) :-
     include(checkpoint_covers_graph(Graph), Checkpoints, For_Graph),
     (   Branch \== none,
-        memberchk(checkpoint(_, Branch, Previous), For_Graph)
+        memberchk(checkpoint(_, Branch, Previous, _), For_Graph)
     ->  do_or_die(
             (   memberchk(Previous, Their_Newest_First)
             ;   Previous == Common
@@ -413,8 +422,11 @@ squash_graph_base(Repo, Graph, Branch, Common, Their_Newest_First, Checkpoints, 
     ),
     % Only source ancestors qualify; target parent history alone misses squash reversions.
     (   once((member(Candidate, Their_Newest_First),
-              memberchk(checkpoint(_, _, Candidate), For_Graph)))
-    ->  Base = Candidate
+              memberchk(checkpoint(_, _, Candidate, _), For_Graph)))
+    ->  % Rebase provenance does not prove the original graph changes landed.
+        do_or_die(memberchk(checkpoint(_, _, Candidate, direct), For_Graph),
+                  error(squash_rebased_checkpoint(Graph), _)),
+        Base = Candidate
     ;   Base = Common
     ).
 

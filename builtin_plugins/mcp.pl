@@ -372,6 +372,8 @@ mcp_error_hint(error(apply_partial_recorded_migration(_, _), _),
                'Part of the source schema change is already on the target. Review the remaining changes and apply an explicit migration; merge does not replay a subset of recorded operations.').
 mcp_error_hint(error(squash_source_history_changed(_), _),
                'The source branch no longer descends from a revision merged for this graph. Review its history and use /api/apply with explicit before and after commits.').
+mcp_error_hint(error(squash_rebased_checkpoint(_), _),
+               'The target was rebased over a squash checkpoint for this graph. Review which source changes landed and use /api/apply with explicit before and after commits. Explicit apply does not restore the checkpoint.').
 mcp_error_hint(error(resource_not_found(Path), _),
                Hint) :-
     format(string(Hint),
