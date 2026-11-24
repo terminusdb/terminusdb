@@ -1966,6 +1966,13 @@ json_schema_predicate_value('@unfold',V,_,_,_,_) :-
 json_schema_predicate_value('@shared',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:shared, P).
+json_schema_predicate_value('@mandatory',[],_,_,P,[]) :-
+    !,
+    global_prefix_expand(sys:mandatory, P).
+json_schema_predicate_value('@mandatory',V,_,_,_,_) :-
+    !,
+    throw(error(schema_check_failure([witness{ '@type': bad_mandatory_value,
+                                               value: V }]),_)).
 json_schema_predicate_value('@shared',V,_,_,_,_) :-
     % Non-list value for @shared — reject with bad_shared_value witness
     !,
@@ -3061,6 +3068,9 @@ schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@shared',[]) :-
 schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@unfoldable',[]) :-
     global_prefix_expand(sys:unfoldable,P),
     !.
+schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@mandatory',[]) :-
+    global_prefix_expand(sys:mandatory,P),
+    !.
 schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@inherits',V) :-
     global_prefix_expand(sys:inherits,P),
     findall(Parent,
@@ -3123,10 +3133,14 @@ schema_subject_predicate_object_key_value(Schema,Prefixes,_Id,P,O,K,JSON) :-
     type_descriptor_json(Descriptor,Prefixes,JSON0),
     (   xrdf(Schema, O, sys:unfold, rdf:nil)
     ->  (   is_dict(JSON0)
-        ->  JSON = JSON0.put('@unfold', true)
-        ;   JSON = json{ '@class': JSON0, '@unfold': true }
+        ->  JSON1 = JSON0.put('@unfold', true)
+        ;   JSON1 = json{ '@class': JSON0, '@unfold': true }
         )
-    ;   JSON = JSON0
+    ;   JSON1 = JSON0
+    ),
+    (   xrdf(Schema, O, sys:mandatory, rdf:nil)
+    ->  JSON = JSON1.put('@mandatory', [])
+    ;   JSON = JSON1
     ).
 
 get_schema_document_uri(Query_Context, ID) :-
@@ -4204,9 +4218,12 @@ schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options) :-
             % rendered subframe like the document serializer does.
             (   schema_property_is_unfold(Schema, Class_Ex, Predicate, true)
             ->  (   is_dict(Subframe0)
-                ->  Subframe = Subframe0.put('@unfold', true)
-                ;   Subframe = json{ '@class': Subframe0, '@unfold': true })
-            ;   Subframe = Subframe0),
+                ->  Subframe1 = Subframe0.put('@unfold', true)
+                ;   Subframe1 = json{ '@class': Subframe0, '@unfold': true })
+            ;   Subframe1 = Subframe0),
+            (   schema_property_is_mandatory(Schema, Class_Ex, Predicate, true)
+            ->  Subframe = Subframe1.put('@mandatory', [])
+            ;   Subframe = Subframe1),
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp, Options)
         ),
         Pre_Pairs),
@@ -4337,9 +4354,10 @@ frame_matches_class_dictionary(DB,Prefixes,Frame,Class) :-
     ).
 
 normalize_type_for_comparison(Type, Normalized) :-
-    (   is_dict(Type),
-        del_dict('@unfold', Type, _, Normalized)
-    ->  true
+    (   is_dict(Type)
+    ->  dict_pairs(Type, Tag, Pairs),
+        exclude([Key-_]>>memberchk(Key, ['@unfold', '@mandatory']), Pairs, Kept),
+        dict_pairs(Normalized, Tag, Kept)
     ;   Normalized = Type
     ).
 
@@ -11897,7 +11915,8 @@ schema6('
   "@type": "Class",
   "name": "xsd:string",
   "perimeter": {"@class": "Coordinate",
-                "@type": "List"}}
+                "@type": "List",
+                "@mandatory": []}}
 
 { "@id": "Coordinate",
   "@key": {"@type": "Random"},
@@ -11967,7 +11986,8 @@ test(all_class_frames, [
 							       '@type':'Class',
 							       name:'xsd:string',
 							       perimeter:json{ '@class':'Coordinate',
-									               '@type':'List'
+									               '@type':'List',
+									               '@mandatory':[]
 									             }
 							     },
 				   'Employee':json{ '@key':json{ '@type':"Random"
@@ -12039,7 +12059,7 @@ test(all_class_frames_simple, [
       'Country':json{ '@key':json{'@type':"ValueHash"},
 		      '@type':'Class',
 		      name:'xsd:string',
-		      perimeter:json{'@class':'Coordinate','@type':'List'}
+		      perimeter:json{'@class':'Coordinate','@type':'List','@mandatory':[]}
 		    },
       'Employee':json{ '@documentation':json{ '@properties':json{ age:"Age of the person.",
 								  name:"Name of the person."
@@ -18059,3 +18079,202 @@ toggle_schema_off(Desc) :-
     ).
 
 :- end_tests(schemaless_shape_check).
+
+:- begin_tests(list_mandatory, [concurrent(true)]).
+:- use_module(core(util/test_utils)).
+
+list_mandatory_schema('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "Item",
+  "@type" : "Class",
+  "@key" : { "@type" : "Random" },
+  "name" : "xsd:string",
+  "tags" : { "@type" : "List", "@class" : "xsd:string" } }
+
+{ "@id" : "RequiredItem",
+  "@type" : "Class",
+  "@key" : { "@type" : "Random" },
+  "name" : "xsd:string",
+  "tags" : { "@type" : "List", "@class" : "xsd:string", "@mandatory" : [] } }
+
+{ "@id" : "InheritedRequiredItem",
+  "@type" : "Class",
+  "@inherits" : "RequiredItem" }
+').
+
+list_mandatory_insert_schema(Desc, Schema) :-
+    with_test_transaction(
+        Desc,
+        Context,
+        insert_schema_document(Context, Schema)
+    ).
+
+test(optional_list_preserves_unset_empty_and_populated,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    run_insert_document(Desc, commit_info{author:"test",message:"test"},
+                        _{ '@type' : "Item", name : "unset" }, Unset_Id),
+    run_insert_document(Desc, commit_info{author:"test",message:"test"},
+                        _{ '@type' : "Item", name : "empty", tags : [] }, Empty_Id),
+    run_insert_document(Desc, commit_info{author:"test",message:"test"},
+                        _{ '@type' : "Item", name : "populated", tags : ["a","b"] }, Populated_Id),
+    get_document(Desc, Unset_Id, Unset),
+    \+ get_dict(tags, Unset, _),
+    get_document(Desc, Empty_Id, Empty),
+    get_dict(tags, Empty, []),
+    get_document(Desc, Populated_Id, Populated),
+    get_dict(tags, Populated, ["a","b"]).
+
+test(mandatory_list_requires_presence_but_not_length,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    run_insert_document(Desc, commit_info{author:"test",message:"test"},
+                        _{ '@type' : "RequiredItem", name : "empty", tags : [] }, Id),
+    get_document(Desc, Id, Document),
+    get_dict(tags, Document, []).
+
+test(mandatory_list_marker_is_inherited,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(
+                [json{'@type':required_field_does_not_exist_in_document,
+                      document:_,
+                      field:'http://s/tags'}]),
+            _)]) :-
+    with_test_transaction(
+        Desc,
+        Context,
+        insert_document(Context, _{ '@type' : "InheritedRequiredItem", name : "missing" }, _),
+        _).
+
+test(mandatory_list_rejects_omission,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(
+                [json{'@type':required_field_does_not_exist_in_document,
+                      document:_,
+                      field:'http://s/tags'}]),
+            _)]) :-
+    with_test_transaction(
+        Desc,
+        Context,
+        insert_document(Context, _{ '@type' : "RequiredItem", name : "missing" }, _),
+        _).
+
+test(mandatory_annotation_round_trips,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'RequiredItem', Required),
+    get_dict(tags, Required, Required_Tags),
+    get_dict('@mandatory', Required_Tags, []),
+    get_schema_document(DB, 'Item', Optional),
+    get_dict(tags, Optional, Optional_Tags),
+    \+ get_dict('@mandatory', Optional_Tags, _),
+    class_frame(DB, 'RequiredItem', Frame),
+    get_dict(tags, Frame, Frame_Tags),
+    get_dict('@mandatory', Frame_Tags, []).
+
+test(mandatory_marker_rejects_non_empty_value,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{'@type':bad_mandatory_value,
+                                          value:["a"]}]),_)]) :-
+    list_mandatory_insert_schema(
+        Desc,
+        _{ '@id' : "BadValue",
+           '@type' : "Class",
+           tags : _{ '@type' : "List", '@class' : "xsd:string", '@mandatory' : ["a"] } }).
+
+test(mandatory_marker_rejects_class_level,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{'@type':mandatory_not_on_list_property,
+                                          class:'http://s/ClassLevel'}]),_)]) :-
+    list_mandatory_insert_schema(
+        Desc,
+        _{ '@id' : "ClassLevel",
+           '@type' : "Class",
+           '@mandatory' : [],
+           tags : _{ '@type' : "List", '@class' : "xsd:string" } }).
+
+test(mandatory_marker_rejects_non_list_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{'@type':mandatory_not_on_list_property,
+                                          class:'http://s/SetLevel',
+                                          property:'http://s/tags'}]),_)]) :-
+    list_mandatory_insert_schema(
+        Desc,
+        _{ '@id' : "SetLevel",
+           '@type' : "Class",
+           tags : _{ '@type' : "Set", '@class' : "xsd:string", '@mandatory' : [] } }).
+
+test(optional_list_replace_can_unset,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    run_insert_document(Desc, commit_info{author:"test",message:"test"},
+                        _{ '@type' : "Item", name : "before", tags : ["a"] }, Id),
+    run_replace_document(Desc, commit_info{author:"test",message:"test"},
+                         _{ '@type' : "Item", '@id' : Id, name : "after" }, _),
+    get_document(Desc, Id, Document),
+    \+ get_dict(tags, Document, _),
+    get_dict(name, Document, "after").
+
+test(mandatory_list_replace_requires_presence,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    run_insert_document(Desc, commit_info{author:"test",message:"test"},
+                        _{ '@type' : "RequiredItem", name : "before", tags : [] }, Id),
+    catch(
+        run_replace_document(Desc, commit_info{author:"test",message:"test"},
+                             _{ '@type' : "RequiredItem", '@id' : Id, name : "after" }, _),
+        Error,
+        true),
+    nonvar(Error),
+    Error = error(schema_check_failure(
+                      [json{'@type':required_field_does_not_exist_in_document,
+                            document:_,
+                            field:'http://s/tags'}]),
+                  _).
+
+test(optional_list_still_validates_supplied_values,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(list_mandatory_schema,Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    catch(
+        with_test_transaction(
+            Desc,
+            Context,
+            insert_document(Context, _{ '@type' : "Item", name : "bad", tags : [["a"]] }, _),
+            _),
+        Error,
+        true),
+    nonvar(Error),
+    Error = error(schema_check_failure(_), _).
+
+:- end_tests(list_mandatory).

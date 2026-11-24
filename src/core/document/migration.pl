@@ -63,7 +63,7 @@ Op := delete_class(Name)
     | replace_class_base(Class,Base)
     | delete_class_base(Class)
     | delete_class_property(Class,Property)
-    | create_class_property(Class,Property,Type)  % for option or set
+    | create_class_property(Class,Property,Type)  % for optional type families
     | create_class_property(Class,Property,Type,Default)
     | move_class_property(Class, Old_Property, New_Property)
     | upcast_class_property(Class, Property, New_Type)
@@ -797,6 +797,8 @@ type_weaken(Type1, Type2, SuperMap) :-
     get_dict('@type', Type2, FamilyString2),
     atom_string(Family1,FamilyString1),
     atom_string(Family2,FamilyString2),
+    \+ (   get_dict('@mandatory', Type2, _),
+           \+ get_dict('@mandatory', Type1, _)),
     (   family_weaken(Family1, Family2)
     ->  true
     ;   Family1 = 'Cardinality',
@@ -822,6 +824,9 @@ type_weaken(Type1Text, Type2, SuperMap) :-
     !,
     atom_string(Type1, Type1Text),
     type_is_optional(Type2),
+    \+ (   get_dict('@type', Type2, FamilyElt),
+           atom_string(Family, FamilyElt),
+           Family = 'List'),
     get_dict('@class', Type2, Class2Text),
     atom_string(Class2, Class2Text),
     class_weaken(Type1, Class2, SuperMap).
@@ -850,6 +855,8 @@ type_is_optional(Type) :-
     atom_string(Family, FamilyElt),
     (   memberchk(Family, ['Set', 'Optional'])
     ->  true
+    ;   Family = 'List'
+    ->  \+ get_dict('@mandatory', Type, _)
     ;   Family = 'Cardinality'
     ->  card_bounds(Type, Min, Max),
         Min =< 1,
@@ -1418,8 +1425,6 @@ check_children_property_defaults(Before, After, Class_Key, Before_Supermap, Afte
     forall(
         member(Property-Type, Added),
         (   type_is_optional(Type)
-        ;   is_dict(Type),
-            get_dict('@type', Type, "List")
         ->  true
         ;   contract_schema_name(Class_Key, Witness_Prefixes, Class_W),
             contract_schema_name(Property, Witness_Prefixes, Property_W),
@@ -1936,16 +1941,8 @@ elaborate_array_default([H|T], Class_Ex, Prefixes, [HE|TE]) :-
         HE = json{'@id' : H_Ex}),
     elaborate_array_default(T, Class_Ex, Prefixes, TE).
 
-create_class_property_operation(Class, Property, Type, After, Count) :-
+create_class_property_operation(Class, Property, Type, _After, Count) :-
     (   is_dict(Type),
-        get_dict('@type', Type, "List")
-    ->  count_solutions(
-            ask(After,
-                (   isa(X, Class),
-                    insert(X, Property, rdf:nil))),
-            Count
-        )
-    ;   is_dict(Type),
         type_is_optional(Type)
     ->  Count = 0
     ;   throw(
@@ -2596,6 +2593,19 @@ test(property_weakening, []) :-
            'D',
            json{'D' : []},
            _Weakened).
+
+test(scalar_to_list_is_not_weakening, []) :-
+    \+ type_weaken('xsd:string',
+                  json{'@class':'xsd:string', '@type':'List'},
+                  json{}).
+
+test(list_mandatory_marker_weakening, []) :-
+    Optional = json{'@class':'xsd:string', '@type':'List'},
+    Mandatory = json{'@class':'xsd:string', '@type':'List', '@mandatory':[]},
+    type_weaken(Mandatory, Optional, json{}),
+    \+ type_weaken(Optional, Mandatory, json{}),
+    type_is_optional(Optional),
+    \+ type_is_optional(Mandatory).
 
 test(weaken_enum_failure, [
          error(weakening_failure(json{class:'Team',message:"An enum was changed to include a set of values which is not a superset",new:['Amazing Marketing','Information Technology'],old:['IT','Marketing'],reason:class_enum_value_change_not_a_weakening}), _)
@@ -4053,6 +4063,31 @@ test(cast_bad_value_error_mode,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops, _Result, []).
+
+test(create_class_property_list_leaves_existing_documents_unset,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_ccp,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@type' : "Tgt", '@id' : 'Tgt/1' }, _)),
+
+    Ops = [_{'@type' : "CreateClassProperty",
+             class : "Tgt",
+             property : "tags",
+             type : _{'@type' : "List", '@class' : "xsd:string"}}],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'Tgt/1', Doc),
+    \+ get_dict(tags, Doc, _).
 
 test(create_class_property_mandatory_spec,
      [setup((setup_temp_store(State),

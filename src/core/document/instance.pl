@@ -202,19 +202,8 @@ refute_cardinality_(array,Validation_Object,S,P,Witness) :-
 refute_cardinality_(list(C),Validation_Object,S,P,Witness) :-
     % a property whose value is a list
     \+ card_count(Validation_Object,S,P,1),
-    instance_layer(Validation_Object, Layer),
-    terminus_store:subject_id(Layer, Subject_String, S),
-    atom_string(Subject, Subject_String),
-    (   atom(P)
-    ->  P = Predicate
-    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
-        atom_string(Predicate, Predicate_String)
-    ),
-    Witness = witness{ '@type': instance_not_cardinality_one,
-                       instance: Subject,
-                       class: C,
-                       predicate: Predicate
-                     }.
+    refute_list_cardinality_witness(C, Validation_Object, S, P, Witness).
+
 refute_cardinality_(list,Validation_Object,S,P,Witness) :-
     % a property inside a list cell
     \+ card_count(Validation_Object,S,P,1),
@@ -252,6 +241,26 @@ refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
     ).
 refute_cardinality_(cardinality(C,N,M),Validation_Object,S,P,Witness) :-
     refute_bounded_cardinality(C,N,M,Validation_Object,S,P,Witness).
+
+refute_optional_list_cardinality(C,Validation_Object,S,P,Witness) :-
+    card_count(Validation_Object,S,P,N),
+    \+ memberchk(N, [0,1]),
+    refute_list_cardinality_witness(C, Validation_Object, S, P, Witness).
+
+refute_list_cardinality_witness(C, Validation_Object, S, P, Witness) :-
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    atom_string(Subject, Subject_String),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
+    Witness = witness{ '@type': instance_not_cardinality_one,
+                       instance: Subject,
+                       class: C,
+                       predicate: Predicate
+                     }.
 
 refute_bounded_cardinality(C,N,M,Validation_Object,S,P,Witness) :-
     card_count(Validation_Object,S,P,Count),
@@ -335,7 +344,10 @@ refute_cardinality(Schema,Validation_Object,S_Id,P_Id,C,Witness) :-
     ;   Predicate = P_Id
     ),
     schema_class_predicate_conjunctive_type(Schema, C, Predicate, Desc),
-    refute_cardinality_(Desc,Validation_Object,S_Id,P_Id,Witness).
+    (   Desc = list(Element),
+        schema_property_is_mandatory(Schema, C, Predicate, false)
+    ->  refute_optional_list_cardinality(Element,Validation_Object,S_Id,P_Id,Witness)
+    ;   refute_cardinality_(Desc,Validation_Object,S_Id,P_Id,Witness)).
 
 refute_cardinality_new(Schema,Validation_Object,S_Id,C,Witness) :-
     instance_layer(Validation_Object, Layer),

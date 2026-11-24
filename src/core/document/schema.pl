@@ -47,6 +47,7 @@
               is_unfoldable/2,
               property_is_unfold/4,
               schema_property_is_unfold/4,
+              schema_property_is_mandatory/4,
               schema_is_subdocument/2,
               schema_is_abstract/2,
               schema_concrete_subclass/3,
@@ -698,6 +699,7 @@ is_built_in(P) :-
             sys:subdocument,
             sys:unfoldable,
             sys:unfold,
+            sys:mandatory,
             sys:shared,
             sys:metadata
         ],
@@ -795,6 +797,13 @@ schema_property_is_unfold(Schema, Class, Predicate, true) :-
     xrdf(Schema, TypeNode, UnfoldPred, RdfNil),
     !.
 schema_property_is_unfold(_, _, _, false).
+
+schema_property_is_mandatory(Schema, Class, Predicate, true) :-
+    schema_class_subsumed(Schema, Class, Super),
+    xrdf(Schema, Super, Predicate, TypeNode),
+    xrdf(Schema, TypeNode, sys:mandatory, rdf:nil),
+    !.
+schema_property_is_mandatory(_, _, _, false).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).
@@ -975,6 +984,20 @@ refute_class_meta(Validation_Object,Class,Witness) :-
     Witness = witness{ '@type' : bad_subdocument_value,
                        class: Class,
                        value: Result }.
+refute_class_meta(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:mandatory, _),
+    Witness = witness{ '@type' : mandatory_not_on_list_property,
+                       class: Class }.
+refute_class_meta(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, Property, Type_Node),
+    atom(Type_Node),
+    xrdf(Schema, Type_Node, sys:mandatory, _),
+    \+ xrdf(Schema, Type_Node, rdf:type, sys:'List'),
+    Witness = witness{ '@type' : mandatory_not_on_list_property,
+                       class: Class,
+                       property: Property }.
 refute_class_meta(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, sys:unfoldable, Result),
