@@ -27,7 +27,8 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
 :- use_module(core(document/schema), [
-      schema_is_shared/2
+      schema_is_shared/2,
+      schema_is_subdocument/2
   ]).
 :- use_module(core(document/instance), [
       instance_of/3
@@ -233,7 +234,18 @@ pre_commit_hook(Validations, Witness) :-
 %  only examines schema structure, NOT instance data or deleted triples.
 has_shared_schema_types(Validation) :-
     database_schema(Validation, Schema),
-    schema_is_shared(Schema, _).
+    schema_is_reference_counted(Schema, _).
+
+%% schema_is_reference_counted(+Schema, ?Class)
+%
+%  True if instances of Class are deleted by this cascade: @shared
+%  documents, and ValueHash subdocuments, whose identity ignores the parent.
+schema_is_reference_counted(Schema, Class) :-
+    schema_is_shared(Schema, Class).
+schema_is_reference_counted(Schema, Class) :-
+    xrdf(Schema, Class, sys:key, Key),
+    xrdf(Schema, Key, rdf:type, sys:'ValueHash'),
+    schema_is_subdocument(Schema, Class).
 
 %% has_any_instance_deletions(+Validation)
 %
@@ -347,7 +359,7 @@ find_orphaned_shared_target(Validation, Visited, Target) :-
     % Check the target still has a type triple (not already deleted)
     xrdf(Instance, Target, rdf:type, Target_Class),
     % Check the target is a @shared class instance
-    schema_is_shared(Schema, Target_Class),
+    schema_is_reference_counted(Schema, Target_Class),
     % Liveness check: target is NOT reachable from any non-@shared document
     empty_assoc(Empty_Live_Visited),
     \+ is_shared_target_live(Validation, Target, Empty_Live_Visited),
@@ -370,7 +382,7 @@ is_shared_target_live(Validation, Target, Visited) :-
     \+ get_assoc(Source, Visited, _),
     % Check: is Source a @shared instance?
     (   xrdf(Instance, Source, rdf:type, Source_Class),
-        schema_is_shared(Schema, Source_Class)
+        schema_is_reference_counted(Schema, Source_Class)
     ->  % Source is @shared — recurse: is Source itself reachable from non-@shared?
         put_assoc(Target, Visited, true, New_Visited),
         is_shared_target_live(Validation, Source, New_Visited)

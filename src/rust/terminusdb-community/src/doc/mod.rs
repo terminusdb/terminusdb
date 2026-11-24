@@ -73,7 +73,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
         let mut subtypes: HashMap<String, HashSet<u64>>;
         let mut document_types: HashSet<u64>;
         let unfoldables: HashSet<u64>;
-        let shared_types: HashSet<u64>;
+        let mut shared_types: HashSet<u64>;
         let mut unfold_pairs: HashSet<(u64, u64)>;
         let mut enums: HashMap<u64, String>;
         let mut set_pairs: HashSet<(u64, u64)>;
@@ -172,6 +172,8 @@ impl<L: Layer + Clone> DocumentContext<L> {
                     value_hashes.insert(type_id);
                 }
             }
+            // A ValueHash subdocument has one node per content, however many parents hold it.
+            shared_types.extend(value_hashes.difference(&document_types).copied());
 
             if let Some(sys_json_document_type_id) = sys.json_document() {
                 document_types.insert(sys_json_document_type_id);
