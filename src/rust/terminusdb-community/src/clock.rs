@@ -81,7 +81,8 @@ mod tests {
         // clock) must still yield a strictly-increasing stamp.
         let base = commit_now_ns();
         let historic = next_ns(base - 60_000_000_000);
-        assert_eq!(historic, base + 1);
+        // Other clock tests share this process-wide clock and may claim intervening stamps.
+        assert!(historic > base, "{historic} not greater than {base}");
         assert!(commit_now_ns() > historic);
     }
 
