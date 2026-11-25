@@ -160,15 +160,18 @@ generate_request_id_from_stream(CGI, Request_Id) :-
     !.
 generate_request_id_from_stream(_, _).
 
-generate_operation_id(Operation_Id) :-
+% A detached thread can inherit an erased request stream; that is not a request context.
+current_cgi_stream(Stream) :-
     current_output(Stream),
-    (   is_cgi_stream(Stream)
+    catch(is_cgi_stream(Stream), error(existence_error(stream, _), _), fail).
+
+generate_operation_id(Operation_Id) :-
+    (   current_cgi_stream(Stream)
     ->  generate_operation_id_from_stream(Stream, Operation_Id)
     ;   Operation_Id = _).
 
 generate_request_id(Request_Id) :-
-    current_output(Stream),
-    (   is_cgi_stream(Stream)
+    (   current_cgi_stream(Stream)
     ->  generate_request_id_from_stream(Stream, Request_Id)
     ;   Request_Id = _).
 

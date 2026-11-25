@@ -171,6 +171,7 @@ pretty_print_record(Offset,Record,Last_DB) :-
 
 :- begin_tests(db).
 :- use_module(core(util/test_utils)).
+:- use_module(library(memfile)).
 
 test(list_all,
      [setup((setup_temp_store(State),
@@ -299,5 +300,69 @@ test(expired_failed_mark_retries_open,
     resolve_absolute_string_descriptor("admin/realdb", Descriptor),
     open_descriptor(Descriptor, _Transaction),
     assertion(\+ descriptor:db_failed("admin", "realdb", _)).
+
+% A detached loader inherits an erased request stream; json_log must not treat it as CGI.
+run_with_erased_output(Store, Goal, Status) :-
+    message_queue_create(Queue),
+    new_memory_file(Memory_File),
+    open_memory_file(Memory_File, write, Stream),
+    with_output_to(Stream,
+                   thread_create((thread_get_message(Queue, go),
+                                  set_local_triple_store(Store),
+                                  Goal),
+                                 Thread, [])),
+    close(Stream),
+    thread_send_message(Queue, go),
+    thread_join(Thread, Status),
+    message_queue_destroy(Queue),
+    free_memory_file(Memory_File).
+
+test(background_load_survives_erased_output,
+     [setup((setup_temp_store(State),
+             State = Store-_Dir,
+             create_db_without_schema("admin","realdb"),
+             setenv('TERMINUSDB_DB_LOAD_WAIT','0'))),
+      cleanup((unsetenv('TERMINUSDB_DB_LOAD_WAIT'),
+               ignore(retract(descriptor:db_failed(_,_,_))),
+               ignore(retract(descriptor:db_unservable_loading(_,_,_))),
+               teardown_temp_store(State)))]) :-
+    % A successful reload clears the loading mark and leaves no failure mark.
+    get_time(Now),
+    assertz(descriptor:db_unservable_loading("admin", "realdb", Now)),
+    run_with_erased_output(Store,
+                           descriptor:reload_database_graphs("admin", "realdb"),
+                           Status),
+    assertion(Status == true),
+    assertion(\+ descriptor:db_unservable_loading("admin", "realdb", _)),
+    assertion(\+ descriptor:db_failed("admin", "realdb", _)),
+    resolve_absolute_string_descriptor("admin/realdb", Descriptor),
+    open_descriptor(Descriptor, _Transaction).
+
+test(failed_background_load_survives_erased_output,
+     [setup((setup_temp_store(State),
+             State = Store-_Dir)),
+      cleanup((ignore(retract(descriptor:db_failed(_,_,_))),
+               ignore(retract(descriptor:db_unservable_loading(_,_,_))),
+               teardown_temp_store(State)))]) :-
+    % A failed reload records db_failed/3 and clears the loading mark, so
+    % requests get the expiring 500-class error rather than an endless 503.
+    create_context(system_descriptor{}, System_Context),
+    with_transaction(System_Context,
+        system_entity:insert_db_object(System_Context, "admin", "ghostdb",
+                                       "ghost label", "ghost comment", Db_Uri),
+        _),
+    db_create:finalize_db(Db_Uri),
+    get_time(Now),
+    assertz(descriptor:db_unservable_loading("admin", "ghostdb", Now)),
+    run_with_erased_output(Store,
+                           descriptor:reload_database_graphs("admin", "ghostdb"),
+                           Status),
+    assertion(Status == true),
+    assertion(\+ descriptor:db_unservable_loading("admin", "ghostdb", _)),
+    assertion(descriptor:db_failed("admin", "ghostdb", _)),
+    resolve_absolute_string_descriptor("admin/ghostdb", Descriptor),
+    assertion(catch(open_descriptor(Descriptor, _Transaction),
+                    error(database_unservable("admin", "ghostdb"), _),
+                    true)).
 
 :- end_tests(db).
