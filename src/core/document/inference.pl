@@ -762,10 +762,15 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#List',
                      Annotated_Dictionary),
             Annotated = success(Annotated_Dictionary)
         )
-    ;   no_captures(Captures),
-        Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
-                                  document : Dictionary,
-                                  field : Key })
+    ;   (   get_dict('@mandatory', Range, _)
+        ->  no_captures(Captures),
+            Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
+                                      document : Dictionary,
+                                      field : Key })
+        ;   no_captures(Captures),
+            drop_key(Key,Dictionary,Annotated_Dictionary),
+            Annotated = success(Annotated_Dictionary)
+        )
     ).
 
 check_bounded_set_type_(Key,Min,Max,Type,Schema,Prefixes,Dictionary,Annotated,Captures) :-

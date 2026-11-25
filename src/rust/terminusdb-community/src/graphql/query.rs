@@ -1186,7 +1186,12 @@ fn compile_query<'a, C: TerminusResolveContext>(
                         },
                     }
                 } else {
-                    return ClonableIterator::new(std::iter::empty());
+                    match op {
+                        // Vacuous truth: with the predicate absent everywhere,
+                        // every collection is empty and allHave matches.
+                        CollectionOperation::AllHave => {}
+                        _ => return ClonableIterator::new(std::iter::empty()),
+                    }
                 }
             }
         }

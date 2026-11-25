@@ -996,6 +996,40 @@ query TestBigIntPattern {
       )
     })
 
+    it('omitted list queries as empty', async function () {
+      const instances = [
+        {
+          '@type': 'Source',
+          name: 'populated',
+          targets: ['Target/solo'],
+        },
+        {
+          '@type': 'Source',
+          name: 'unset',
+        },
+        {
+          '@type': 'Target',
+          name: 'solo',
+        },
+      ]
+      await document.insert(agent, { instance: instances })
+      const LIST_QUERY = gql`
+ query SourceQuery {
+    Source(filter: { name : { eq : "unset" } }) {
+        name
+        targets {
+           name
+        }
+    }
+}`
+      const result = await client.query({ query: LIST_QUERY })
+      expect(result.data.Source).to.deep.equal(
+        [
+          { name: 'unset', targets: [] },
+        ],
+      )
+    })
+
     it('ne query', async function () {
       const NE_QUERY = gql`
   query PersonQuery {
