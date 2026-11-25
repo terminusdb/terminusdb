@@ -1440,32 +1440,33 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                             instance,
                         )
                     }
-                    FieldKind::List => {
-                        let list_id = instance
-                            .single_triple_sp(self.id, field_id)
-                            .expect("list element expected but not found")
-                            .object;
-                        let object_ids =
-                            ClonableIterator::new(CachedClonableIterator::new(RdfListIterator {
-                                layer: instance,
-                                cur: list_id,
-                                rdf_first_id: instance.predicate_id(RDF_FIRST),
-                                rdf_rest_id: instance.predicate_id(RDF_REST),
-                                rdf_nil_id: instance.subject_id(RDF_NIL),
-                            }));
-                        collect_into_graphql_list(
-                            ListElementType {
-                                doc_type,
-                                enum_type,
-                                is_json,
-                            },
-                            executor,
-                            info,
-                            arguments,
-                            object_ids,
-                            instance,
-                        )
-                    }
+                    FieldKind::List => match instance.single_triple_sp(self.id, field_id) {
+                        Some(list_triple) => {
+                            let list_id = list_triple.object;
+                            let object_ids = ClonableIterator::new(CachedClonableIterator::new(
+                                RdfListIterator {
+                                    layer: instance,
+                                    cur: list_id,
+                                    rdf_first_id: instance.predicate_id(RDF_FIRST),
+                                    rdf_rest_id: instance.predicate_id(RDF_REST),
+                                    rdf_nil_id: instance.subject_id(RDF_NIL),
+                                },
+                            ));
+                            collect_into_graphql_list(
+                                ListElementType {
+                                    doc_type,
+                                    enum_type,
+                                    is_json,
+                                },
+                                executor,
+                                info,
+                                arguments,
+                                object_ids,
+                                instance,
+                            )
+                        }
+                        None => Some(Ok(graphql_value!([]))),
+                    },
                     FieldKind::Array => {
                         let array_element_ids: Box<dyn Iterator<Item = IdTriple> + Send> =
                             Box::new(instance.triples_sp(self.id, field_id));
