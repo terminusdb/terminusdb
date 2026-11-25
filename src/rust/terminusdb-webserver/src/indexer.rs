@@ -946,7 +946,8 @@ impl IndexerRegistry {
                     )
                 }
                 None => {
-                    // Task was removed (e.g. by abort_domain) — skip.
+                    // Rescheduling can encounter more removed tasks and needs this lock again.
+                    drop(tasks);
                     *self.current_branch.lock().unwrap() = None;
                     self.try_spawn_next();
                     return;
@@ -2805,6 +2806,44 @@ mod tests {
 
         assert!(registry.current_branch.lock().unwrap().is_none());
         assert!(registry.tasks.lock().unwrap().get(&key).is_none());
+    }
+
+    #[test]
+    fn stale_completion_skips_removed_tasks_during_config_cleanup() {
+        let registry = Arc::new(IndexerRegistry::new());
+        let key = BranchKey {
+            path: "admin/cancelled/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let task = stalled_branch_task(&BranchProgress::new());
+        task.cancel.cancel();
+        *registry.current_branch.lock().unwrap() = Some(key.clone());
+        // set_config clears tasks before the queue; a cancelled task can finish between them.
+        for database in ["removed-first", "removed-second"] {
+            registry.pending_queue.lock().unwrap().push_back(BranchKey {
+                path: format!("admin/{database}/local/branch/main"),
+                branch: "main".to_string(),
+            });
+        }
+
+        let (finished, completion) = std::sync::mpsc::channel();
+        let completing_registry = registry.clone();
+        let worker = std::thread::spawn(move || {
+            completing_registry.on_task_complete(
+                &key,
+                TaskResult::Error("task cancelled".to_string()),
+                &task,
+            );
+            finished.send(()).unwrap();
+        });
+
+        completion
+            .recv_timeout(Duration::from_secs(2))
+            .expect("stale completion must skip removed tasks without deadlocking cleanup");
+        worker.join().unwrap();
+        assert!(registry.current_branch.lock().unwrap().is_none());
+        assert!(registry.pending_queue.lock().unwrap().is_empty());
+        registry.set_config(String::new(), String::new());
     }
 
     #[test]

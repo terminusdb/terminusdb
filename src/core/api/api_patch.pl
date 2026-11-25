@@ -410,13 +410,14 @@ checkpoint_covers_graph(Graph, checkpoint(Mode, _, _, _)) :-
 
 squash_graph_base(Repo, Graph, Branch, Common, Their_Newest_First, Checkpoints, Base) :-
     include(checkpoint_covers_graph(Graph), Checkpoints, For_Graph),
-    (   Branch \== none,
-        memberchk(checkpoint(_, Branch, Previous, _), For_Graph)
-    ->  do_or_die(
-            (   memberchk(Previous, Their_Newest_First)
-            ;   Previous == Common
-            ;   most_recent_common_ancestor(Repo, Repo, Previous, Common, some(Previous), [], _)
-            ),
+    (   Branch \== none
+    ->  % Target rebase orders replays by target history, not by source ancestry.
+        do_or_die(
+            forall(member(checkpoint(_, Branch, Previous, _), For_Graph),
+                   (   memberchk(Previous, Their_Newest_First)
+                   ;   Previous == Common
+                   ;   most_recent_common_ancestor(Repo, Repo, Previous, Common, some(Previous), [], _)
+                   )),
             error(squash_source_history_changed(Graph), _))
     ;   true
     ),
