@@ -1,3 +1,39 @@
+# TerminusDB Server 12.1.0 Release Candidate 5
+
+Release Candidate 5 carries List and Array collections through rebase, apply and squash merges, makes List properties optional unless marked `@mandatory`, and clears three liveness faults in the indexer and the background database loader.
+
+## New functionality
+* Squash merges apply schema changes through a verified migration, and reject migrations that rewrite instance data [#2684](https://github.com/terminusdb/terminusdb/pull/2684)
+* MCP squash merges select the schema or the instance graph, defaulting to both [#2684](https://github.com/terminusdb/terminusdb/pull/2684)
+* `"@mandatory": []` on a List specification requires the property without imposing a minimum length [#2689](https://github.com/terminusdb/terminusdb/pull/2689)
+
+## Behavior changes
+* **List properties are optional by default.** Omitting one leaves it unset instead of raising `required_field_does_not_exist_in_document`, and `[]` stores an explicit empty list. Mark a List `"@mandatory": []` to keep it required. No data migration [#2689](https://github.com/terminusdb/terminusdb/pull/2689)
+* **`BranchOrigin` is `@shared`, not `@subdocument`.** Branches cut from the same head share one provenance node, and neither could be deleted while the other referenced it. `current_ref_version` moves to v1.0.4 on boot; the stored triples are identical under both declarations, so no instance migration [#2680](https://github.com/terminusdb/terminusdb/pull/2680)
+
+## Bugfixes
+* Rebase merges List and Array collection documents three-way instead of replaying their triple delta, which failed schema validation on Lists and could return a corrupted Array [#2679](https://github.com/terminusdb/terminusdb/pull/2679)
+* `@unfoldable` element ids survive the rebase merge, and `@`-metadata present on one side no longer fails the whole document merge [#2679](https://github.com/terminusdb/terminusdb/pull/2679)
+* Apply reports a Conflict (409) when a patch does not fit a Set, List or Array of subdocuments, instead of reporting success and dropping the document change [#2678](https://github.com/terminusdb/terminusdb/pull/2678)
+* Squash apply checks every recorded checkpoint against source ancestry, so an older replay cannot hide a newer checkpoint [#2687](https://github.com/terminusdb/terminusdb/pull/2687) [#2684](https://github.com/terminusdb/terminusdb/pull/2684)
+* Indexer cleanup releases the task map lock before scheduling the next entry, which deadlocked later operations after a cancelled completion [#2685](https://github.com/terminusdb/terminusdb/pull/2685)
+* Task cancellation drops in-flight engine HTTP, so a task blocked in `/last-indexed` or `/push` no longer wedges server shutdown [#2681](https://github.com/terminusdb/terminusdb/pull/2681)
+* Background database loads survive the erased request stream that left `db_unservable_loading/3` set, answering `database_loading` on a healthy database for the life of the process [#2688](https://github.com/terminusdb/terminusdb/pull/2688)
+* `allHave` matches empty collections when the predicate is absent from the database [#2689](https://github.com/terminusdb/terminusdb/pull/2689)
+* Removing `@mandatory` from a List replays as a weakening instead of failing `not_implemented` [#2689](https://github.com/terminusdb/terminusdb/pull/2689)
+* A mandatory list link can no longer be deleted outside the document API [#2689](https://github.com/terminusdb/terminusdb/pull/2689)
+* Concurrent branch creation returns the branch-exists error instead of a duplicate document [#2684](https://github.com/terminusdb/terminusdb/pull/2684)
+* Squash apply requires the protected source permission to read commits from a protected branch [#2684](https://github.com/terminusdb/terminusdb/pull/2684)
+* Squash apply reports a recorded migration it cannot complete by inference, instead of replaying a subset [#2684](https://github.com/terminusdb/terminusdb/pull/2684)
+
+## Maintenance
+* `make docker-pr-light` runs `make pr-light` in a dev container sharing the `make docker` cargo cache, and `make docker-dev-shell` opens the same container for single suites [#2677](https://github.com/terminusdb/terminusdb/pull/2677)
+* The Rust clock test asserts strict ordering instead of one-nanosecond increments [#2683](https://github.com/terminusdb/terminusdb/pull/2683)
+* Rebase merge predicates state determinism, with the convention noted in `docs/CONTRIBUTING.md` [#2679](https://github.com/terminusdb/terminusdb/pull/2679)
+* Update the generated man page [#2686](https://github.com/terminusdb/terminusdb/pull/2686)
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.1.0-rc4...v12.1.0-rc5
+
 # TerminusDB Server 12.1.0 Release Candidate 4
 
 Release Candidate 4 records where merges and branches came from in the commit graph (provenance), and hardens squash apply, the indexer, and GraphQL numeric filters against failure modes found in release-candidate testing.
