@@ -233,16 +233,18 @@ class_extension_key(Frame, metadata, Metadata) :-
     get_dict('@metadata', Frame, Metadata).
 
 % is_required_property(+FrameValue) is semidet.
-% Only properties whose absence is invalid are required: bare values
-% (Mandatory), Cardinality with a lower bound above zero, and specs
-% without a wrapper. Collections (Set, List, Array) and Optional are
-% 0..n — an absent key means an empty/absent collection, which the
-% document API accepts, so requiring it would over-constrain output.
+% Only properties whose absence is invalid are required: bare values,
+% Cardinality with a lower bound above zero, specs without a wrapper, and
+% Lists marked @mandatory. Other collections and Optional are 0..n — an
+% absent key means an empty/absent collection, which the document API
+% accepts, so requiring them would over-constrain output.
 is_required_property(Value) :-
     (   is_dict(Value)
     ->  (   get_dict('@type', Value, Type)
         ->  normalize_system_type(Type, Type_Bare),
-            \+ memberchk(Type_Bare, ['Optional', 'Set', 'List', 'Array']),
+            (   Type_Bare = 'List'
+            ->  get_dict('@mandatory', Value, _)
+            ;   \+ memberchk(Type_Bare, ['Optional', 'Set', 'Array'])),
             (   Type_Bare = 'Cardinality'
             ->  get_dict('@min', Value, Min),
                 Min > 0
@@ -629,6 +631,7 @@ jsonschema_test_schema('
   "postcode" : {"@type" : "Optional", "@class" : "xsd:string"},
   "aliases" : {"@type" : "Set", "@class" : "xsd:string"},
   "history" : {"@type" : "List", "@class" : "xsd:string"},
+  "stops" : {"@type" : "List", "@class" : "xsd:string", "@mandatory" : []},
   "lucky" : {"@type" : "Cardinality", "@class" : "xsd:integer", "@min_cardinality" : 1, "@max_cardinality" : 3} }
 
 { "@id" : "JsColor",
@@ -701,9 +704,11 @@ test(simple_class,
     assertion(JSON.properties.lucky ==
               json{type:"array", minItems:1, maxItems:3,
                    items:json{type:"integer"}}),
-    % required: mandatory street and cardinality-bounded lucky; Set/List
-    % collections and Optional are not required
-    assertion(JSON.required == [lucky,street]),
+    assertion(JSON.properties.stops ==
+              json{type:"array", items:json{type:"string"}}),
+    % required: mandatory street, cardinality-bounded lucky and @mandatory
+    % List stops; other collections and Optional are not required
+    assertion(JSON.required == [lucky,stops,street]),
     % @type and @id accept arbitrary string values
     assertion(JSON.properties.'@type' == json{type:"string"}),
     assertion(JSON.properties.'@id' == json{type:"string"}),
