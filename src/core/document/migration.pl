@@ -2156,8 +2156,8 @@ interpret_instance_operation_(upcast_class_property(Class, Property, New_Type_Ca
         get_dict('@type', New_Type, Family),
         atom_string(Family_Name, Family),
         Family_Name = 'List'
-    ->  % Upcasts to List only arise within the List family, which shares
-        % one representation, so no instance rewrite is needed.
+    ->  % type_weaken only admits same-class or document-class weakening
+        % for lists, so elements never need a rewrite.
         Count = 0
     ;   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
@@ -3509,6 +3509,7 @@ before_refs('
 
 ').
 
+
 before_mandatory_list('
 { "@base": "terminusdb:///data/",
   "@schema": "terminusdb:///schema#",
@@ -4132,6 +4133,7 @@ test(upcast_list_leaves_instances_unchanged,
 
     get_document(Descriptor, 'Tgt/1', Doc),
     get_dict(tags, Doc, ["a","b"]).
+
 
 test(create_class_property_mandatory_spec,
      [setup((setup_temp_store(State),
