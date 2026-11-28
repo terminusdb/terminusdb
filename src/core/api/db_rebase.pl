@@ -38,7 +38,9 @@
                   delete_document/3,
                   get_document/3,
                   insert_document/3,
-                  replace_document/2
+                  insert_document/4,
+                  replace_document/2,
+                  replace_document/5
               ]).
 :- use_module(core(document/meta_commit_queue)).
 :- use_module(core(transaction/descriptor), [branch_key_from_descriptor/2]).
@@ -446,9 +448,17 @@ apply_doc_action(Write_Context, Id, _, delete) :-
     delete_document(Write_Context, false, Id).
 apply_doc_action(Write_Context, _Id, Merged, insert) :-
     !,
-    insert_document(Write_Context, Merged, _Inserted_Id).
+    (   raw_json_document(Merged)
+    ->  insert_document(Write_Context, Merged, true, _Inserted_Id)
+    ;   insert_document(Write_Context, Merged, _Inserted_Id)).
 apply_doc_action(Write_Context, _, Merged, replace) :-
-    replace_document(Write_Context, Merged).
+    (   raw_json_document(Merged)
+    ->  replace_document(Write_Context, Merged, false, true, _Replaced_Id)
+    ;   replace_document(Write_Context, Merged)).
+
+raw_json_document(Document) :-
+    is_dict(Document),
+    \+ get_dict('@type', Document, _).
 
 % segment_writes_schema(+Repo_Context, +Commit_Ids) is semidet.
 %
