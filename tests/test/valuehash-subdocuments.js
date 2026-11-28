@@ -182,24 +182,6 @@ describe('valuehash-subdocuments', function () {
       expect(result.body[0].sub.data).to.deep.equal(['a', 'b'])
     })
 
-    it('does not rewrite a nested captured random subdocument id during replacement', async function () {
-      await createSchema([
-        { '@type': 'Class', '@id': 'RInnerCaptureSub', '@subdocument': [], '@key': { '@type': 'Random' }, x: 'xsd:string' },
-        { '@type': 'Class', '@id': 'ROuterCaptureSub', '@subdocument': [], '@key': { '@type': 'Random' }, inner: { '@type': 'Optional', '@class': 'RInnerCaptureSub' } },
-        { '@type': 'Class', '@id': 'LNestedCaptureParent', '@key': { '@type': 'Lexical', '@fields': ['k'] }, k: 'xsd:string', sub: { '@type': 'Optional', '@class': 'ROuterCaptureSub' }, alias: { '@type': 'Optional', '@class': 'RInnerCaptureSub' } },
-      ])
-      const instance = { '@type': 'LNestedCaptureParent', k: 'one', sub: { '@type': 'ROuterCaptureSub', inner: { '@type': 'RInnerCaptureSub', '@capture': 'inner', x: 'a' } }, alias: { '@ref': 'inner' } }
-      await document.insert(agent, { instance })
-      const inserted = await document.get(agent, { query: { type: 'LNestedCaptureParent', as_list: true } })
-      const id = inserted.body[0]['@id']
-
-      await document.replace(agent, { instance: { '@id': id, ...instance } })
-
-      const result = await document.get(agent, { query: { type: 'LNestedCaptureParent', as_list: true } })
-      expect(result.body[0].sub.inner.x).to.equal('a')
-      expect(result.body[0].alias.x).to.equal('a')
-    })
-
     it('keeps a shared subdocument list intact during replacement', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'RSharedListChild', '@subdocument': [], '@key': { '@type': 'Random' }, items: { '@type': 'List', '@class': 'xsd:string' } },
@@ -217,6 +199,24 @@ describe('valuehash-subdocuments', function () {
       const result = await document.get(agent, { query: { type: 'VPListGroup', as_list: true } })
       expect(result.body[0].sub.children).to.have.lengthOf(1)
       expect(result.body[0].sub.children[0].items).to.deep.equal(['a', 'b'])
+    })
+
+    it('does not rewrite a nested captured random subdocument id during replacement', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RInnerCaptureSub', '@subdocument': [], '@key': { '@type': 'Random' }, x: 'xsd:string' },
+        { '@type': 'Class', '@id': 'ROuterCaptureSub', '@subdocument': [], '@key': { '@type': 'Random' }, inner: { '@type': 'Optional', '@class': 'RInnerCaptureSub' } },
+        { '@type': 'Class', '@id': 'LNestedCaptureParent', '@key': { '@type': 'Lexical', '@fields': ['k'] }, k: 'xsd:string', sub: { '@type': 'Optional', '@class': 'ROuterCaptureSub' }, alias: { '@type': 'Optional', '@class': 'RInnerCaptureSub' } },
+      ])
+      const instance = { '@type': 'LNestedCaptureParent', k: 'one', sub: { '@type': 'ROuterCaptureSub', inner: { '@type': 'RInnerCaptureSub', '@capture': 'inner', x: 'a' } }, alias: { '@ref': 'inner' } }
+      await document.insert(agent, { instance })
+      const inserted = await document.get(agent, { query: { type: 'LNestedCaptureParent', as_list: true } })
+      const id = inserted.body[0]['@id']
+
+      await document.replace(agent, { instance: { '@id': id, ...instance } })
+
+      const result = await document.get(agent, { query: { type: 'LNestedCaptureParent', as_list: true } })
+      expect(result.body[0].sub.inner.x).to.equal('a')
+      expect(result.body[0].alias.x).to.equal('a')
     })
 
     it('treats an identical repeat insert with a typed literal as a no-op', async function () {
@@ -239,11 +239,14 @@ describe('valuehash-subdocuments', function () {
       await createSchema(randomSubSchema)
       const instance = { '@type': 'VHR', sub: { '@type': 'RSub', x: 'a' } }
       await document.insert(agent, { instance })
+      const inserted = await document.get(agent, { query: { type: 'VHR', as_list: true } })
+      const childId = inserted.body[0].sub['@id']
 
       await document.insert(agent, { instance, fullReplace: true })
 
       const result = await document.get(agent, { query: { type: 'VHR', as_list: true } })
       expect(result.body).to.have.lengthOf(1)
+      expect(result.body[0].sub['@id']).to.equal(childId)
       expect(result.body[0].sub.x).to.equal('a')
     })
 
