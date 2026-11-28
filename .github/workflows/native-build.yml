@@ -7,6 +7,9 @@ on:
     branches: [ main, 12.1-rc ]
   workflow_dispatch:
 
+env:
+  RELEVANT_PATHS: '^(src/|tests/|distribution/|Makefile|\.github/workflows/|\.github/install-swi-prolog\.sh)'
+
 jobs:
   build:
     name: "Build"
@@ -32,23 +35,25 @@ jobs:
         id: check_changes
         run: |
           if [ "${{ github.event_name }}" == "push" ]; then
-            git fetch --deepen=10
-            # Check that HEAD~1 exists
-            if git rev-parse HEAD~1 >/dev/null 2>&1; then
-              CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
-            else
-              echo "Only one commit available; treating all files as changed"
-              CHANGED_FILES=$(git diff --name-only HEAD)
+            # A push can contain several commits; diff the event range.
+            BEFORE="${{ github.event.before }}"
+            DIFF_OK=false
+            if [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git fetch origin "$BEFORE" --depth=1; then
+              if CHANGED_FILES=$(git diff --name-only "$BEFORE" "${{ github.sha }}"); then
+                DIFF_OK=true
+              fi
+            fi
+            if [ "$DIFF_OK" != "true" ]; then
+              CHANGED_FILES=$(git ls-files)
             fi
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            # For pull requests, fetch the base commit and compare to head
             git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
             CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git ls-files)
           fi
 
-          # Superset of both test jobs' filters: if either considers the
-          # change relevant, the build artifact must exist.
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/|\.github/install-swi-prolog\.sh)' || true)
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E "$RELEVANT_PATHS" || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "relevant_changed=true" >> "$GITHUB_OUTPUT"
@@ -140,21 +145,25 @@ jobs:
         id: check_changes
         run: |
           if [ "${{ github.event_name }}" == "push" ]; then
-            git fetch --deepen=10
-            # Check that HEAD~1 exists
-            if git rev-parse HEAD~1 >/dev/null 2>&1; then
-              CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
-            else
-              echo "Only one commit available; treating all files as changed"
-              CHANGED_FILES=$(git diff --name-only HEAD)
+            # A push can contain several commits; diff the event range.
+            BEFORE="${{ github.event.before }}"
+            DIFF_OK=false
+            if [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git fetch origin "$BEFORE" --depth=1; then
+              if CHANGED_FILES=$(git diff --name-only "$BEFORE" "${{ github.sha }}"); then
+                DIFF_OK=true
+              fi
+            fi
+            if [ "$DIFF_OK" != "true" ]; then
+              CHANGED_FILES=$(git ls-files)
             fi
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            # For pull requests, fetch the base commit and compare to head
             git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
             CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git ls-files)
           fi
 
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/native\-build\.yml|\.github/install-swi-prolog\.sh)' || true)
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E "$RELEVANT_PATHS" || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "relevant_changed=true" >> "$GITHUB_OUTPUT"
@@ -200,7 +209,6 @@ jobs:
   inter-tests:
     name: "Integration Tests"
     needs: build
-    if: github.event_name == 'pull_request'
 
     strategy:
       # Run all jobs even when some jobs fail.
@@ -223,9 +231,26 @@ jobs:
       - name: Check for file changes
         id: check_changes
         run: |
-          git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/|\.github/install-swi-prolog\.sh)' || true)
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # A push can contain several commits; diff the event range.
+            BEFORE="${{ github.event.before }}"
+            DIFF_OK=false
+            if [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git fetch origin "$BEFORE" --depth=1; then
+              if CHANGED_FILES=$(git diff --name-only "$BEFORE" "${{ github.sha }}"); then
+                DIFF_OK=true
+              fi
+            fi
+            if [ "$DIFF_OK" != "true" ]; then
+              CHANGED_FILES=$(git ls-files)
+            fi
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git ls-files)
+          fi
+
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E "$RELEVANT_PATHS" || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "relevant_changed=true" >> "$GITHUB_OUTPUT"
@@ -303,7 +328,6 @@ jobs:
   cli-tests:
     name: "CLI Tests"
     needs: build
-    if: github.event_name == 'pull_request'
 
     strategy:
       # Run all jobs even when some jobs fail.
@@ -324,9 +348,26 @@ jobs:
       - name: Check for file changes
         id: check_changes
         run: |
-          git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/|\.github/install-swi-prolog\.sh)' || true)
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # A push can contain several commits; diff the event range.
+            BEFORE="${{ github.event.before }}"
+            DIFF_OK=false
+            if [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git fetch origin "$BEFORE" --depth=1; then
+              if CHANGED_FILES=$(git diff --name-only "$BEFORE" "${{ github.sha }}"); then
+                DIFF_OK=true
+              fi
+            fi
+            if [ "$DIFF_OK" != "true" ]; then
+              CHANGED_FILES=$(git ls-files)
+            fi
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git ls-files)
+          fi
+
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E "$RELEVANT_PATHS" || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "relevant_changed=true" >> "$GITHUB_OUTPUT"
