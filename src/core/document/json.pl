@@ -3667,6 +3667,77 @@ elaborated_member_value(Value, Id, Member) :-
     member(Item, Value),
     elaborated_member_value(Item, Id, Member).
 
+% Random ids carry no content, so content equality must reuse the node already stored on an existing parent.
+normalize_repeated_random_subdocuments(Transaction, Elaborated, Normalized) :-
+    (   get_dict('@id', Elaborated, Id),
+        ground(Id),
+        database_instance(Transaction, Instance),
+        xrdf(Instance, Id, _, _)
+    ->  normalize_repeated_random_subdocument_fields(Transaction, Elaborated, Normalized)
+    ;   Normalized = Elaborated).
+
+normalize_repeated_random_subdocument_fields(Transaction, Elaborated, Normalized) :-
+    dict_pairs(Elaborated, Tag, Pairs),
+    get_dict('@id', Elaborated, Parent_Id),
+    maplist({Transaction, Parent_Id}/[Key-Value,Key-Normalized_Value]>>(
+                normalize_repeated_random_subdocument_value(Transaction, Parent_Id, Key, Value, Normalized_Value)
+            ),
+            Pairs,
+            Normalized_Pairs),
+    dict_pairs(Normalized, Tag, Normalized_Pairs).
+
+normalize_repeated_random_subdocument_value(Transaction, Parent_Id, Property, Value, Normalized) :-
+    is_dict(Value),
+    get_dict('@container', Value, "@set"),
+    !,
+    get_dict('@value', Value, Members),
+    maplist({Transaction, Parent_Id, Property}/[Member,Normalized_Member]>>(
+                normalize_repeated_random_subdocument_member(Transaction, Parent_Id, Property, Member, Normalized_Member)
+            ),
+            Members,
+            Normalized_Members),
+    put_dict('@value', Value, Normalized_Members, Normalized).
+normalize_repeated_random_subdocument_value(Transaction, Parent_Id, Property, Value, Normalized) :-
+    normalize_repeated_random_subdocument_member(Transaction, Parent_Id, Property, Value, Normalized).
+
+normalize_repeated_random_subdocument_member(Transaction, Parent_Id, Property, Value, Normalized) :-
+    is_dict(Value),
+    get_dict('@id', Value, Child_Id),
+    ground(Child_Id),
+    get_dict('@type', Value, Type),
+    Type \= "@id",
+    is_subdocument(Transaction, Type),
+    !,
+    (   key_descriptor(Transaction, Type, random(Base)),
+        matching_existing_random_subdocument(Transaction, Parent_Id, Property, Base, Value, Existing)
+    ->  Normalized = Existing
+    ;   normalize_repeated_random_subdocument_fields(Transaction, Value, Normalized)
+    ).
+normalize_repeated_random_subdocument_member(_Transaction, _Parent_Id, _Property, Value, Value).
+
+matching_existing_random_subdocument(Transaction, Parent_Id, Property, Base, Value, Existing_Elaborated) :-
+    database_and_default_prefixes(Transaction, Prefixes),
+    path_component([type(Base),property(Property),node(Parent_Id)], Prefixes, [Path_Base]),
+    prefix_expand(Path_Base, Prefixes, Path_Base_Ex),
+    elaborated_content_hash(Transaction, Value, Hash),
+    database_instance(Transaction, Instance),
+    xrdf(Instance, Parent_Id, Property, Existing_Id),
+    % Migrations use fresh random ids to repair nonconforming stored ids.
+    atom_concat(Path_Base_Ex, _, Existing_Id),
+    stored_subdocument_elaboration(Transaction, Existing_Id, Existing_Elaborated),
+    elaborated_content_hash(Transaction, Existing_Elaborated, Hash).
+
+stored_subdocument_elaboration(Transaction, Id, Elaborated) :-
+    Options = options{compress_ids: false, unfold: true, keep_json_type: false},
+    get_document(Transaction, Id, Stored, Options),
+    database_prefixes(Transaction, Prefixes),
+    once(infer_type(Transaction, Prefixes, Stored, _Type, success(Elaborated))).
+
+elaborated_content_hash(Transaction, Elaborated, Hash) :-
+    database_and_default_prefixes(Transaction, Prefixes),
+    get_all_path_values(Elaborated, Prefixes, Path_Values),
+    idgen_path_values_hash('', Path_Values, Hash).
+
 valid_json_id_or_die(Prefixes,Id) :-
     do_or_die(
         (   get_dict('@base', Prefixes, Base),
@@ -3840,9 +3911,10 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
     % (S)QName lexicals resolve against this database's own prefix map —
     % validation already used it, so storage must too.
     database_and_default_prefixes(Transaction, Cast_Prefixes),
+    normalize_repeated_random_subdocuments(Transaction, Elaborated, Normalized_Elaborated),
     % insert
     forall(
-        json_triple_(Elaborated, Cast_Prefixes, t(S,P,O)),
+        json_triple_(Normalized_Elaborated, Cast_Prefixes, t(S,P,O)),
         (   (   O = _^^OT, context_prefix_datatype(OT)
             ->  json_to_database_type(O, [prefixes(Cast_Prefixes)], OC)
             ;   json_to_database_type(O, OC)
