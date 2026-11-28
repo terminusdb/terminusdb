@@ -2527,7 +2527,7 @@ paths:
       operationId: rebaseBranch
       summary: Rebase all commits from a source onto this branch
       description: |
-          Given a submitted commit ref (either a branch path or a commit path), this will find out the most recent common commit, and starting at that common commit, reapply commits from the source, followed by the commits from this branch. The end result is a history where all changes unique to this branch are now at the top of the history.
+          Given a submitted commit ref (either a branch path or a commit path), this will find out the most recent common commit, and starting at that common commit, copy the commits unique to the source, then reapply the commits unique to this branch. The end result is a history where all changes unique to this branch are now at the top of the history.
 
           If there is no common history, the rebase will take all commits into account.
           
