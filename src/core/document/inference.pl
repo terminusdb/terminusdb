@@ -1214,9 +1214,12 @@ cardinality_violation_in(List) :-
 check_type_candidate_(Schema, Prefixes, Dictionary, Candidate, Annotated, Captures) :-
     catch(
         check_type_(Schema, Prefixes, Dictionary, Candidate, Annotated, Captures),
-        error(schema_check_failure([Witness]), _),
-        Annotated = witness(Witness)
+        error(schema_check_failure(Witnesses), Context),
+        Annotated = thrown(error(schema_check_failure(Witnesses), Context))
     ).
+
+failed_candidate_result(_-witness(_)-_-_).
+failed_candidate_result(_-thrown(_)-_-_).
 
 split_cardinality_successes([], [], []).
 split_cardinality_successes([Success|Successes], Violating, Conforming) :-
@@ -1288,15 +1291,18 @@ infer_type_or_check_(Schema, Prefixes, Super, Dictionary, Type, Annotated,captur
                 inference_level_read(Cand_Level)
             ),
             Results),
-    exclude([_-witness(_)-_-_]>>true, Results, Successes),
+    exclude(failed_candidate_result, Results, Successes),
     (   Successes = []
     ->  inference_level_set(Saved_Level),
-        (   [_-witness(Witness)-_-_] = Results
-        ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
-                                      'reason' : Witness,
-                                      'document' : Dictionary})
-        ;   Annotated = witness(json{ '@type' : no_unique_type_for_document,
-                                      'document' : Dictionary})
+        (   member(_-thrown(Error)-_-_, Results)
+        ->  throw(Error)
+        ;   (   [_-witness(Witness)-_-_] = Results
+            ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
+                                          'reason' : Witness,
+                                          'document' : Dictionary})
+            ;   Annotated = witness(json{ '@type' : no_unique_type_for_document,
+                                          'document' : Dictionary})
+            )
         )
     ;   split_cardinality_successes(Successes, Violating, Conforming),
         (   Conforming = []
@@ -1609,6 +1615,105 @@ test(infer_list_as_set_over_invalid_scalar_cardinality,
             infer_type(Database,Document,Type,success(_)),
             Type = 'terminusdb:///schema#SetMentions'
         )).
+
+scalar_only_inference('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "ScalarOnlyTarget" }
+
+{ "@type" : "Class",
+  "@id" : "ScalarOnlyMentions",
+  "mentions" : "ScalarOnlyTarget" }
+
+{ "@type" : "Class",
+  "@id" : "OtherScalarOnlyMentions",
+  "mentions" : "ScalarOnlyTarget" }
+').
+
+test(infer_list_error_survives_failed_inference,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(scalar_only_inference,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(
+                [witness{'@type':unexpected_list,
+                         type:'terminusdb:///schema#ScalarOnlyTarget',
+                         value:["Target/one"]}]),
+            _)
+     ]) :-
+
+    Document =
+    json{
+        mentions : ["Target/one"]
+    },
+    open_descriptor(Desc,Database),
+    infer_type(Database,Document,_,_).
+
+abstract_nested_inference('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Entity",
+  "@abstract" : [],
+  "name" : { "@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@type" : "Class",
+  "@id" : "Person",
+  "@inherits" : "Entity" }
+
+{ "@type" : "Class",
+  "@id" : "Holder",
+  "entity" : "Entity" }
+').
+
+test(infer_nested_concrete_subclass_of_abstract_field,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_nested_inference,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@type' : 'Holder',
+        entity : json{ name : "Aelfred" }
+    },
+    open_descriptor(Desc,Database),
+    infer_type(Database,Document,Type,success(Annotated)),
+
+    Type = 'terminusdb:///schema#Holder',
+    get_dict('terminusdb:///schema#entity', Annotated, Entity),
+    get_dict('@type', Entity, 'terminusdb:///schema#Person').
+
+test(reify_nested_abstract_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_nested_inference,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(
+                [witness{'@type':reifying_abstract_class,
+                         class:'terminusdb:///schema#Entity',
+                         subject:unknown}]),
+            _)
+     ]) :-
+
+    Document =
+    json{
+        '@type' : 'Holder',
+        entity : json{ '@type' : 'Entity',
+                       name : "Aelfred" }
+    },
+    open_descriptor(Desc,Database),
+    infer_type(Database,Document,_,_).
 
 test(expanded_enum,
      [setup((setup_temp_store(State),
