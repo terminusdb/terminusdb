@@ -18,7 +18,7 @@ jobs:
           - os: ubuntu-latest
             swipl_release: 10.0.2
           - os: macos-latest
-            swipl_release: homebrew
+            swipl_release: 10.0.2
 #            - os: ubuntu-latest
 #            swipl_release: 10.0.2
 
@@ -48,7 +48,7 @@ jobs:
 
           # Superset of both test jobs' filters: if either considers the
           # change relevant, the build artifact must exist.
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/)' || true)
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/|\.github/install-swi-prolog\.sh)' || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "relevant_changed=true" >> "$GITHUB_OUTPUT"
@@ -126,7 +126,7 @@ jobs:
           - os: ubuntu-latest
             swipl_release: 10.0.2
           - os: macos-latest
-            swipl_release: homebrew
+            swipl_release: 10.0.2
 #            - os: ubuntu-latest
 #            swipl_release: 10.0.2
 
@@ -154,7 +154,7 @@ jobs:
             CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
           fi
 
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/native\-build\.yml)' || true)
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/native\-build\.yml|\.github/install-swi-prolog\.sh)' || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "relevant_changed=true" >> "$GITHUB_OUTPUT"
@@ -210,7 +210,7 @@ jobs:
           - os: ubuntu-latest
             swipl_release: 10.0.2
           - os: macos-latest
-            swipl_release: homebrew
+            swipl_release: 10.0.2
 #            - os: ubuntu-latest
 #            swipl_release: 10.0.2
 
@@ -225,7 +225,7 @@ jobs:
         run: |
           git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/)' || true)
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/|\.github/install-swi-prolog\.sh)' || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "relevant_changed=true" >> "$GITHUB_OUTPUT"
@@ -313,7 +313,7 @@ jobs:
           - os: ubuntu-latest
             swipl_release: 10.0.2
           - os: macos-latest
-            swipl_release: homebrew
+            swipl_release: 10.0.2
 
     runs-on: ${{ matrix.os }}
 
@@ -326,7 +326,7 @@ jobs:
         run: |
           git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/)' || true)
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/|\.github/install-swi-prolog\.sh)' || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "relevant_changed=true" >> "$GITHUB_OUTPUT"
