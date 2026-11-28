@@ -128,19 +128,21 @@ describe('rebase-conflict-resolution', function () {
     const suffix = `raw-${Math.random().toString(36).slice(2, 8)}`
     const local = `${dbName}-${suffix}`
     await request(agent.post('/api/db/admin/' + local).send({ label: suffix, schema: false }))
-    const baseRaw = { '@id': 'rawdoc', a: 1, b: 1 }
+    const baseRaw = { '@id': 'rawdoc', '@type': 'application-type', '@custom': 1, a: 1, b: 1 }
     await request(agent.post(`/api/document/admin/${local}/local/branch/main?author=a&message=base&raw_json=true`).send(baseRaw))
     await request(agent.post(`/api/branch/admin/${local}/local/branch/other`).send({
       origin: `admin/${local}/local/branch/main`,
     }))
     await request(agent.put(`/api/document/admin/${local}/local/branch/other?author=a&message=other&raw_json=true`).send({ ...baseRaw, a: 2 }))
-    await request(agent.put(`/api/document/admin/${local}/local/branch/main?author=a&message=main&raw_json=true`).send({ ...baseRaw, b: 2 }))
+    await request(agent.put(`/api/document/admin/${local}/local/branch/main?author=a&message=main&raw_json=true`).send({ ...baseRaw, b: 2, '@custom': 2 }))
 
     const result = await rebase(local)
     expect(result.status, `rebase status: ${JSON.stringify(result.body)}`).to.equal(200)
     const doc = await request(agent.get(`/api/document/admin/${local}/local/branch/other?id=rawdoc&raw_json=true`))
     expect(doc.body.a).to.equal(2)
     expect(doc.body.b).to.equal(2)
+    expect(doc.body['@type']).to.equal('application-type')
+    expect(doc.body['@custom']).to.equal(2)
   })
 
   it('replays migrations that add fields with defaults', async function () {

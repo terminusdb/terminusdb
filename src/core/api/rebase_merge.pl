@@ -162,15 +162,6 @@ merge_keys_(Schema, Prefixes, Base, Ours, Theirs, Winner, [Key|Keys], Path, Pair
         ;   conflict(['@type'|Path], Base, Ours, Theirs)),
         Pairs = ['@type'-T1|Pairs0],
         Field_Events = []
-    ;   sub_atom(Key, 0, 1, _, '@')
-    ->  value_of(Key, Ours, OV),
-        value_of(Key, Theirs, TV),
-        (   OV == missing, TV == missing
-        ->  Pairs = Pairs0
-        ;   OV == TV
-        ->  Pairs = [Key-OV|Pairs0]
-        ;   Pairs = Pairs0),
-        Field_Events = []
     ;   property_type(Schema, Prefixes, Ours, Key, Type),
         value_of(Key, Base, BV),
         value_of(Key, Ours, OV),

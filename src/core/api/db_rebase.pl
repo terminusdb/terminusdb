@@ -450,17 +450,24 @@ apply_doc_action(Write_Context, Id, _, delete) :-
     delete_document(Write_Context, false, Id).
 apply_doc_action(Write_Context, _Id, Merged, insert) :-
     !,
-    (   raw_json_document(Merged)
+    (   raw_json_document(Write_Context, Merged)
     ->  insert_document(Write_Context, Merged, true, _Inserted_Id)
     ;   insert_document(Write_Context, Merged, _Inserted_Id)).
 apply_doc_action(Write_Context, _, Merged, replace) :-
-    (   raw_json_document(Merged)
+    (   raw_json_document(Write_Context, Merged)
     ->  replace_document(Write_Context, Merged, false, true, _Replaced_Id)
     ;   replace_document(Write_Context, Merged)).
 
-raw_json_document(Document) :-
+raw_json_document(Transaction, Document) :-
     is_dict(Document),
-    \+ get_dict('@type', Document, _).
+    (   \+ get_dict('@type', Document, _)
+    ->  true
+    ;   get_dict('@type', Document, Type),
+        (   catch(database_schema(Transaction, Schema), _, fail)
+        ->  database_prefixes(Transaction, Prefixes),
+            catch(prefix_expand_schema(Type, Prefixes, TypeEx), _, fail),
+            \+ is_schema_simple_class(Schema, TypeEx)
+        ;   true)).
 
 % segment_writes_schema(+Repo_Context, +Commit_Ids) is semidet.
 %
