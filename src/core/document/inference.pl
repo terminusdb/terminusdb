@@ -1211,6 +1211,13 @@ cardinality_violation_in(List) :-
     member(Value, List),
     cardinality_violation_in(Value).
 
+check_type_candidate_(Schema, Prefixes, Dictionary, Candidate, Annotated, Captures) :-
+    catch(
+        check_type_(Schema, Prefixes, Dictionary, Candidate, Annotated, Captures),
+        error(schema_check_failure([Witness]), _),
+        Annotated = witness(Witness)
+    ).
+
 split_cardinality_successes([], [], []).
 split_cardinality_successes([Success|Successes], Violating, Conforming) :-
     (   Success = _-success(Annotated)-_-_,
@@ -1277,7 +1284,7 @@ infer_type_or_check_(Schema, Prefixes, Super, Dictionary, Type, Annotated,captur
             (   Captures0 = captures(In,DepH-DepT0,SubH-SubT0, Out0),
                 candidate_subsumed_(Schema, Super, Candidate, Dictionary_Expanded),
                 inference_level_set(0),
-                check_type_(Schema,Prefixes,Dictionary_Expanded,Candidate,Annotated0,Captures0),
+                check_type_candidate_(Schema,Prefixes,Dictionary_Expanded,Candidate,Annotated0,Captures0),
                 inference_level_read(Cand_Level)
             ),
             Results),
@@ -1587,14 +1594,21 @@ test(infer_list_as_set_over_invalid_scalar_cardinality,
       cleanup(teardown_temp_store(State))
      ]) :-
 
-    Document =
-    json{
-        mentions : ["Target/one", "Target/two"]
-    },
+    Cases = [
+        ["Target/one"],
+        ["Target/one", "Target/one"],
+        ["Target/one", "Target/two"]
+    ],
     open_descriptor(Desc,Database),
-    infer_type(Database,Document,Type,success(_)),
-
-    Type = 'terminusdb:///schema#SetMentions'.
+    forall(
+        member(Mentions, Cases),
+        (   Document =
+            json{
+                mentions : Mentions
+            },
+            infer_type(Database,Document,Type,success(_)),
+            Type = 'terminusdb:///schema#SetMentions'
+        )).
 
 test(expanded_enum,
      [setup((setup_temp_store(State),
