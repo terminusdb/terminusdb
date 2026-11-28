@@ -208,7 +208,7 @@ property_type(_, _, _, _, unknown).
 % commit's raw delta like any non-collection document.
 normalize_document(Schema, Prefixes, Doc0, Doc) :-
     collapse_linked_frames(Schema, Prefixes, Doc0, Doc1),
-    strip_nested_ids(Doc1, Doc).
+    strip_nested_ids(Schema, Prefixes, Doc1, Doc).
 
 % collapse_linked_frames(+Schema, +Prefixes, +Doc, -Result) is det.
 %
@@ -247,35 +247,45 @@ linked_frame_id(Schema, Prefixes, Dict, Id) :-
            \+ schema_is_subdocument(Schema, ClassEx)), _, fail),
     !.
 
-% strip_nested_ids(+Doc, -Result) is det.
+% strip_nested_ids(+Schema, +Prefixes, +Doc, -Result) is det.
 %
-% Keep the top-level @id, strip all nested @ids.
-strip_nested_ids(Doc, Result) :-
+% Keep the top-level @id, strip nested subdocument ids and preserve JSON data.
+strip_nested_ids(Schema, Prefixes, Doc, Result) :-
     is_dict(Doc), !,
     dict_pairs(Doc, Tag, Pairs),
-    maplist(strip_nested_pair_top, Pairs, Stripped),
+    maplist(strip_nested_pair_top(Schema, Prefixes), Pairs, Stripped),
     dict_pairs(Result, Tag, Stripped).
-strip_nested_ids(Value, New) :-
-    is_list(Value), !, maplist(strip_nested_ids, Value, New).
-strip_nested_ids(Value, Value).
+strip_nested_ids(Schema, Prefixes, Value, New) :-
+    is_list(Value), !, maplist(strip_nested_ids(Schema, Prefixes), Value, New).
+strip_nested_ids(_, _, Value, Value).
 
-strip_nested_pair_top('@id'-Value, ('@id'-Value)) :- !.
-strip_nested_pair_top(Key-Value, Key-New) :- strip_ids_deep(Value, New).
+strip_nested_pair_top(_, _, '@id'-Value, ('@id'-Value)) :- !.
+strip_nested_pair_top(Schema, Prefixes, Key-Value, Key-New) :-
+    strip_ids_deep(Schema, Prefixes, Value, New).
 
-strip_ids_deep(Value, New) :-
+strip_ids_deep(Schema, Prefixes, Value, New) :-
     is_dict(Value), !,
     dict_pairs(Value, Tag, Pairs),
-    exclude(id_pair, Pairs, Kept),
-    maplist(strip_ids_deep_pair, Kept, Stripped),
+    (   subdocument_frame(Schema, Prefixes, Value)
+    ->  exclude(id_pair, Pairs, Kept)
+    ;   Kept = Pairs),
+    maplist(strip_ids_deep_pair(Schema, Prefixes), Kept, Stripped),
     dict_pairs(New, Tag, Stripped).
 
-strip_ids_deep(Value, New) :-
-    is_list(Value), !, maplist(strip_ids_deep, Value, New).
-strip_ids_deep(Value, Value).
+strip_ids_deep(Schema, Prefixes, Value, New) :-
+    is_list(Value), !, maplist(strip_ids_deep(Schema, Prefixes), Value, New).
+strip_ids_deep(_, _, Value, Value).
+
+subdocument_frame(Schema, Prefixes, Dict) :-
+    get_dict('@type', Dict, Class),
+    catch(prefix_expand_schema(Class, Prefixes, ClassEx), _, fail),
+    catch(schema_is_subdocument(Schema, ClassEx), _, fail),
+    !.
 
 id_pair('@id'-_).
 
-strip_ids_deep_pair(Key-Value, Key-New) :- strip_ids_deep(Value, New).
+strip_ids_deep_pair(Schema, Prefixes, Key-Value, Key-New) :-
+    strip_ids_deep(Schema, Prefixes, Value, New).
 
 % element_key(+Schema, +Prefixes, +Element, -Key) is det.
 %

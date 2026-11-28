@@ -19,10 +19,17 @@ describe('rebase-conflict-resolution', function () {
       k: 'xsd:string',
       label: 'xsd:string',
       tags: { '@type': 'Set', '@class': 'xsd:string' },
+      payload: { '@type': 'Optional', '@class': 'sys:JSON' },
     },
   ]
 
-  const base = { '@type': 'Thing', k: 't', label: 'base', tags: ['x'] }
+  const base = {
+    '@type': 'Thing',
+    k: 't',
+    label: 'base',
+    tags: ['x'],
+    payload: { object: { '@id': 'application-owned', value: 1 } },
+  }
 
   const request = promise => promise.ok(res => true)
 
@@ -101,6 +108,19 @@ describe('rebase-conflict-resolution', function () {
     expect(result.status, `rebase status: ${JSON.stringify(result.body)}`).to.equal(200)
     const doc = await request(agent.get(`/api/document/admin/${local}/local/branch/other?id=Thing/t`))
     expect(doc.body.tags.slice().sort()).to.deep.equal(['y', 'z'])
+  })
+
+  it('preserves application-owned ids in embedded JSON', async function () {
+    this.timeout(60000)
+    const local = await setup(
+      'json-id',
+      { ...base, label: 'other label' },
+      { ...base, tags: ['x', 'z'] },
+    )
+    const result = await rebase(local)
+    expect(result.status, `rebase status: ${JSON.stringify(result.body)}`).to.equal(200)
+    const doc = await request(agent.get(`/api/document/admin/${local}/local/branch/other?id=Thing/t`))
+    expect(doc.body.payload).to.deep.equal(base.payload)
   })
 
   it('keeps cardinality-one fields non-unionable under merge', async function () {
