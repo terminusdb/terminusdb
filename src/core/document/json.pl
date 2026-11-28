@@ -3713,12 +3713,27 @@ normalize_repeated_random_subdocument_member(Transaction, Reuse, Parent_Id, Prop
     !,
     (   key_descriptor(Transaction, Type, random(Base)),
         % A capture makes the generated identifier visible inside the transaction.
-        \+ get_dict('@capture', Value, _),
+        \+ elaborated_has_capture(Value),
         matching_existing_random_subdocument(Transaction, Reuse, Parent_Id, Property, Base, Value, Existing)
     ->  Normalized = Existing
     ;   normalize_repeated_random_subdocument_fields(Transaction, Reuse, Value, Normalized)
     ).
 normalize_repeated_random_subdocument_member(_Transaction, _Reuse, _Parent_Id, _Property, Value, Value).
+
+elaborated_has_capture(Value) :-
+    is_dict(Value),
+    get_dict('@capture', Value, _),
+    !.
+elaborated_has_capture(Value) :-
+    is_dict(Value),
+    !,
+    dict_pairs(Value, _, Pairs),
+    member(_-Member, Pairs),
+    elaborated_has_capture(Member).
+elaborated_has_capture(Value) :-
+    is_list(Value),
+    member(Member, Value),
+    elaborated_has_capture(Member).
 
 matching_existing_random_subdocument(Transaction, Reuse, Parent_Id, Property, Base, Value, Existing) :-
     database_and_default_prefixes(Transaction, Prefixes),
