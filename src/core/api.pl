@@ -26,6 +26,7 @@
 
               % db_rebase.pl
               rebase_on_branch/9,
+              rebase_on_branch/10,
               cycle_context/4,
 
               % db_fast_forward.pl

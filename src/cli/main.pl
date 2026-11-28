@@ -433,7 +433,12 @@ opt_spec(rebase,'terminusdb rebase TO_DATABASE_SPEC FROM_DATABASE_SPEC OPTIONS',
            longflags([author]),
            shortflags([a]),
            default(admin),
-           help('The author of the rebase')]
+           help('The author of the rebase')],
+          [opt(conflict_resolution),
+           type(atom),
+           longflags(['conflict-resolution', conflict_resolution]),
+           default(error),
+           help('Conflict resolution: error, ours, theirs, or merge')]
          ]).
 opt_spec(squash,'terminusdb squash DATABASE_SPEC OPTIONS',
          'Squash a commit.',
@@ -1967,10 +1972,12 @@ run_command(rebase,[Path,From_Path],Opts) :-
     opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(author(Author),Opts),
+    option(conflict_resolution(Conflict_Resolution), Opts),
     api_report_errors(
         rebase,
         (   Strategy_Map = [],
-            rebase_on_branch(System_DB, Auth, Path, From_Path, Author, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports))),
+            rebase_on_branch(System_DB, Auth, Path, From_Path, Author, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports,
+                             [conflict_resolution(Conflict_Resolution)]))),
     format(current_output, "~nRebased from: ~q to ~q~n", [From_Path, Path]),
     format(current_output, "Forwarded_Commits: ~q~n", [Forwarded_Commits]),
     (   Common_Commit_ID_Option = some(Common_Commit_ID)

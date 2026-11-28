@@ -29,6 +29,7 @@
               delete_documents_by_type/3,
               delete_subdocument/3,
               insert_document/3,
+              insert_document/4,
               insert_document/7,
               insert_document/8,
               insert_document_merge/9,

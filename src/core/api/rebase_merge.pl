@@ -2,6 +2,7 @@
     layer_touches_collections/1,
     collection_predicate/1,
     merge_document/6,
+    merge_document_with_resolution/8,
     normalize_document/4
 ]).
 
@@ -40,12 +41,19 @@ layer_touches_collections(Layer) :-
 
 % merge_document(+Schema, +Prefixes, +Base, +Ours, +Theirs, -Merged) is det.
 %
-% Three-way merge of one document as returned by get_document/3. Base, Ours
-% and Theirs are document dicts or the atom 'missing'. Merged is a document
-% dict (nested @id fields stripped so ids regenerate on write, top-level
-% @id kept) or 'missing'. Throws
+% Strict three-way merge of one document as returned by get_document/3.
+merge_document(Schema, Prefixes, Base, Ours, Theirs, Merged) :-
+    merge_document_with_resolution(Schema, Prefixes, Base, Ours, Theirs, error, Merged, _).
+
+% merge_document_with_resolution(+Schema, +Prefixes, +Base, +Ours, +Theirs, +Winner, -Merged, -Events) is det.
+%
+% Base, Ours and Theirs are document dicts or the atom 'missing'. Winner is
+% error, ours, theirs or merge. Merged is a document dict (nested @id
+% fields stripped so ids regenerate on write, top-level @id kept) or
+% 'missing'. Events carry resolution(Path, Winner) for each place where a
+% caller-selected resolution decided the outcome. Throws
 % error(rebase_merge_conflict(Document, Path, Base, Ours, Theirs), _).
-merge_document(Schema, Prefixes, Base0, Ours0, Theirs0, Merged) :-
+merge_document_with_resolution(Schema, Prefixes, Base0, Ours0, Theirs0, Winner, Merged, Events) :-
     normalize_document(Schema, Prefixes, Base0, Base),
     normalize_document(Schema, Prefixes, Ours0, Ours),
     normalize_document(Schema, Prefixes, Theirs0, Theirs),
@@ -57,45 +65,65 @@ merge_document(Schema, Prefixes, Base0, Ours0, Theirs0, Merged) :-
     ;   TopId = BaseId
     ),
     catch(
-        merge_value(Schema, Prefixes, unknown, Base, Ours, Theirs, [], Result0),
+        merge_value(Schema, Prefixes, unknown, Base, Ours, Theirs, Winner, [], Result0, Events),
         error(rebase_merge_conflict(_, Path, B, O, T), _),
-        (   (   top_id(Base, Id) -> true
-            ;   top_id(Ours, Id) -> true
-            ;   top_id(Theirs, Id) -> true
-            ;   Id = unknown ),
-            throw(error(rebase_merge_conflict(Id, Path, B, O, T), _)))),
+        resolve_merge_conflict(Winner, Base, Ours, Theirs, Path, B, O, T, Result0, Events)),
     (   Result0 == missing
     ->  Merged = missing
     ;   is_dict(Result0), nonvar(TopId)
     ->  put_dict('@id', Result0, TopId, Merged)
     ;   Merged = Result0).
 
+resolve_merge_conflict(Winner, _Base, Ours, Theirs, _Path, _B, _O, _T, Resolved, [resolution([], Winner)]) :-
+    memberchk(Winner, [ours, theirs]),
+    !,
+    (   Winner == ours
+    ->  Resolved = Ours
+    ;   Resolved = Theirs).
+resolve_merge_conflict(_Winner, Base, Ours, Theirs, Path, B, O, T, _Result, _Events) :-
+    (   top_id(Base, Id) -> true
+    ;   top_id(Ours, Id) -> true
+    ;   top_id(Theirs, Id) -> true
+    ;   Id = unknown ),
+    throw(error(rebase_merge_conflict(Id, Path, B, O, T), _)).
+
 top_id(Doc, Id) :- is_dict(Doc), get_dict('@id', Doc, Id), !.
 top_id(_, _).
 
-% merge_value(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Path, -Result) is det.
-merge_value(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result) :-
+% merge_value(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Winner, +Path, -Result, -Events) is det.
+merge_value(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events) :-
     (   Ours == Theirs
-    ->  Result = Ours
+    ->  Result = Ours,
+        Events = []
     ;   Base == Ours
-    ->  Result = Theirs
+    ->  Result = Theirs,
+        Events = []
     ;   Base == Theirs
-    ->  Result = Ours
-    ;   merge_value_structured(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result)).
+    ->  Result = Ours,
+        Events = []
+    ;   merge_value_structured(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events)).
 
-merge_value_structured(Schema, Prefixes, Type0, Base, Ours, Theirs, Path, Result) :-
+merge_value_structured(Schema, Prefixes, Type0, Base, Ours, Theirs, Winner, Path, Result, Events) :-
     (   container_type(Type0)
     ->  unwrap_optional(Type0, Type),
-        (   is_list(Base), is_list(Ours), is_list(Theirs)
-        ->  (   Type =.. [set|_] -> merge_set(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result)
-            ;   merge_list(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result))
+        container_value(Type, Base, Base_Value),
+        container_value(Type, Ours, Ours_Value),
+        container_value(Type, Theirs, Theirs_Value),
+        (   is_list(Base_Value), is_list(Ours_Value), is_list(Theirs_Value)
+        ->  (   Type =.. [set|_] -> merge_set(Schema, Prefixes, Type, Base_Value, Ours_Value, Theirs_Value, Winner, Path, Result, Events)
+            ;   merge_list(Schema, Prefixes, Type, Base_Value, Ours_Value, Theirs_Value, Winner, Path, Result, Events))
         ;   conflict(Path, Base, Ours, Theirs))
     ;   is_dict(Base), is_dict(Ours), is_dict(Theirs)
-    ->  merge_document_keys(Schema, Prefixes, Base, Ours, Theirs, Path, Result)
+    ->  merge_document_keys(Schema, Prefixes, Base, Ours, Theirs, Winner, Path, Result, Events)
     ;   conflict(Path, Base, Ours, Theirs)).
 
 unwrap_optional(optional(Type), Unwrapped) :- !, unwrap_optional(Type, Unwrapped).
 unwrap_optional(Type, Type).
+
+container_value(Type, missing, []) :-
+    Type =.. [set|_],
+    !.
+container_value(_, Value, Value).
 
 container_type(optional(Type)) :- !, container_type(Type).
 container_type(Type) :-
@@ -108,13 +136,13 @@ container_type(Type) :-
 conflict(Path, Base, Ours, Theirs) :-
     throw(error(rebase_merge_conflict(unknown, Path, Base, Ours, Theirs), _)).
 
-merge_document_keys(Schema, Prefixes, Base, Ours, Theirs, Path, Result) :-
+merge_document_keys(Schema, Prefixes, Base, Ours, Theirs, Winner, Path, Result, Events) :-
     dict_pairs(Ours, _, OursPairs),
     dict_pairs(Theirs, _, TheirsPairs),
     dict_pairs(Base, _, BasePairs),
     append([OursPairs, TheirsPairs, BasePairs], Pairs0),
     keys_of_pairs(Pairs0, [], Keys),
-    merge_keys_(Schema, Prefixes, Base, Ours, Theirs, Keys, Path, ResultPairs),
+    merge_keys_(Schema, Prefixes, Base, Ours, Theirs, Winner, Keys, Path, ResultPairs, Events),
     dict_pairs(Result, json, ResultPairs).
 
 keys_of_pairs([], Acc, Acc).
@@ -123,34 +151,30 @@ keys_of_pairs([Key-_|Rest], Acc, Out) :-
     ->  keys_of_pairs(Rest, Acc, Out)
     ;   keys_of_pairs(Rest, [Key|Acc], Out)).
 
-merge_keys_(_, _, _, _, _, [], _, []) :- !.
-merge_keys_(Schema, Prefixes, Base, Ours, Theirs, [Key|Keys], Path, Pairs) :-
+merge_keys_(_, _, _, _, _, _, [], _, [], []) :- !.
+merge_keys_(Schema, Prefixes, Base, Ours, Theirs, Winner, [Key|Keys], Path, Pairs, Events) :-
     (   Key == '@id'
-    ->  Pairs = Pairs0
+    ->  Pairs = Pairs0,
+        Field_Events = []
     ;   Key == '@type'
     ->  (   get_dict('@type', Ours, T1), get_dict('@type', Theirs, T2), T1 == T2
         ->  true
         ;   conflict(['@type'|Path], Base, Ours, Theirs)),
-        Pairs = ['@type'-T1|Pairs0]
-    ;   sub_atom(Key, 0, 1, _, '@')
-    ->  value_of(Key, Ours, OV),
-        value_of(Key, Theirs, TV),
-        (   OV == missing, TV == missing
-        ->  Pairs = Pairs0
-        ;   OV == TV
-        ->  Pairs = [Key-OV|Pairs0]
-        ;   Pairs = Pairs0)
+        Pairs = ['@type'-T1|Pairs0],
+        Field_Events = []
     ;   property_type(Schema, Prefixes, Ours, Key, Type),
         value_of(Key, Base, BV),
         value_of(Key, Ours, OV),
         value_of(Key, Theirs, TV),
         (   OV == missing, TV == missing
-        ->  Pairs = Pairs0
-        ;   merge_value(Schema, Prefixes, Type, BV, OV, TV, [Key|Path], RV),
+        ->  Pairs = Pairs0,
+            Field_Events = []
+        ;   merge_value(Schema, Prefixes, Type, BV, OV, TV, Winner, [Key|Path], RV, Field_Events),
             (   RV == missing
             ->  Pairs = Pairs0
             ;   Pairs = [Key-RV|Pairs0]))),
-    merge_keys_(Schema, Prefixes, Base, Ours, Theirs, Keys, Path, Pairs0).
+    merge_keys_(Schema, Prefixes, Base, Ours, Theirs, Winner, Keys, Path, Pairs0, Rest_Events),
+    append(Field_Events, Rest_Events, Events).
 
 value_of(Key, Doc, Value) :-
     is_dict(Doc), !,
@@ -175,7 +199,7 @@ property_type(_, _, _, _, unknown).
 % commit's raw delta like any non-collection document.
 normalize_document(Schema, Prefixes, Doc0, Doc) :-
     collapse_linked_frames(Schema, Prefixes, Doc0, Doc1),
-    strip_nested_ids(Doc1, Doc).
+    strip_nested_ids(Schema, Prefixes, Doc1, Doc).
 
 % collapse_linked_frames(+Schema, +Prefixes, +Doc, -Result) is det.
 %
@@ -214,35 +238,45 @@ linked_frame_id(Schema, Prefixes, Dict, Id) :-
            \+ schema_is_subdocument(Schema, ClassEx)), _, fail),
     !.
 
-% strip_nested_ids(+Doc, -Result) is det.
+% strip_nested_ids(+Schema, +Prefixes, +Doc, -Result) is det.
 %
-% Keep the top-level @id, strip all nested @ids.
-strip_nested_ids(Doc, Result) :-
+% Keep the top-level @id, strip nested subdocument ids and preserve JSON data.
+strip_nested_ids(Schema, Prefixes, Doc, Result) :-
     is_dict(Doc), !,
     dict_pairs(Doc, Tag, Pairs),
-    maplist(strip_nested_pair_top, Pairs, Stripped),
+    maplist(strip_nested_pair_top(Schema, Prefixes), Pairs, Stripped),
     dict_pairs(Result, Tag, Stripped).
-strip_nested_ids(Value, New) :-
-    is_list(Value), !, maplist(strip_nested_ids, Value, New).
-strip_nested_ids(Value, Value).
+strip_nested_ids(Schema, Prefixes, Value, New) :-
+    is_list(Value), !, maplist(strip_nested_ids(Schema, Prefixes), Value, New).
+strip_nested_ids(_, _, Value, Value).
 
-strip_nested_pair_top('@id'-Value, ('@id'-Value)) :- !.
-strip_nested_pair_top(Key-Value, Key-New) :- strip_ids_deep(Value, New).
+strip_nested_pair_top(_, _, '@id'-Value, ('@id'-Value)) :- !.
+strip_nested_pair_top(Schema, Prefixes, Key-Value, Key-New) :-
+    strip_ids_deep(Schema, Prefixes, Value, New).
 
-strip_ids_deep(Value, New) :-
+strip_ids_deep(Schema, Prefixes, Value, New) :-
     is_dict(Value), !,
     dict_pairs(Value, Tag, Pairs),
-    exclude(id_pair, Pairs, Kept),
-    maplist(strip_ids_deep_pair, Kept, Stripped),
+    (   subdocument_frame(Schema, Prefixes, Value)
+    ->  exclude(id_pair, Pairs, Kept)
+    ;   Kept = Pairs),
+    maplist(strip_ids_deep_pair(Schema, Prefixes), Kept, Stripped),
     dict_pairs(New, Tag, Stripped).
 
-strip_ids_deep(Value, New) :-
-    is_list(Value), !, maplist(strip_ids_deep, Value, New).
-strip_ids_deep(Value, Value).
+strip_ids_deep(Schema, Prefixes, Value, New) :-
+    is_list(Value), !, maplist(strip_ids_deep(Schema, Prefixes), Value, New).
+strip_ids_deep(_, _, Value, Value).
+
+subdocument_frame(Schema, Prefixes, Dict) :-
+    get_dict('@type', Dict, Class),
+    catch(prefix_expand_schema(Class, Prefixes, ClassEx), _, fail),
+    catch(schema_is_subdocument(Schema, ClassEx), _, fail),
+    !.
 
 id_pair('@id'-_).
 
-strip_ids_deep_pair(Key-Value, Key-New) :- strip_ids_deep(Value, New).
+strip_ids_deep_pair(Schema, Prefixes, Key-Value, Key-New) :-
+    strip_ids_deep(Schema, Prefixes, Value, New).
 
 % element_key(+Schema, +Prefixes, +Element, -Key) is det.
 %
@@ -286,19 +320,21 @@ schema_local_key(Prefixes, Field, Local) :-
     atom_concat(SchemaPrefixA, Local, Field),
     !.
 
-% merge_list(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Path, -Result) is det.
+% merge_list(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Winner, +Path, -Result, -Events) is det.
 %
-% Ordered three-way merge of List/Array elements by stable identity.
-merge_list(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result) :-
+% Ordered three-way merge of List/Array elements by stable identity. merge
+% does not concatenate ordered containers because order has no canonical
+% resolution.
+merge_list(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events) :-
     element_keys(Schema, Prefixes, Base, KeysB),
     element_keys(Schema, Prefixes, Ours, KeysO),
     element_keys(Schema, Prefixes, Theirs, KeysT),
     (   KeysO == KeysB
-    ->  merge_list_theirs(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result)
+    ->  merge_list_theirs(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events)
     ;   KeysT == KeysB
-    ->  merge_list_ours(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result)
+    ->  merge_list_ours(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events)
     ;   KeysO == KeysT
-    ->  merge_list_both(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result)
+    ->  merge_list_both(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events)
     ;   conflict(Path, Base, Ours, Theirs)).
 
 element_keys(Schema, Prefixes, Elements, Keys) :-
@@ -306,7 +342,7 @@ element_keys(Schema, Prefixes, Elements, Keys) :-
 
 % ours kept base's membership and order: theirs drives structure, ours'
 % content edits merge into shared elements.
-merge_list_theirs(Schema, Prefixes, _Type, Base, Ours, Theirs, Path, Result) :-
+merge_list_theirs(Schema, Prefixes, _Type, Base, Ours, Theirs, Winner, Path, Result, Events) :-
     element_assoc(Schema, Prefixes, Base, AssocB),
     element_assoc(Schema, Prefixes, Ours, AssocO),
     assoc_to_list(AssocB, BasePairs),
@@ -318,17 +354,19 @@ merge_list_theirs(Schema, Prefixes, _Type, Base, Ours, Theirs, Path, Result) :-
             O \== B,
             \+ memberchk(K, KeysT)),
            conflict(Path, B, O, missing)),
-    maplist(merge_list_theirs_elem(Schema, Prefixes, AssocB, AssocO, Path), Theirs, Result).
+    maplist(merge_list_theirs_elem(Schema, Prefixes, AssocB, AssocO, Winner, Path), Theirs, Result, Event_Lists),
+    append(Event_Lists, Events).
 
-merge_list_theirs_elem(Schema, Prefixes, AssocB, AssocO, Path, Element, Merged) :-
+merge_list_theirs_elem(Schema, Prefixes, AssocB, AssocO, Winner, Path, Element, Merged, Events) :-
     element_key(Schema, Prefixes, Element, Key),
     (   memberchk(Key-B, AssocB),
         memberchk(Key-O, AssocO)
-    ->  merge_value(Schema, Prefixes, unknown, B, O, Element, Path, Merged)
-    ;   Merged = Element).
+    ->  merge_value(Schema, Prefixes, unknown, B, O, Element, Winner, Path, Merged, Events)
+    ;   Merged = Element,
+        Events = []).
 
 % theirs kept base's membership and order: ours drives structure.
-merge_list_ours(Schema, Prefixes, _Type, Base, Ours, Theirs, Path, Result) :-
+merge_list_ours(Schema, Prefixes, _Type, Base, Ours, Theirs, Winner, Path, Result, Events) :-
     element_assoc(Schema, Prefixes, Base, AssocB),
     element_assoc(Schema, Prefixes, Theirs, AssocT),
     assoc_to_list(AssocB, BasePairs),
@@ -339,49 +377,59 @@ merge_list_ours(Schema, Prefixes, _Type, Base, Ours, Theirs, Path, Result) :-
             T \== B,
             \+ memberchk(K, KeysO)),
            conflict(Path, B, missing, T)),
-    maplist(merge_list_ours_elem(Schema, Prefixes, AssocB, AssocT, Path), Ours, Result).
+    maplist(merge_list_ours_elem(Schema, Prefixes, AssocB, AssocT, Winner, Path), Ours, Result, Event_Lists),
+    append(Event_Lists, Events).
 
-merge_list_ours_elem(Schema, Prefixes, AssocB, AssocT, Path, Element, Merged) :-
+merge_list_ours_elem(Schema, Prefixes, AssocB, AssocT, Winner, Path, Element, Merged, Events) :-
     element_key(Schema, Prefixes, Element, Key),
     (   memberchk(Key-B, AssocB),
         memberchk(Key-T, AssocT)
-    ->  merge_value(Schema, Prefixes, unknown, B, Element, T, Path, Merged)
-    ;   Merged = Element).
+    ->  merge_value(Schema, Prefixes, unknown, B, Element, T, Winner, Path, Merged, Events)
+    ;   Merged = Element,
+        Events = []).
 
-merge_list_both(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result) :-
+merge_list_both(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events) :-
     element_assoc(Schema, Prefixes, Base, AssocB),
-    maplist(merge_list_both_elem(Schema, Prefixes, Type, AssocB, Path), Ours, Theirs, Result).
+    maplist(merge_list_both_elem(Schema, Prefixes, Type, AssocB, Winner, Path), Ours, Theirs, Result, Event_Lists),
+    append(Event_Lists, Events).
 
-merge_list_both_elem(Schema, Prefixes, _Type, AssocB, Path, OursElt, TheirsElt, Merged) :-
+merge_list_both_elem(Schema, Prefixes, _Type, AssocB, Winner, Path, OursElt, TheirsElt, Merged, Events) :-
     element_key(Schema, Prefixes, OursElt, Key),
     (   memberchk(Key-B, AssocB)
-    ->  merge_value(Schema, Prefixes, unknown, B, OursElt, TheirsElt, Path, Merged)
-    ;   merge_value(Schema, Prefixes, unknown, missing, OursElt, TheirsElt, Path, Merged)).
+    ->  merge_value(Schema, Prefixes, unknown, B, OursElt, TheirsElt, Winner, Path, Merged, Events)
+    ;   merge_value(Schema, Prefixes, unknown, missing, OursElt, TheirsElt, Winner, Path, Merged, Events)).
 
 assoc_to_list(Assoc, Pairs) :-
     (   is_dict(Assoc) -> dict_pairs(Assoc, _, Pairs) ; Pairs = Assoc ).
 
-% merge_set(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Path, -Result) is det.
+% merge_set(+Schema, +Prefixes, +Type, +Base, +Ours, +Theirs, +Winner, +Path, -Result, -Events) is det.
 %
-% Unordered three-way merge of Set elements by stable identity.
-merge_set(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result) :-
+% Unordered three-way merge of Set elements by stable identity. Divergent
+% membership changes union additions and removals only under an explicit
+% merge resolution.
+merge_set(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events) :-
     element_keys(Schema, Prefixes, Base, KeysB),
     element_keys(Schema, Prefixes, Ours, KeysO),
     element_keys(Schema, Prefixes, Theirs, KeysT),
     sort(KeysB, SortedB), sort(KeysO, SortedO), sort(KeysT, SortedT),
     (   SortedO == SortedB
-    ->  merge_list_theirs(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result)
+    ->  merge_list_theirs(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events)
     ;   SortedT == SortedB
-    ->  merge_list_ours(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result)
-    ;   merge_set_changed(Schema, Prefixes, Type, Base, Ours, Theirs, Path, Result)).
+    ->  merge_list_ours(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events)
+    ;   SortedO == SortedT
+    ->  merge_set_changed(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events)
+    ;   Winner == merge
+    ->  merge_set_changed(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Rest_Events),
+        Events = [resolution(Path, merge)|Rest_Events]
+    ;   conflict(Path, Base, Ours, Theirs)).
 
-merge_set_changed(Schema, Prefixes, _Type, Base, Ours, Theirs, Path, Result) :-
+merge_set_changed(Schema, Prefixes, _Type, Base, Ours, Theirs, Winner, Path, Result, Events) :-
     element_assoc(Schema, Prefixes, Base, AssocB),
     element_assoc(Schema, Prefixes, Ours, AssocO),
     element_assoc(Schema, Prefixes, Theirs, AssocT),
     assoc_to_list(AssocB, BasePairs),
     assoc_to_list(AssocT, TheirsPairs),
-    maplist(merge_set_ours_elem(Schema, Prefixes, AssocB, AssocT, Path), Ours, KeptWithMarkers),
+    maplist(merge_set_ours_elem(Schema, Prefixes, AssocB, AssocT, Winner, Path), Ours, KeptWithMarkers, Event_Lists),
     exclude(==(removed), KeptWithMarkers, KeptOurs),
     % ours removed an element that theirs modified: conflict; unchanged, the
     % removal stands and the element must not come back through theirs.
@@ -394,7 +442,8 @@ merge_set_changed(Schema, Prefixes, _Type, Base, Ours, Theirs, Path, Result) :-
     exclude(memberchk_in_assoc(AssocO), KeysT, NotOurs),
     exclude(memberchk_in_assoc(AssocB), NotOurs, OnlyTheirsKeys),
     maplist(theirs_key_elem(AssocT), OnlyTheirsKeys, ExtraTheirs),
-    append(KeptOurs, ExtraTheirs, Result).
+    append(KeptOurs, ExtraTheirs, Result),
+    append(Event_Lists, Events).
 
 memberchk_in_assoc(Assoc, Key) :- memberchk(Key-_, Assoc).
 
@@ -404,16 +453,19 @@ assoc_keys(Assoc, Keys) :-
 
 theirs_key_elem(Assoc, Key, Elt) :- memberchk(Key-Elt, Assoc).
 
-merge_set_ours_elem(Schema, Prefixes, AssocB, AssocT, Path, OursElt, Merged) :-
+merge_set_ours_elem(Schema, Prefixes, AssocB, AssocT, Winner, Path, OursElt, Merged, Events) :-
     element_key(Schema, Prefixes, OursElt, Key),
     (   memberchk(Key-B, AssocB)
     ->  (   memberchk(Key-T, AssocT)
-        ->  merge_value(Schema, Prefixes, unknown, B, OursElt, T, Path, Merged)
+        ->  merge_value(Schema, Prefixes, unknown, B, OursElt, T, Winner, Path, Merged, Events)
         ;   OursElt == B
-        ->  Merged = removed
+        ->  Merged = removed,
+            Events = []
         ;   conflict(Path, B, OursElt, missing))
     ;   (   memberchk(Key-T, AssocT)
         ->  (   OursElt == T
-            ->  Merged = OursElt
+            ->  Merged = OursElt,
+                Events = []
             ;   conflict(Path, missing, OursElt, T))
-        ;   Merged = OursElt)).
+        ;   Merged = OursElt,
+            Events = [])).
