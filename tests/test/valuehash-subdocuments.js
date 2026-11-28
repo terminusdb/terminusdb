@@ -114,6 +114,21 @@ describe('valuehash-subdocuments', function () {
       expect(result.body[0].sub.tags).to.deep.equal(['a', 'b'])
     })
 
+    it('does not reuse a random subdocument when array shape changes', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RArraySub', '@subdocument': [], '@key': { '@type': 'Random' }, arr: { '@type': 'Array', '@dimensions': 2, '@class': 'xsd:string' } },
+        { '@type': 'Class', '@id': 'VHArrayParent', '@key': { '@type': 'ValueHash' }, sub: { '@type': 'Optional', '@class': 'RArraySub' } },
+      ])
+      await document.insert(agent, { instance: { '@type': 'VHArrayParent', sub: { '@type': 'RArraySub', arr: [['a', 'b']] } } })
+      const inserted = await document.get(agent, { query: { type: 'VHArrayParent', as_list: true } })
+      const id = inserted.body[0]['@id']
+
+      await document.replace(agent, { instance: { '@id': id, '@type': 'VHArrayParent', sub: { '@type': 'RArraySub', arr: [['a'], ['b']] } } })
+
+      const result = await document.get(agent, { query: { type: 'VHArrayParent', as_list: true } })
+      expect(result.body[0].sub.arr).to.deep.equal([['a'], ['b']])
+    })
+
     it('does not rewrite a captured random subdocument id during replacement', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'RCaptureSub', '@subdocument': [], '@key': { '@type': 'Random' }, x: 'xsd:string' },

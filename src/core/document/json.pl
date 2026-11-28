@@ -4070,10 +4070,21 @@ replace_document_expanded(Transaction, Elaborated, Contract, Create, ID) :-
             )
         )
     ),
+    delete_replacement_value_hash_document(Transaction, ID, Id_Pairs),
     (   ground(Dependencies)
     ->  insert_replacement_document_expanded(Transaction, Elaborated, ID)
     ;   when(ground(Dependencies),
              insert_replacement_document_expanded(Transaction, Elaborated, ID))
+    ).
+
+delete_replacement_value_hash_document(Transaction, Id, Id_Pairs) :-
+    (   memberchk(Id-value_hash, Id_Pairs)
+    ->  catch(
+            delete_document(Transaction, false, Id),
+            error(document_not_found(_), _),
+            true
+        )
+    ;   true
     ).
 
 insert_backlinks(Links, Graph) :-
@@ -4154,6 +4165,7 @@ replace_document(Transaction, Document, Create, false, Captures_In, Ids, Depende
                 )
             ),
             Deletions),
+    delete_replacement_value_hash_document(Transaction, Elaborated_Id, Id_Pairs),
     ensure_transaction_has_builder(instance, Transaction),
     convlist([Id0-Variety,Id0]>>(Variety \= value_hash),Id_Pairs,Ids),
     when(ground(Dependencies),
