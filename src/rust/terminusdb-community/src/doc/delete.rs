@@ -552,16 +552,19 @@ pub fn delete_all_documents_by_type<L: Layer + Clone>(
     }
     let rdf_type = rdf_type.unwrap();
 
+    let mut document_ids = HashSet::new();
     for type_id in context.get_subtypes_for(type_name) {
         for triple in layer.triples_o(type_id) {
-            if triple.predicate != rdf_type {
-                continue;
+            if triple.predicate == rdf_type {
+                document_ids.insert(triple.subject);
             }
+        }
+    }
 
-            delete_id_document(context, builder, triple.subject);
-            if unlink {
-                unlink_id_document(context, builder, triple.subject);
-            }
+    delete_multiple_documents_with_roots(context, builder, &document_ids, &document_ids);
+    if unlink {
+        for document_id in document_ids {
+            unlink_id_document(context, builder, document_id);
         }
     }
 }

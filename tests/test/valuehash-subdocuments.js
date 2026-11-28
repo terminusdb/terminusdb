@@ -243,6 +243,15 @@ describe('valuehash-subdocuments', function () {
       expect(await triplesContaining(agent, childFragment)).to.have.lengthOf(0)
     })
 
+    it('removes the shared subdocument when all sharers are deleted by type', async function () {
+      const childId = await insertSharedParents()
+      const childFragment = childId.split('/').pop()
+
+      await document.delete(agent, { queryString: 'type=VP&author=default_author&message=default_message' })
+
+      expect(await triplesContaining(agent, childFragment)).to.have.lengthOf(0)
+    })
+
     it('still cascades into an exclusively owned valuehash subdocument', async function () {
       await createSchema(sharedSchema)
       await document.insert(agent, { instance: { '@type': 'VP', k: 'one', sub: { '@type': 'VHSub', name: 'exclusive' } } })
