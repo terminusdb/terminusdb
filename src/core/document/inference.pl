@@ -1197,6 +1197,31 @@ infer_type_(Schema, Prefixes, Super, Dictionary, Type, Annotated, captures(In,De
         In = Out
     ).
 
+cardinality_violation_in(Term) :-
+    is_dict(Term, cardinality_violation),
+    !.
+cardinality_violation_in(Dict) :-
+    is_dict(Dict),
+    !,
+    dict_pairs(Dict, _, Pairs),
+    member(_-Value, Pairs),
+    cardinality_violation_in(Value).
+cardinality_violation_in(List) :-
+    is_list(List),
+    member(Value, List),
+    cardinality_violation_in(Value).
+
+split_cardinality_successes([], [], []).
+split_cardinality_successes([Success|Successes], Violating, Conforming) :-
+    (   Success = _-success(Annotated)-_-_,
+        cardinality_violation_in(Annotated)
+    ->  Violating = [Success|Violating_Rest],
+        Conforming = Conforming_Rest
+    ;   Violating = Violating_Rest,
+        Conforming = [Success|Conforming_Rest]
+    ),
+    split_cardinality_successes(Successes, Violating_Rest, Conforming_Rest).
+
 infer_type_or_check_(Schema, _Prefixes, _Super, Dictionary, _Inferred_Type, Annotated, Captures),
 get_dict('@type', Dictionary, "@id"),
 get_dict('@id', Dictionary, Id),
@@ -1266,9 +1291,14 @@ infer_type_or_check_(Schema, Prefixes, Super, Dictionary, Type, Annotated,captur
         ;   Annotated = witness(json{ '@type' : no_unique_type_for_document,
                                       'document' : Dictionary})
         )
-    ;   findall(L, member(_-_-_-L, Successes), Levels),
+    ;   split_cardinality_successes(Successes, Violating, Conforming),
+        (   Conforming = []
+        ->  Candidates = Violating
+        ;   Candidates = Conforming
+        ),
+        findall(L, member(_-_-_-L, Candidates), Levels),
         min_list(Levels, Best_Level),
-        findall(E, (member(E, Successes), E = _-_-_-Best_Level), Best),
+        findall(E, (member(E, Candidates), E = _-_-_-Best_Level), Best),
         (   Best = [Type-success(Annotated0)-captures(In,DepH-DepT,SubH-SubT,Out)-Best_Level]
         ->  put_dict(json{'@type' : Type}, Annotated0, Annotated1),
             Annotated = success(Annotated1),
@@ -1530,6 +1560,41 @@ test(reference_success,
                      'terminusdb:///schema#mentions':
                      json{'@id':'terminusdb:///data/Mentioned/something_or_other',
                           '@type':"@id"}}.
+
+scalar_or_set_inference('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "InferenceTarget" }
+
+{ "@type" : "Class",
+  "@id" : "ScalarMentions",
+  "mentions" : "InferenceTarget" }
+
+{ "@type" : "Class",
+  "@id" : "SetMentions",
+  "mentions" : { "@type" : "Set",
+                 "@class" : "xsd:string" } }
+').
+
+test(infer_list_as_set_over_invalid_scalar_cardinality,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(scalar_or_set_inference,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        mentions : ["Target/one", "Target/two"]
+    },
+    open_descriptor(Desc,Database),
+    infer_type(Database,Document,Type,success(_)),
+
+    Type = 'terminusdb:///schema#SetMentions'.
 
 test(expanded_enum,
      [setup((setup_temp_store(State),
