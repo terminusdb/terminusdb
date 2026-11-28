@@ -432,11 +432,11 @@ pub fn delete_all_triples<L: Layer + Clone>(layer: &L, builder: &mut dyn LayerBu
 
 /// Delete multiple documents with pre-computed root IDs from Prolog.
 /// This properly handles:
-/// 1. Regular typed subdocuments (recurse into non-document, non-value-hash types)
-/// 2. sys:JSON content-addressed structures (reference counting for shared content)
+/// 1. Regular typed subdocuments (recurse into non-document types)
+/// 2. ValueHash subdocuments and sys:JSON content-addressed structures (reference counting for shared content)
 ///
 /// Uses the same logic as delete_id_document but with bulk-aware reference counting.
-/// For content-addressed JSON, uses backward traversal (like has_other_link) to check
+/// For shared content, uses backward traversal (like has_other_link) to check
 /// if other documents (not being deleted) still reference the node.
 pub fn delete_multiple_documents_with_roots<L: Layer + Clone>(
     context: &DocumentContext<L>,
