@@ -182,6 +182,18 @@ describe('valuehash-subdocuments', function () {
       expect(commitsAfter).to.equal(commitsBefore)
     })
 
+    it('keeps an unchanged full replacement import intact', async function () {
+      await createSchema(randomSubSchema)
+      const instance = { '@type': 'VHR', sub: { '@type': 'RSub', x: 'a' } }
+      await document.insert(agent, { instance })
+
+      await document.insert(agent, { instance, fullReplace: true })
+
+      const result = await document.get(agent, { query: { type: 'VHR', as_list: true } })
+      expect(result.body).to.have.lengthOf(1)
+      expect(result.body[0].sub.x).to.equal('a')
+    })
+
     it('does not duplicate random children in a shared subdocument during replacement', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'RSharedChild', '@subdocument': [], '@key': { '@type': 'Random' }, x: 'xsd:string' },

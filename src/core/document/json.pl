@@ -3966,7 +3966,7 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids,
         error(missing_field('@id', Elaborated), _)),
     extract_return_ids(Id_Pairs, Ids),
     when(ground(Dependencies),
-         insert_document_expanded(Transaction, Elaborated, Id)).
+         insert_replacement_document_expanded(Transaction, Elaborated, Id)).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
     insert_document_expanded_with_reuse(Transaction, reference, Elaborated, ID).
