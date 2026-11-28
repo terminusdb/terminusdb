@@ -166,6 +166,22 @@ describe('valuehash-subdocuments', function () {
       expect(result.body[0].sub.items).to.deep.equal(['a', 'b'])
     })
 
+    it('replaces a random subdocument containing a JSON array', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RJsonSub', '@subdocument': [], '@key': { '@type': 'Random' }, data: 'sys:JSON' },
+        { '@type': 'Class', '@id': 'LJsonParent', '@key': { '@type': 'Lexical', '@fields': ['k'] }, k: 'xsd:string', sub: { '@type': 'Optional', '@class': 'RJsonSub' } },
+      ])
+      const instance = { '@type': 'LJsonParent', k: 'one', sub: { '@type': 'RJsonSub', data: ['a', 'b'] } }
+      await document.insert(agent, { instance })
+      const inserted = await document.get(agent, { query: { type: 'LJsonParent', as_list: true } })
+      const id = inserted.body[0]['@id']
+
+      await document.replace(agent, { instance: { '@id': id, ...instance } })
+
+      const result = await document.get(agent, { query: { type: 'LJsonParent', as_list: true } })
+      expect(result.body[0].sub.data).to.deep.equal(['a', 'b'])
+    })
+
     it('treats an identical repeat insert with a typed literal as a no-op', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'RTypedSub', '@subdocument': [], '@key': { '@type': 'Random' }, n: 'xsd:integer' },

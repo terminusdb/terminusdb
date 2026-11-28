@@ -3777,7 +3777,9 @@ canonical_elaborated_value(Transaction, Value, literal(Casted)) :-
     !,
     database_and_default_prefixes(Transaction, Prefixes),
     prefix_expand(Type, Prefixes, Type_Ex),
-    (   string(Literal),
+    (   Type_Ex = 'http://terminusdb.com/schema/sys#JSON'
+    ->  Casted = json(Literal)
+    ;   string(Literal),
         Type_Ex = 'http://www.w3.org/2001/XMLSchema#string'
     ->  Casted = Literal^^Type_Ex
     ;   number(Literal),
