@@ -3749,6 +3749,7 @@ matching_existing_random_subdocument(Transaction, Reuse, Parent_Id, Property, Ba
     (   Reuse = reference
     ->  Existing = json{'@type': "@id", '@id': Existing_Id}
     ;   Reuse = elaborated(Root_Id),
+        Parent_Id \= Root_Id,
         parent_survives_outside_root(Transaction, Root_Id, Parent_Id)
     ->  Existing = json{'@type': "@id", '@id': Existing_Id}
     ;   Existing = Existing_Elaborated

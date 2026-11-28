@@ -219,6 +219,22 @@ describe('valuehash-subdocuments', function () {
       expect(result.body[0].alias.x).to.equal('a')
     })
 
+    it('replaces a referenced document without dropping its random child', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RRefChild', '@subdocument': [], '@key': { '@type': 'Random' }, x: 'xsd:string' },
+        { '@type': 'Class', '@id': 'LReferencedRoot', '@key': { '@type': 'Lexical', '@fields': ['k'] }, k: 'xsd:string', sub: { '@type': 'Optional', '@class': 'RRefChild' } },
+        { '@type': 'Class', '@id': 'LReferrer', '@key': { '@type': 'Lexical', '@fields': ['k'] }, k: 'xsd:string', target: { '@type': 'Optional', '@class': 'LReferencedRoot' } },
+      ])
+      const instance = { '@type': 'LReferencedRoot', k: 'one', sub: { '@type': 'RRefChild', x: 'a' } }
+      await document.insert(agent, { instance })
+      await document.insert(agent, { instance: { '@type': 'LReferrer', k: 'ref', target: { '@type': '@id', '@id': 'LReferencedRoot/one' } } })
+
+      await document.replace(agent, { instance: { '@id': 'LReferencedRoot/one', ...instance } })
+
+      const result = await document.get(agent, { query: { id: 'LReferencedRoot/one' } })
+      expect(result.body.sub.x).to.equal('a')
+    })
+
     it('treats an identical repeat insert with a typed literal as a no-op', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'RTypedSub', '@subdocument': [], '@key': { '@type': 'Random' }, n: 'xsd:integer' },
