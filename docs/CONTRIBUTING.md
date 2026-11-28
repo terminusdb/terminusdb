@@ -351,6 +351,7 @@ For local development on macOS, use the development build target which avoids co
 
 **Prerequisites for a fresh clone:**
 
+- SWI-Prolog 10.0.2, as described in `docs/BUILD.md`; SWI-Prolog 11 is not supported
 - `protoc` (the Protocol Buffers compiler), e.g. `brew install protobuf`. Without it, `cargo
   build` fails inside a transitive dependency with `Could not find protoc installation`.
 - `make install-deps` must be run once, **before** the first `make dev`, to fetch the SWI-Prolog
@@ -378,7 +379,7 @@ This creates a `terminusdb` binary that:
 - Works immediately without Gatekeeper/code signing issues
 - Dynamically links to SWI-Prolog libraries (no stripping)
 - Faster to rebuild during development
-- Requires SWI-Prolog to be installed (via Homebrew recommended)
+- Requires SWI-Prolog 10.0.2 to be installed (see `docs/BUILD.md`)
 - Requires `protoc` to be installed (via Homebrew recommended: `brew install protobuf`)
 
 Run the development binary:
