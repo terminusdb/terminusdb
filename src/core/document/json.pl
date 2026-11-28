@@ -3669,38 +3669,41 @@ elaborated_member_value(Value, Id, Member) :-
 
 % Random ids carry no content, so content equality must reuse the node already stored on an existing parent.
 normalize_repeated_random_subdocuments(Transaction, Elaborated, Normalized) :-
+    normalize_repeated_random_subdocuments(Transaction, reference, Elaborated, Normalized).
+
+normalize_repeated_random_subdocuments(Transaction, Reuse, Elaborated, Normalized) :-
     (   get_dict('@id', Elaborated, Id),
         ground(Id),
         database_instance(Transaction, Instance),
         xrdf(Instance, Id, _, _)
-    ->  normalize_repeated_random_subdocument_fields(Transaction, Elaborated, Normalized)
+    ->  normalize_repeated_random_subdocument_fields(Transaction, Reuse, Elaborated, Normalized)
     ;   Normalized = Elaborated).
 
-normalize_repeated_random_subdocument_fields(Transaction, Elaborated, Normalized) :-
+normalize_repeated_random_subdocument_fields(Transaction, Reuse, Elaborated, Normalized) :-
     dict_pairs(Elaborated, Tag, Pairs),
     get_dict('@id', Elaborated, Parent_Id),
-    maplist({Transaction, Parent_Id}/[Key-Value,Key-Normalized_Value]>>(
-                normalize_repeated_random_subdocument_value(Transaction, Parent_Id, Key, Value, Normalized_Value)
+    maplist({Transaction, Reuse, Parent_Id}/[Key-Value,Key-Normalized_Value]>>(
+                normalize_repeated_random_subdocument_value(Transaction, Reuse, Parent_Id, Key, Value, Normalized_Value)
             ),
             Pairs,
             Normalized_Pairs),
     dict_pairs(Normalized, Tag, Normalized_Pairs).
 
-normalize_repeated_random_subdocument_value(Transaction, Parent_Id, Property, Value, Normalized) :-
+normalize_repeated_random_subdocument_value(Transaction, Reuse, Parent_Id, Property, Value, Normalized) :-
     is_dict(Value),
     get_dict('@container', Value, "@set"),
     !,
     get_dict('@value', Value, Members),
-    maplist({Transaction, Parent_Id, Property}/[Member,Normalized_Member]>>(
-                normalize_repeated_random_subdocument_member(Transaction, Parent_Id, Property, Member, Normalized_Member)
+    maplist({Transaction, Reuse, Parent_Id, Property}/[Member,Normalized_Member]>>(
+                normalize_repeated_random_subdocument_member(Transaction, Reuse, Parent_Id, Property, Member, Normalized_Member)
             ),
             Members,
             Normalized_Members),
     put_dict('@value', Value, Normalized_Members, Normalized).
-normalize_repeated_random_subdocument_value(Transaction, Parent_Id, Property, Value, Normalized) :-
-    normalize_repeated_random_subdocument_member(Transaction, Parent_Id, Property, Value, Normalized).
+normalize_repeated_random_subdocument_value(Transaction, Reuse, Parent_Id, Property, Value, Normalized) :-
+    normalize_repeated_random_subdocument_member(Transaction, Reuse, Parent_Id, Property, Value, Normalized).
 
-normalize_repeated_random_subdocument_member(Transaction, Parent_Id, Property, Value, Normalized) :-
+normalize_repeated_random_subdocument_member(Transaction, Reuse, Parent_Id, Property, Value, Normalized) :-
     is_dict(Value),
     get_dict('@id', Value, Child_Id),
     ground(Child_Id),
@@ -3709,13 +3712,15 @@ normalize_repeated_random_subdocument_member(Transaction, Parent_Id, Property, V
     is_subdocument(Transaction, Type),
     !,
     (   key_descriptor(Transaction, Type, random(Base)),
-        matching_existing_random_subdocument(Transaction, Parent_Id, Property, Base, Value, Existing)
+        % A capture makes the generated identifier visible inside the transaction.
+        \+ get_dict('@capture', Value, _),
+        matching_existing_random_subdocument(Transaction, Reuse, Parent_Id, Property, Base, Value, Existing)
     ->  Normalized = Existing
-    ;   normalize_repeated_random_subdocument_fields(Transaction, Value, Normalized)
+    ;   normalize_repeated_random_subdocument_fields(Transaction, Reuse, Value, Normalized)
     ).
-normalize_repeated_random_subdocument_member(_Transaction, _Parent_Id, _Property, Value, Value).
+normalize_repeated_random_subdocument_member(_Transaction, _Reuse, _Parent_Id, _Property, Value, Value).
 
-matching_existing_random_subdocument(Transaction, Parent_Id, Property, Base, Value, Existing) :-
+matching_existing_random_subdocument(Transaction, Reuse, Parent_Id, Property, Base, Value, Existing) :-
     database_and_default_prefixes(Transaction, Prefixes),
     path_component([type(Base),property(Property),node(Parent_Id)], Prefixes, [Path_Base]),
     prefix_expand(Path_Base, Prefixes, Path_Base_Ex),
@@ -3726,7 +3731,10 @@ matching_existing_random_subdocument(Transaction, Parent_Id, Property, Base, Val
     atom_concat(Path_Base_Ex, _, Existing_Id),
     stored_subdocument_elaboration(Transaction, Existing_Id, Existing_Elaborated),
     canonical_elaborated_content(Transaction, Existing_Elaborated, Canonical),
-    Existing = json{'@type': "@id", '@id': Existing_Id}.
+    (   Reuse = reference
+    ->  Existing = json{'@type': "@id", '@id': Existing_Id}
+    ;   Existing = Existing_Elaborated
+    ).
 
 stored_subdocument_elaboration(Transaction, Id, Elaborated) :-
     Options = options{compress_ids: false, unfold: true, keep_json_type: false},
@@ -3961,12 +3969,15 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids,
          insert_document_expanded(Transaction, Elaborated, Id)).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
-    normalize_repeated_random_subdocuments(Transaction, Elaborated, Normalized_Elaborated),
-    insert_elaborated_document_triples(Transaction, Normalized_Elaborated, ID).
+    insert_document_expanded_with_reuse(Transaction, reference, Elaborated, ID).
 
-% Replacement cannot reuse the stored ownership tree it has just deleted.
+% Replacement must write reused content in full because deletion may have removed it.
 insert_replacement_document_expanded(Transaction, Elaborated, ID) :-
-    insert_elaborated_document_triples(Transaction, Elaborated, ID).
+    insert_document_expanded_with_reuse(Transaction, elaborated, Elaborated, ID).
+
+insert_document_expanded_with_reuse(Transaction, Reuse, Elaborated, ID) :-
+    normalize_repeated_random_subdocuments(Transaction, Reuse, Elaborated, Normalized_Elaborated),
+    insert_elaborated_document_triples(Transaction, Normalized_Elaborated, ID).
 
 insert_elaborated_document_triples(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID0),

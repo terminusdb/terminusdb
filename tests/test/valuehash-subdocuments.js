@@ -182,6 +182,27 @@ describe('valuehash-subdocuments', function () {
       expect(commitsAfter).to.equal(commitsBefore)
     })
 
+    it('does not duplicate random children in a shared subdocument during replacement', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RSharedChild', '@subdocument': [], '@key': { '@type': 'Random' }, x: 'xsd:string' },
+        { '@type': 'Class', '@id': 'VHGroup', '@subdocument': [], '@key': { '@type': 'ValueHash' }, children: { '@type': 'Set', '@class': 'RSharedChild' } },
+        { '@type': 'Class', '@id': 'VPGroup', '@key': { '@type': 'Lexical', '@fields': ['k'] }, k: 'xsd:string', sub: { '@type': 'Optional', '@class': 'VHGroup' } },
+      ])
+      const group = { '@type': 'VHGroup', children: [{ '@type': 'RSharedChild', x: 'a' }] }
+      await document.insert(agent, { instance: { '@type': 'VPGroup', k: 'one', sub: group } })
+      const inserted = await document.get(agent, { query: { id: 'VPGroup/one' } })
+      const groupId = inserted.body.sub['@id']
+      expect(inserted.body.sub.children).to.have.lengthOf(1)
+      await document.insert(agent, { instance: { '@type': 'VPGroup', k: 'two', sub: { '@type': '@id', '@id': groupId } } })
+
+      await document.replace(agent, { instance: { '@id': 'VPGroup/one', '@type': 'VPGroup', k: 'one', sub: group } })
+
+      const result = await document.get(agent, { query: { type: 'VPGroup', as_list: true } })
+      expect(result.body).to.have.lengthOf(2)
+      expect(result.body[0].sub.children).to.have.lengthOf(1)
+      expect(result.body[1].sub.children).to.have.lengthOf(1)
+    })
+
     it('keeps deterministic ValueHash subdocument repeat inserts as no-ops', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'VHSub', '@subdocument': [], '@key': { '@type': 'ValueHash' }, x: 'xsd:string' },
