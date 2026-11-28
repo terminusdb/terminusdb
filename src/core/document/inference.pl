@@ -534,7 +534,7 @@ check_non_collection_type_(Key,Kind,Schema,Prefixes,Value,Type,Annotated,Capture
             ->  presentation_type(Type, Presentation),
                 Annotated = success(cardinality_violation{ '@container' : "@set",
                                                            '@type' : Presentation,
-                                                           '@value' : List,
+                                                           '@value' : Unique,
                                                            kind: Kind,
                                                            class: Presentation,
                                                            predicate: Key })

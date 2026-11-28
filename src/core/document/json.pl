@@ -8857,6 +8857,38 @@ test(insert_multiple_values_for_optional_field,
         _
     ).
 
+test(insert_repeated_value_counts_once_in_optional_cardinality,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema_cardinality_optional,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':instance_has_wrong_cardinality,
+                            class:'http://www.w3.org/2001/XMLSchema#string',
+                            instance:'http://i/Note/document1',
+                            predicate:'http://s/note',
+                            cardinality:2,
+                            object_list:["first", "second"]}
+                   ]),
+               _)
+     ]) :-
+    Document = _{ '@id' : "Note/document1",
+                  '@type' : "Note",
+                  note : ["first", "first", "second"]},
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
+
 schema_cardinality_optional_enum('
 { "@type" : "@context",
   "@base" : "http://i/",
