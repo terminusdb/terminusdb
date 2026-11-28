@@ -1,11 +1,22 @@
 const { expect } = require('chai')
-const { Agent, db, document, util } = require('../lib')
+const { Agent, db, document, util, woql } = require('../lib')
 
 const DATA_VERSION_HEADER = 'terminusdb-data-version'
 
 async function documentHistoryLength (agent, dbName, id) {
   const response = await agent.get(`/api/history/admin/${dbName}?id=${encodeURIComponent(id)}`)
   return response.body.length
+}
+
+async function triplesContaining (agent, fragment) {
+  const query = {
+    '@type': 'Triple',
+    subject: { '@type': 'NodeValue', variable: 'Subject' },
+    predicate: { '@type': 'NodeValue', variable: 'Predicate' },
+    object: { '@type': 'Value', variable: 'Object' },
+  }
+  const result = await woql.post(agent, query)
+  return result.body.bindings.filter(binding => JSON.stringify(binding).includes(fragment))
 }
 
 describe('valuehash-subdocuments', function () {
@@ -104,4 +115,71 @@ describe('valuehash-subdocuments', function () {
     })
   })
 
+  describe('shared valuehash subdocument removal', function () {
+    const sharedSchema = [
+      { '@type': 'Class', '@id': 'VHSub', '@subdocument': [], '@key': { '@type': 'ValueHash' }, name: 'xsd:string' },
+      { '@type': 'Class', '@id': 'VP', '@key': { '@type': 'Lexical', '@fields': ['k'] }, k: 'xsd:string', sub: { '@type': 'Optional', '@class': 'VHSub' } },
+    ]
+    const sharedInstance = [
+      { '@type': 'VP', k: 'one', sub: { '@type': 'VHSub', name: 'shared' } },
+      { '@type': 'VP', k: 'two', sub: { '@type': 'VHSub', name: 'shared' } },
+    ]
+
+    async function insertSharedParents () {
+      await createSchema(sharedSchema)
+      await document.insert(agent, { instance: sharedInstance, merge_repeats: true })
+      const result = await document.get(agent, { query: { type: 'VP', as_list: true } })
+      expect(result.body).to.have.lengthOf(2)
+      expect(result.body[0].sub['@id']).to.equal(result.body[1].sub['@id'])
+      return result.body[0].sub['@id']
+    }
+
+    it('deletes one sharing parent and keeps the subdocument for the survivor', async function () {
+      await insertSharedParents()
+
+      await document.delete(agent, { query: { id: 'VP/one' } })
+
+      const survivor = await document.get(agent, { query: { id: 'VP/two' } })
+      expect(survivor.body.sub.name).to.equal('shared')
+    })
+
+    it('updates one sharing parent to drop the reference and keeps the subdocument for the survivor', async function () {
+      await insertSharedParents()
+
+      await document.replace(agent, { instance: { '@id': 'VP/one', '@type': 'VP', k: 'one' } })
+
+      const survivor = await document.get(agent, { query: { id: 'VP/two' } })
+      expect(survivor.body.sub.name).to.equal('shared')
+    })
+
+    it('removes the shared subdocument when its last reference disappears', async function () {
+      const childId = await insertSharedParents()
+      const childFragment = childId.split('/').pop()
+
+      await document.delete(agent, { query: { id: 'VP/one' } })
+      await document.delete(agent, { query: { id: 'VP/two' } })
+
+      expect(await triplesContaining(agent, childFragment)).to.have.lengthOf(0)
+    })
+
+    it('removes the shared subdocument when all sharers are deleted in one transaction', async function () {
+      const childId = await insertSharedParents()
+      const childFragment = childId.split('/').pop()
+
+      await document.delete(agent, { body: ['VP/one', 'VP/two'] })
+
+      expect(await triplesContaining(agent, childFragment)).to.have.lengthOf(0)
+    })
+
+    it('still cascades into an exclusively owned valuehash subdocument', async function () {
+      await createSchema(sharedSchema)
+      await document.insert(agent, { instance: { '@type': 'VP', k: 'one', sub: { '@type': 'VHSub', name: 'exclusive' } } })
+      const inserted = await document.get(agent, { query: { id: 'VP/one' } })
+      const childFragment = inserted.body.sub['@id'].split('/').pop()
+
+      await document.delete(agent, { query: { id: 'VP/one' } })
+
+      expect(await triplesContaining(agent, childFragment)).to.have.lengthOf(0)
+    })
+  })
 })

@@ -27,11 +27,7 @@ pub fn delete_id_document<L: Layer + Clone>(
                     if !visited.contains(&triple.object) {
                         let type_triple = layer.single_triple_sp(triple.object, rdf_type);
                         if let Some(type_triple) = type_triple {
-                            if !context.document_types.contains(&type_triple.object)
-                                && !context.value_hashes.contains(&type_triple.object)
-                            {
-                                // Only apply reference counting for content-addressed JSON objects
-                                // (shared Cons lists and JSON objects with SHA1 hashes)
+                            if !context.document_types.contains(&type_triple.object) {
                                 let object_iri =
                                     layer.id_subject(triple.object).unwrap_or_default();
                                 let is_content_addressed = object_iri
@@ -39,14 +35,15 @@ pub fn delete_id_document<L: Layer + Clone>(
                                     || object_iri.starts_with("terminusdb:///json/JSON/SHA1/");
                                 let is_json_type = Some(type_triple.object) == context.sys.json()
                                     || Some(type_triple.object) == context.rdf.list();
+                                let is_value_hash =
+                                    context.value_hashes.contains(&type_triple.object);
 
-                                let should_recurse = if is_content_addressed && is_json_type {
-                                    // Content-addressed JSON objects: check for other references
-                                    !has_other_link(context, triple.object, id, &visited)
-                                } else {
-                                    // Non-content-addressed objects: recurse unconditionally
-                                    true
-                                };
+                                let should_recurse =
+                                    if is_value_hash || (is_content_addressed && is_json_type) {
+                                        !has_other_link(context, triple.object, id, &visited)
+                                    } else {
+                                        true
+                                    };
 
                                 if should_recurse {
                                     visit_next.push(triple.object);
@@ -461,9 +458,7 @@ pub fn delete_multiple_documents_with_roots<L: Layer + Clone>(
     let should_traverse = |object_id: u64| -> bool {
         let type_triple = layer.single_triple_sp(object_id, rdf_type);
         if let Some(type_triple) = type_triple {
-            // Recurse if type is NOT a document type and NOT a value hash
             !context.document_types.contains(&type_triple.object)
-                && !context.value_hashes.contains(&type_triple.object)
         } else {
             false
         }
@@ -523,14 +518,16 @@ pub fn delete_multiple_documents_with_roots<L: Layer + Clone>(
                 // Check if the object node should be recursively deleted
                 if let Some(true) = layer.id_object_is_node(triple.object) {
                     if !global_visited.contains(&triple.object) && should_traverse(triple.object) {
-                        // For content-addressed sys:JSON, check for external references
-                        let should_recurse = if is_content_addressed_json(triple.object) {
-                            // Only delete if no external documents reference this node
-                            !has_external_reference(triple.object, &global_visited)
-                        } else {
-                            // Non-content-addressed: always recurse (regular subdocuments)
-                            true
-                        };
+                        let is_value_hash = layer
+                            .single_triple_sp(triple.object, rdf_type)
+                            .map(|type_triple| context.value_hashes.contains(&type_triple.object))
+                            .unwrap_or(false);
+                        let should_recurse =
+                            if is_value_hash || is_content_addressed_json(triple.object) {
+                                !has_external_reference(triple.object, &global_visited)
+                            } else {
+                                true
+                            };
 
                         if should_recurse {
                             visit_next.push(triple.object);

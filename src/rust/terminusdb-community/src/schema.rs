@@ -284,14 +284,18 @@ impl<'a, L: Layer + Clone> SchemaQueryContext<'a, L> {
     }
 
     pub fn get_valuehash_type_ids(&self) -> HashSet<u64> {
-        if let (Some(sys_key), Some(sys_value_hash)) = (self.sys.key(), self.sys.value_hash()) {
+        if let (Some(sys_key), Some(sys_value_hash), Some(rdf_type)) =
+            (self.sys.key(), self.sys.value_hash(), self.rdf.type_())
+        {
             let mut result = HashSet::new();
-            for triple in self.layer.triples_o(sys_value_hash) {
-                if triple.predicate != sys_key {
-                    continue;
+            for key_triple in self.layer.triples_p(sys_key) {
+                if let Some(key_type_triple) =
+                    self.layer.single_triple_sp(key_triple.object, rdf_type)
+                {
+                    if key_type_triple.object == sys_value_hash {
+                        result.insert(key_triple.subject);
+                    }
                 }
-
-                result.insert(triple.subject);
             }
 
             result
