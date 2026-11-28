@@ -166,6 +166,22 @@ describe('valuehash-subdocuments', function () {
       expect(result.body[0].sub.items).to.deep.equal(['a', 'b'])
     })
 
+    it('treats an identical repeat insert with a typed literal as a no-op', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RTypedSub', '@subdocument': [], '@key': { '@type': 'Random' }, n: 'xsd:integer' },
+        { '@type': 'Class', '@id': 'VHTypedParent', '@key': { '@type': 'ValueHash' }, sub: { '@type': 'Optional', '@class': 'RTypedSub' } },
+      ])
+      const instance = { '@type': 'VHTypedParent', sub: { '@type': 'RTypedSub', n: '1' } }
+
+      await document.insert(agent, { instance })
+      const inserted = await document.get(agent, { query: { type: 'VHTypedParent', as_list: true } })
+      const commitsBefore = await documentHistoryLength(agent, dbName, inserted.body[0]['@id'])
+      await document.insert(agent, { instance })
+      const commitsAfter = await documentHistoryLength(agent, dbName, inserted.body[0]['@id'])
+
+      expect(commitsAfter).to.equal(commitsBefore)
+    })
+
     it('keeps deterministic ValueHash subdocument repeat inserts as no-ops', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'VHSub', '@subdocument': [], '@key': { '@type': 'ValueHash' }, x: 'xsd:string' },

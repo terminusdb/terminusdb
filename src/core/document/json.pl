@@ -3762,11 +3762,21 @@ canonical_elaborated_value(_Transaction, Value, reference(Id)) :-
     get_dict('@type', Value, "@id"),
     !,
     get_dict('@id', Value, Id).
-canonical_elaborated_value(_Transaction, Value, literal(Type, Literal)) :-
+canonical_elaborated_value(Transaction, Value, literal(Casted)) :-
     is_dict(Value),
     get_dict('@value', Value, Literal),
     get_dict('@type', Value, Type),
-    !.
+    !,
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Type, Prefixes, Type_Ex),
+    (   string(Literal),
+        Type_Ex = 'http://www.w3.org/2001/XMLSchema#string'
+    ->  Casted = Literal^^Type_Ex
+    ;   number(Literal),
+        Type_Ex = 'http://www.w3.org/2001/XMLSchema#decimal'
+    ->  Casted = Literal^^Type_Ex
+    ;   json_to_database_type(Literal^^Type_Ex, [prefixes(Prefixes)], Casted)
+    ).
 canonical_elaborated_value(Transaction, Value, document(Type, Id_Canonical, Canonical_Fields)) :-
     is_dict(Value),
     get_dict('@type', Value, Type),
