@@ -211,12 +211,28 @@ describe('document', function () {
       }
     })
 
-    it('fails insert instance with unexpected list (#623)', async function () {
+    it('fails insert instance with multiple values in a cardinality-one field', async function () {
       const type = util.randomString()
       const expectedType = 'http://www.w3.org/2001/XMLSchema#string'
       const schema = { '@id': type, '@type': 'Class', s: expectedType }
       await document.insert(agent, { schema })
       const badValue = ['a', 'b']
+      const witness = {
+        '@type': 'instance_not_cardinality_one',
+        class: 'http://www.w3.org/2001/XMLSchema#string',
+        instance: `terminusdb:///data/${type}/cardinality-violation`,
+        predicate: 'terminusdb:///schema#s',
+      }
+      const instance = { '@type': type, '@id': `${type}/cardinality-violation`, s: badValue }
+      await document.insert(agent, { instance }).fails(api.error.schemaCheckFailure([witness]))
+    })
+
+    it('fails insert instance with a singleton list in a cardinality-one field', async function () {
+      const type = util.randomString()
+      const expectedType = 'http://www.w3.org/2001/XMLSchema#string'
+      const schema = { '@id': type, '@type': 'Class', s: expectedType }
+      await document.insert(agent, { schema })
+      const badValue = ['a']
       const witness = {
         '@type': 'unexpected_list',
         type: 'http://www.w3.org/2001/XMLSchema#string',
