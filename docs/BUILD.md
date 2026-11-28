@@ -137,7 +137,7 @@ Homebrew's current `swi-prolog` formula installs SWI-Prolog 11, which TerminusDB
 (
   set -e
   tap=terminusdb/swi-prolog-10
-  brew tap-new --no-git "$tap"
+  brew tap | grep -qx "$tap" || brew tap-new --no-git "$tap"
   curl -fLO https://raw.githubusercontent.com/Homebrew/homebrew-core/89fc67a7d3f12962f3eddfb6b56ccb02d4c4be08/Formula/s/swi-prolog.rb
   mv swi-prolog.rb "$(brew --repository "$tap")/Formula/swi-prolog.rb"
   brew uninstall homebrew/core/swi-prolog 2>/dev/null || true
