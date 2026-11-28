@@ -506,6 +506,41 @@ check_type_pairs_([Key-Range|Pairs],Schema,Prefixes,Dictionary,Annotated,capture
     check_type_pair_(Key,Range,Schema,Prefixes,Dictionary,Dictionary0,captures(In,DepH-DepM,SubH-SubM,Middle)),
     check_type_pairs_(Pairs,Schema,Prefixes,Dictionary0,Annotated,captures(Middle,DepM-DepT,SubM-SubT,Out)).
 
+check_non_collection_type_(Key,Kind,Schema,Prefixes,Value,Type,Annotated,Captures) :-
+    (   is_list(Value),
+        expand_type(Type, Schema, Type_Ex),
+        global_prefix_expand(sys:'JSON', Sys_JSON),
+        Type_Ex \== Sys_JSON,
+        length(Value, Count),
+        Count > 1
+    ->  Captures = captures(In,DepH-DepT,SubH-SubT,Out),
+        mapm(
+            {Schema,Prefixes,Type}/
+            [Member,Exp,DepH0-SubH0-In0,DepT0-SubT0-Out0]>>(
+                Capture0 = captures(In0,DepH0-DepT0,SubH0-SubT0,Out0),
+                check_simple_or_compound_type_(Schema,Prefixes,Member,Type,Exp,Capture0)
+            ),
+            Value,Expanded,DepH-SubH-In,DepT-SubT-Out),
+        promote_result_list(Expanded,Result_List),
+        (   Result_List = witness(_)
+        ->  Annotated = Result_List
+        ;   Result_List = success(List),
+            sort(List, Unique),
+            (   Unique = [_,_|_]
+            ->  presentation_type(Type, Presentation),
+                Annotated = success(cardinality_violation{ '@container' : "@set",
+                                                           '@type' : Presentation,
+                                                           '@value' : List,
+                                                           kind: Kind,
+                                                           class: Type,
+                                                           predicate: Key })
+            ;   throw(error(schema_check_failure([witness{ '@type' : unexpected_list,
+                                                           value: Value, type : Type }]), _))
+            )
+        )
+    ;   check_simple_or_compound_type_(Schema, Prefixes, Value, Type, Annotated, Captures)
+    ).
+
 check_type_pair_(_Key,_Range,_Schema,_Prefixes,witness(Failure),Annotated,Captures) =>
     no_captures(Captures),
     witness(Failure) = Annotated.
@@ -530,7 +565,7 @@ check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Annotated,Captures
 ;   foreign_class(Type, _)) =>
     expand_type(Type, Schema, Type_Ex),
     (   get_dict_not_null(Key,Dictionary,Value)
-    ->  (   check_value_type_(Schema, Prefixes, Value, Type_Ex, Annotated_Value,Captures)
+    ->  (   check_non_collection_type_(Key, plain, Schema, Prefixes, Value, Type_Ex, Annotated_Value,Captures)
         ->  (   Annotated_Value = success(Success_Value)
             ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
                 Annotated = success(Annotated_Success)
@@ -587,7 +622,7 @@ _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@subdocument' : [], '@class' : Type} :< Range =>
     (   get_dict_not_null(Key,Dictionary,Value)
-    ->  check_value_type_(Schema, Prefixes, Value, Type, Annotated_Value, Captures),
+    ->  check_non_collection_type_(Key, plain, Schema, Prefixes, Value, Type, Annotated_Value, Captures),
         (   Annotated_Value = success(Success_Value)
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
@@ -610,7 +645,7 @@ _{ '@subdocument' : [], '@class' : Type} :< Range =>
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@unfoldable' : [], '@class' : Type} :< Range =>
     (   get_dict_not_null(Key,Dictionary,Value)
-    ->  check_value_type_(Schema, Prefixes, Value, Type, Annotated_Value, Captures),
+    ->  check_non_collection_type_(Key, plain, Schema, Prefixes, Value, Type, Annotated_Value, Captures),
         (   Annotated_Value = success(Success_Value)
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
@@ -698,7 +733,7 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Optional', '@class' : Class } :< 
     (   get_dict_not_null(Key, Dictionary, Value)
     ->  (   foreign_class(Range,Type)
         ->  check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Annotated,Captures)
-        ;   check_simple_or_compound_type_(Schema, Prefixes, Value, Class, Annotated_Value,Captures),
+        ;   check_non_collection_type_(Key, optional, Schema, Prefixes, Value, Class, Annotated_Value,Captures),
             (   Annotated_Value = success(Success_Value)
             ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
                 Annotated = success(Annotated_Success)
