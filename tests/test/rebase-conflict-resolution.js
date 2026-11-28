@@ -26,12 +26,12 @@ describe('rebase-conflict-resolution', function () {
 
   const request = promise => promise.ok(res => true)
 
-  const setup = async (name, otherDoc, mainDoc) => {
+  const setup = async (name, otherDoc, mainDoc, initial = base) => {
     const suffix = `${name}-${Math.random().toString(36).slice(2, 8)}`
     const local = `${dbName}-${suffix}`
     await request(agent.post('/api/db/admin/' + local).send({ label: suffix }))
     await request(agent.post(`/api/document/admin/${local}/local/branch/main?author=a&message=schema&graph_type=schema`).send(schema))
-    await request(agent.post(`/api/document/admin/${local}/local/branch/main?author=a&message=base`).send(base))
+    await request(agent.post(`/api/document/admin/${local}/local/branch/main?author=a&message=base`).send(initial))
     await request(agent.post(`/api/branch/admin/${local}/local/branch/other`).send({
       origin: `admin/${local}/local/branch/main`,
     }))
@@ -86,6 +86,21 @@ describe('rebase-conflict-resolution', function () {
     expect(doc.status).to.equal(200)
     expect(doc.body.tags.slice().sort()).to.deep.equal(['x', 'y', 'z'])
     expect(doc.body.label).to.equal('main label')
+  })
+
+  it('unions additions to an initially empty Set', async function () {
+    this.timeout(60000)
+    const emptyBase = { ...base, tags: [] }
+    const local = await setup(
+      'empty-set',
+      { ...base, tags: ['y'] },
+      { ...base, tags: ['z'] },
+      emptyBase,
+    )
+    const result = await rebase(local, 'merge')
+    expect(result.status, `rebase status: ${JSON.stringify(result.body)}`).to.equal(200)
+    const doc = await request(agent.get(`/api/document/admin/${local}/local/branch/other?id=Thing/t`))
+    expect(doc.body.tags.slice().sort()).to.deep.equal(['y', 'z'])
   })
 
   it('keeps cardinality-one fields non-unionable under merge', async function () {

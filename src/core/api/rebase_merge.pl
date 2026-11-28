@@ -106,9 +106,12 @@ merge_value(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Ev
 merge_value_structured(Schema, Prefixes, Type0, Base, Ours, Theirs, Winner, Path, Result, Events) :-
     (   container_type(Type0)
     ->  unwrap_optional(Type0, Type),
-        (   is_list(Base), is_list(Ours), is_list(Theirs)
-        ->  (   Type =.. [set|_] -> merge_set(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events)
-            ;   merge_list(Schema, Prefixes, Type, Base, Ours, Theirs, Winner, Path, Result, Events))
+        container_value(Type, Base, Base_Value),
+        container_value(Type, Ours, Ours_Value),
+        container_value(Type, Theirs, Theirs_Value),
+        (   is_list(Base_Value), is_list(Ours_Value), is_list(Theirs_Value)
+        ->  (   Type =.. [set|_] -> merge_set(Schema, Prefixes, Type, Base_Value, Ours_Value, Theirs_Value, Winner, Path, Result, Events)
+            ;   merge_list(Schema, Prefixes, Type, Base_Value, Ours_Value, Theirs_Value, Winner, Path, Result, Events))
         ;   conflict(Path, Base, Ours, Theirs))
     ;   is_dict(Base), is_dict(Ours), is_dict(Theirs)
     ->  merge_document_keys(Schema, Prefixes, Base, Ours, Theirs, Winner, Path, Result, Events)
@@ -116,6 +119,11 @@ merge_value_structured(Schema, Prefixes, Type0, Base, Ours, Theirs, Winner, Path
 
 unwrap_optional(optional(Type), Unwrapped) :- !, unwrap_optional(Type, Unwrapped).
 unwrap_optional(Type, Type).
+
+container_value(Type, missing, []) :-
+    Type =.. [set|_],
+    !.
+container_value(_, Value, Value).
 
 container_type(optional(Type)) :- !, container_type(Type).
 container_type(Type) :-
