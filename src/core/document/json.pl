@@ -4003,7 +4003,7 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids,
         error(missing_field('@id', Elaborated), _)),
     extract_return_ids(Id_Pairs, Ids),
     when(ground(Dependencies),
-         insert_replacement_document_expanded(Transaction, Elaborated, Id)).
+         insert_full_replacement_document_expanded(Transaction, Elaborated, Id)).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
     insert_document_expanded_with_reuse(Transaction, reference, Elaborated, ID).
@@ -4011,6 +4011,9 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
 % Replacement must write reused content in full because deletion may have removed it.
 insert_replacement_document_expanded(Transaction, Elaborated, ID) :-
     insert_document_expanded_with_reuse(Transaction, elaborated, Elaborated, ID).
+
+insert_full_replacement_document_expanded(Transaction, Elaborated, ID) :-
+    insert_document_expanded_with_reuse(Transaction, rebuild, Elaborated, ID).
 
 insert_document_expanded_with_reuse(Transaction, Reuse0, Elaborated, ID) :-
     (   Reuse0 = elaborated,

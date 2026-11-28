@@ -235,6 +235,31 @@ describe('valuehash-subdocuments', function () {
       expect(result.body.sub.x).to.equal('a')
     })
 
+    it('rebuilds shared subdocuments during a full replacement import', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RFullSharedChild', '@subdocument': [], '@key': { '@type': 'Random' }, x: 'xsd:string' },
+        { '@type': 'Class', '@id': 'VHFullGroup', '@subdocument': [], '@key': { '@type': 'ValueHash' }, children: { '@type': 'Set', '@class': 'RFullSharedChild' } },
+        { '@type': 'Class', '@id': 'VPFullGroup', '@key': { '@type': 'Lexical', '@fields': ['k'] }, k: 'xsd:string', sub: { '@type': 'Optional', '@class': 'VHFullGroup' } },
+      ])
+      const group = { '@type': 'VHFullGroup', children: [{ '@type': 'RFullSharedChild', x: 'a' }] }
+      await document.insert(agent, { instance: { '@type': 'VPFullGroup', k: 'one', sub: group } })
+      const inserted = await document.get(agent, { query: { id: 'VPFullGroup/one' } })
+      const groupId = inserted.body.sub['@id']
+
+      await document.insert(agent, {
+        instance: [
+          { '@type': 'VPFullGroup', k: 'one', sub: group },
+          { '@type': 'VPFullGroup', k: 'two', sub: { '@type': '@id', '@id': groupId } },
+        ],
+        fullReplace: true,
+      })
+
+      const result = await document.get(agent, { query: { type: 'VPFullGroup', as_list: true } })
+      expect(result.body).to.have.lengthOf(2)
+      expect(result.body[0].sub.children).to.have.lengthOf(1)
+      expect(result.body[1].sub.children).to.have.lengthOf(1)
+    })
+
     it('treats an identical repeat insert with a typed literal as a no-op', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'RTypedSub', '@subdocument': [], '@key': { '@type': 'Random' }, n: 'xsd:integer' },
