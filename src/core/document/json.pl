@@ -3722,6 +3722,11 @@ normalize_repeated_random_subdocument_member(_Transaction, _Reuse, _Parent_Id, _
 
 elaborated_has_capture(Value) :-
     is_dict(Value),
+    get_dict('@type', Value, 'http://terminusdb.com/schema/sys#JSON'),
+    !,
+    fail.
+elaborated_has_capture(Value) :-
+    is_dict(Value),
     get_dict('@capture', Value, _),
     !.
 elaborated_has_capture(Value) :-

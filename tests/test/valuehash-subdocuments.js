@@ -260,6 +260,20 @@ describe('valuehash-subdocuments', function () {
       expect(result.body[1].sub.children).to.have.lengthOf(1)
     })
 
+    it('does not treat capture keys in JSON data as document captures', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RJsonCaptureSub', '@subdocument': [], '@key': { '@type': 'Random' }, data: 'sys:JSON' },
+        { '@type': 'Class', '@id': 'LJsonCaptureParent', '@key': { '@type': 'ValueHash' }, sub: { '@type': 'Set', '@class': 'RJsonCaptureSub' } },
+      ])
+      const instance = { '@type': 'LJsonCaptureParent', sub: [{ '@type': 'RJsonCaptureSub', data: { items: [{ '@capture': 'data', x: 'a' }] } }] }
+      await document.insert(agent, { instance })
+
+      await document.insert(agent, { instance })
+
+      const result = await document.get(agent, { query: { type: 'LJsonCaptureParent' } })
+      expect(result.body.sub).to.have.lengthOf(1)
+    })
+
     it('treats an identical repeat insert with a typed literal as a no-op', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'RTypedSub', '@subdocument': [], '@key': { '@type': 'Random' }, n: 'xsd:integer' },
