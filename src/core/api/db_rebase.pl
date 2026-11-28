@@ -463,7 +463,8 @@ raw_json_document(Transaction, Document) :-
     (   \+ get_dict('@type', Document, _)
     ->  true
     ;   get_dict('@type', Document, Type),
-        (   catch(database_schema(Transaction, Schema), _, fail)
+        (   [Transaction_Object] = Transaction.transaction_objects,
+            catch(database_schema(Transaction_Object, Schema), _, fail)
         ->  database_prefixes(Transaction, Prefixes),
             catch(prefix_expand_schema(Type, Prefixes, TypeEx), _, fail),
             \+ is_schema_simple_class(Schema, TypeEx)
