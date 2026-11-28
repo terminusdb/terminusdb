@@ -188,10 +188,12 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
 %
 % Document commits merge each affected document three-way because raw triple
 % replay cannot distinguish a clean replay from a divergent write. Commits
-% without document changes replay as raw triple deltas.
+% without document changes or with schema changes replay as raw triple deltas;
+% schema migrations are already encoded against the schema they carry.
 rebase_apply_commit(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Id, Their_Commit_Uri, Author, Resolution, New_Commit_Id, New_Commit_Uri, Resolution_Reports) :-
     commit_query_context(Us_Repo_Context, Their_Commit_Id, Their_Transaction, Their_Context),
     (   commit_instance_layer(Their_Repo_Context, Their_Commit_Uri, Their_Layer),
+        \+ segment_writes_schema(Their_Repo_Context, [Their_Commit_Id]),
         mergeable_roots(Us_Repo_Context, Us_Commit_Uri, Their_Transaction, Their_Layer, Roots, Cell_Set)
     ->  apply_commit_merged(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Id, Their_Commit_Uri, Author, Resolution, Their_Context, Their_Layer, Roots, Cell_Set, New_Commit_Id, New_Commit_Uri, Resolution_Reports)
     ;   apply_commit_on_commit(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri),

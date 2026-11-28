@@ -143,6 +143,33 @@ describe('rebase-conflict-resolution', function () {
     expect(doc.body.b).to.equal(2)
   })
 
+  it('replays migrations that add fields with defaults', async function () {
+    this.timeout(60000)
+    const local = await setup(
+      'migration',
+      { ...base, label: 'other label' },
+      { ...base, tags: ['x', 'z'] },
+    )
+    const migration = await request(agent.post(`/api/migration/admin/${local}/local/branch/main`).send({
+      author: 'a',
+      message: 'migration',
+      operations: [{
+        '@type': 'CreateClassProperty',
+        class: 'Thing',
+        property: 'req',
+        type: { '@type': 'Mandatory', '@class': 'xsd:string' },
+        default: 'dflt',
+      }],
+    }))
+    expect(migration.status, `migration status: ${JSON.stringify(migration.body)}`).to.equal(200)
+
+    const result = await rebase(local)
+    expect(result.status, `rebase status: ${JSON.stringify(result.body)}`).to.equal(200)
+    const doc = await request(agent.get(`/api/document/admin/${local}/local/branch/other?id=Thing/t`))
+    expect(doc.body.req).to.equal('dflt')
+    expect(doc.body.label).to.equal('other label')
+  })
+
   it('keeps cardinality-one fields non-unionable under merge', async function () {
     this.timeout(60000)
     const local = await setup(
