@@ -29,6 +29,7 @@
               delete_documents_by_type/3,
               delete_subdocument/3,
               insert_document/3,
+              insert_document/4,
               insert_document/7,
               insert_document/8,
               insert_document_merge/9,
@@ -3978,6 +3979,59 @@ insert_document(Transaction, Document, Prefixes, false, Overwrite, Merge, Captur
              insert_document_expanded(Transaction, Elaborated, _)
          )).
 
+cardinality_json_value(Value, JSON) :-
+    (   get_dict('@value', Value, JSON)
+    ->  true
+    ;   get_dict('@id', Value, JSON)
+    ->  true
+    ;   JSON = Value
+    ).
+
+cardinality_marker_witness(Marker, Instance, Witness) :-
+    (   get_dict(kind, Marker, plain)
+    ->  get_dict(class, Marker, Class),
+        get_dict(predicate, Marker, Predicate),
+        Witness = witness{ '@type': instance_not_cardinality_one,
+                           instance: Instance,
+                           class: Class,
+                           predicate: Predicate }
+    ;   get_dict(class, Marker, Class),
+        get_dict(predicate, Marker, Predicate),
+        get_dict('@value', Marker, Values),
+        length(Values, Count),
+        maplist(cardinality_json_value, Values, Object_List),
+        Witness = witness{ '@type': instance_has_wrong_cardinality,
+                           class: Class,
+                           instance: Instance,
+                           predicate: Predicate,
+                           cardinality: Count,
+                           object_list: Object_List }
+    ).
+
+cardinality_witness(Term, Instance, Witness) :-
+    is_dict(Term, cardinality_violation),
+    !,
+    cardinality_marker_witness(Term, Instance, Witness).
+cardinality_witness(Dict, Instance0, Witness) :-
+    is_dict(Dict),
+    !,
+    (   get_dict('@id', Dict, Instance)
+    ->  true
+    ;   Instance = Instance0
+    ),
+    dict_pairs(Dict, _, Pairs),
+    member(_-Value, Pairs),
+    cardinality_witness(Value, Instance, Witness).
+cardinality_witness(List, Instance, Witness) :-
+    is_list(List),
+    member(Value, List),
+    cardinality_witness(Value, Instance, Witness).
+
+throw_cardinality_violation(Elaborated) :-
+    (   once(cardinality_witness(Elaborated, none, Witness))
+    ->  throw(error(schema_check_failure([Witness]), _))
+    ;   true).
+
 extract_return_ids(Id_Pairs, Ids) :-
     % Filter out subdocuments - we only want top-level documents (normal or value_hash)
     convlist([Id-Value,Id]>>(Value\=subdocument), Id_Pairs, Top_Ids),
@@ -4038,6 +4092,7 @@ insert_elaborated_document_triples(Transaction, Elaborated, ID) :-
     ;   throw(error(type_error(atom_or_string, ID0), _))
     ),
     database_instance(Transaction, [Instance]),
+    throw_cardinality_violation(Elaborated),
     % (S)QName lexicals resolve against this database's own prefix map —
     % validation already used it, so storage must too.
     database_and_default_prefixes(Transaction, Cast_Prefixes),
@@ -8869,6 +8924,228 @@ test(document_with_no_required_field,
 
     open_descriptor(Desc, DB),
     create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
+
+test(insert_multiple_values_for_cardinality_one_field,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':instance_not_cardinality_one,
+                            class:'http://www.w3.org/2001/XMLSchema#string',
+                            instance:'http://i/Moo/doug',
+                            predicate:'http://s/name'}
+                   ]),
+               _)
+     ]) :-
+    Document = _{ '@id' : "Moo/doug",
+                  '@type' : "Moo",
+                  name : ["moo?", "moo!"]},
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
+
+test(insert_multiple_values_names_generated_instance,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Document = _{ '@type' : "Moo",
+                  name : ["moo?", "moo!"]},
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    catch(
+        with_transaction(
+            Context,
+            insert_document(Context, Document, _Id),
+            _),
+        Error,
+        true),
+    Error = error(schema_check_failure([Witness]), _),
+    Witness = witness{ '@type': instance_not_cardinality_one,
+                       class: 'http://www.w3.org/2001/XMLSchema#string',
+                       instance: Instance,
+                       predicate: 'http://s/name' },
+    atom(Instance),
+    sub_string(Instance, 0, _, _, 'http://i/Moo/').
+
+test(insert_non_cardinality_lists_keep_unexpected_list,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Cases = [
+        ["moo?"]-["moo?"],
+        ["moo?", "moo?"]-["moo?", "moo?"],
+        [["moo?"], "moo!"]-["moo?"]
+    ],
+    forall(
+        member(Value-Witness_Value, Cases),
+        (   Document = _{ '@id' : "Moo/doug",
+                          '@type' : "Moo",
+                          name : Value},
+            create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+            catch(
+                with_transaction(
+                    Context,
+                    insert_document(Context, Document, _Id),
+                    _),
+                Error,
+                true),
+            Error = error(schema_check_failure([Witness]), _),
+            Witness = witness{ '@type': unexpected_list,
+                               type: 'http://www.w3.org/2001/XMLSchema#string',
+                               value: Witness_Value }
+        )).
+
+schema_cardinality_optional('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "Note",
+  "@type" : "Class",
+  "note" : { "@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+').
+
+test(insert_multiple_values_for_optional_field,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema_cardinality_optional,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':instance_has_wrong_cardinality,
+                            class:'http://www.w3.org/2001/XMLSchema#string',
+                            instance:'http://i/Note/document1',
+                            predicate:'http://s/note',
+                            cardinality:2,
+                            object_list:_}
+                   ]),
+               _)
+     ]) :-
+    Document = _{ '@id' : "Note/document1",
+                  '@type' : "Note",
+                  note : ["first", "second"]},
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
+
+test(insert_repeated_value_counts_once_in_optional_cardinality,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema_cardinality_optional,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':instance_has_wrong_cardinality,
+                            class:'http://www.w3.org/2001/XMLSchema#string',
+                            instance:'http://i/Note/document1',
+                            predicate:'http://s/note',
+                            cardinality:2,
+                            object_list:["first", "second"]}
+                   ]),
+               _)
+     ]) :-
+    Document = _{ '@id' : "Note/document1",
+                  '@type' : "Note",
+                  note : ["first", "first", "second"]},
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
+
+schema_cardinality_optional_enum('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "RockSize",
+  "@type" : "Enum",
+  "@value" : ["big", "small"] }
+
+{ "@id" : "RockNote",
+  "@type" : "Class",
+  "size" : { "@type" : "Optional",
+             "@class" : "RockSize" } }
+
+').
+
+test(insert_multiple_values_for_optional_enum_field,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema_cardinality_optional_enum,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':instance_has_wrong_cardinality,
+                            class:'http://s/RockSize',
+                            instance:'http://i/RockNote/document1',
+                            predicate:'http://s/size',
+                            cardinality:2,
+                            object_list:['http://s/RockSize/big',
+                                         'http://s/RockSize/small']}
+                   ]),
+               _)
+     ]) :-
+    Document = _{ '@id' : "RockNote/document1",
+                  '@type' : "RockNote",
+                  size : ["big", "small"]},
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
     with_transaction(
         Context,
         insert_document(Context, Document, _Id),

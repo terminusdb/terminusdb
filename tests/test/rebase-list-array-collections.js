@@ -174,6 +174,7 @@ describe('rebase-list-array-collections', function () {
       const rebase = await request(agent.post(`/api/rebase/admin/${local}/local/branch/other`).send({
         rebase_from: `admin/${local}/local/branch/main`,
         author: 'a',
+        conflict_resolution: 'merge',
       }))
       expect(rebase.status, `rebase status: ${JSON.stringify(rebase.body)}`).to.equal(409)
       expect(rebase.body['api:error']['@type']).to.equal('api:RebaseMergeConflict')
@@ -227,6 +228,7 @@ describe('rebase-list-array-collections', function () {
     const rebase = await request(agent.post(`/api/rebase/admin/${local}/local/branch/other`).send({
       rebase_from: `admin/${local}/local/branch/main`,
       author: 'a',
+      conflict_resolution: 'merge',
     }))
     expect(rebase.status, `rebase status: ${JSON.stringify(rebase.body)}`).to.equal(200)
     const doc = await request(agent.get(`/api/document/admin/${local}/local/branch/other?id=Product/tee`))

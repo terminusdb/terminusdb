@@ -559,7 +559,7 @@ api_global_error_jsonld(error(apply_schema_delta(Before, After),_), Type, JSON) 
             }.
 api_global_error_jsonld(error(bad_conflict_resolution(Resolution),_), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "Invalid conflict_resolution ~q. Expected \"error\", \"ours\", \"theirs\", or an object with \"default\" and \"documents\" keys.", [Resolution]),
+    format(string(Msg), "Invalid conflict_resolution ~q. Expected a supported resolution string, or an object with \"default\" and \"documents\" keys.", [Resolution]),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:BadConflictResolution',
@@ -1203,16 +1203,13 @@ api_error_jsonld_(rebase,error(rebase_commit_application_failed(fixup_error(Thei
                               'api:witness' : Fixup_Witnesses},
              'api:message' : Msg
             }.
-api_error_jsonld_(rebase,error(rebase_merge_conflict(Document, Path, Base, Ours, Theirs),_), JSON) :-
-    format(string(Msg), "Rebase failed: document ~q has conflicting changes at ~q", [Document, Path]),
+api_error_jsonld_(rebase,error(rebase_merge_conflict(Document, Path, _Base, _Ours, _Theirs),_), JSON) :-
+    format(string(Msg), "Rebase failed: document ~q has conflicting changes at ~q; select an explicit conflict_resolution", [Document, Path]),
     JSON = _{'@type' : 'api:RebaseErrorResponse',
              'api:status' : 'api:conflict',
              'api:error' : _{ '@type' : 'api:RebaseMergeConflict',
                               'api:document' : Document,
-                              'api:path' : Path,
-                              'api:base' : Base,
-                              'api:ours' : Ours,
-                              'api:theirs' : Theirs},
+                              'api:path' : Path},
              'api:message' : Msg
             }.
 api_error_jsonld_(rebase,error(rebase_target_branch_changed(Path),_), JSON) :-
