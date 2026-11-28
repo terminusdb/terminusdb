@@ -3668,6 +3668,188 @@ elaborated_member_value(Value, Id, Member) :-
     member(Item, Value),
     elaborated_member_value(Item, Id, Member).
 
+% Random ids carry no content, so content equality must reuse the node already stored on an existing parent.
+normalize_repeated_random_subdocuments(Transaction, Elaborated, Normalized) :-
+    normalize_repeated_random_subdocuments(Transaction, reference, Elaborated, Normalized).
+
+normalize_repeated_random_subdocuments(Transaction, Reuse, Elaborated, Normalized) :-
+    (   get_dict('@id', Elaborated, Id),
+        ground(Id),
+        database_instance(Transaction, Instance),
+        xrdf(Instance, Id, _, _)
+    ->  normalize_repeated_random_subdocument_fields(Transaction, Reuse, Elaborated, Normalized)
+    ;   Normalized = Elaborated).
+
+normalize_repeated_random_subdocument_fields(Transaction, Reuse, Elaborated, Normalized) :-
+    dict_pairs(Elaborated, Tag, Pairs),
+    get_dict('@id', Elaborated, Parent_Id),
+    maplist({Transaction, Reuse, Parent_Id}/[Key-Value,Key-Normalized_Value]>>(
+                normalize_repeated_random_subdocument_value(Transaction, Reuse, Parent_Id, Key, Value, Normalized_Value)
+            ),
+            Pairs,
+            Normalized_Pairs),
+    dict_pairs(Normalized, Tag, Normalized_Pairs).
+
+normalize_repeated_random_subdocument_value(Transaction, Reuse, Parent_Id, Property, Value, Normalized) :-
+    is_dict(Value),
+    get_dict('@container', Value, "@set"),
+    !,
+    get_dict('@value', Value, Members),
+    maplist({Transaction, Reuse, Parent_Id, Property}/[Member,Normalized_Member]>>(
+                normalize_repeated_random_subdocument_member(Transaction, Reuse, Parent_Id, Property, Member, Normalized_Member)
+            ),
+            Members,
+            Normalized_Members),
+    put_dict('@value', Value, Normalized_Members, Normalized).
+normalize_repeated_random_subdocument_value(Transaction, Reuse, Parent_Id, Property, Value, Normalized) :-
+    normalize_repeated_random_subdocument_member(Transaction, Reuse, Parent_Id, Property, Value, Normalized).
+
+normalize_repeated_random_subdocument_member(Transaction, Reuse, Parent_Id, Property, Value, Normalized) :-
+    is_dict(Value),
+    get_dict('@id', Value, Child_Id),
+    ground(Child_Id),
+    get_dict('@type', Value, Type),
+    Type \= "@id",
+    is_subdocument(Transaction, Type),
+    !,
+    (   key_descriptor(Transaction, Type, random(Base)),
+        % A capture makes the generated identifier visible inside the transaction.
+        \+ elaborated_has_capture(Value),
+        matching_existing_random_subdocument(Transaction, Reuse, Parent_Id, Property, Base, Value, Existing)
+    ->  Normalized = Existing
+    ;   normalize_repeated_random_subdocument_fields(Transaction, Reuse, Value, Normalized)
+    ).
+normalize_repeated_random_subdocument_member(_Transaction, _Reuse, _Parent_Id, _Property, Value, Value).
+
+elaborated_has_capture(Value) :-
+    is_dict(Value),
+    get_dict('@type', Value, 'http://terminusdb.com/schema/sys#JSON'),
+    !,
+    fail.
+elaborated_has_capture(Value) :-
+    is_dict(Value),
+    get_dict('@capture', Value, _),
+    !.
+elaborated_has_capture(Value) :-
+    is_dict(Value),
+    !,
+    dict_pairs(Value, _, Pairs),
+    member(_-Member, Pairs),
+    elaborated_has_capture(Member).
+elaborated_has_capture(Value) :-
+    is_list(Value),
+    member(Member, Value),
+    elaborated_has_capture(Member).
+
+matching_existing_random_subdocument(Transaction, Reuse, Parent_Id, Property, Base, Value, Existing) :-
+    database_and_default_prefixes(Transaction, Prefixes),
+    path_component([type(Base),property(Property),node(Parent_Id)], Prefixes, [Path_Base]),
+    prefix_expand(Path_Base, Prefixes, Path_Base_Ex),
+    canonical_elaborated_content(Transaction, Value, Canonical),
+    database_instance(Transaction, Instance),
+    xrdf(Instance, Parent_Id, Property, Existing_Id),
+    % Migrations use fresh random ids to repair nonconforming stored ids.
+    atom_concat(Path_Base_Ex, _, Existing_Id),
+    stored_subdocument_elaboration(Transaction, Existing_Id, Existing_Elaborated),
+    canonical_elaborated_content(Transaction, Existing_Elaborated, Canonical),
+    (   Reuse = reference
+    ->  Existing = json{'@type': "@id", '@id': Existing_Id}
+    ;   Reuse = elaborated(Root_Id),
+        Parent_Id \= Root_Id,
+        parent_survives_outside_root(Transaction, Root_Id, Parent_Id)
+    ->  Existing = json{'@type': "@id", '@id': Existing_Id}
+    ;   Existing = Existing_Elaborated
+    ).
+
+parent_survives_outside_root(Transaction, Root_Id, Node) :-
+    database_instance(Transaction, Instance),
+    xrdf(Instance, Owner, _, Node),
+    Owner \= Root_Id,
+    owner_survives_outside_root(Transaction, Instance, Root_Id, Owner, [Node]).
+
+owner_survives_outside_root(Transaction, Instance, Root_Id, Owner, Visited) :-
+    \+ memberchk(Owner, Visited),
+    (   xrdf(Instance, Owner, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Type),
+        is_subdocument(Transaction, Type)
+    ->  xrdf(Instance, Parent, _, Owner),
+        Parent \= Root_Id,
+        owner_survives_outside_root(Transaction, Instance, Root_Id, Parent, [Owner|Visited])
+    ;   true
+    ).
+
+stored_subdocument_elaboration(Transaction, Id, Elaborated) :-
+    Options = options{compress_ids: false, unfold: true, keep_json_type: false},
+    get_document(Transaction, Id, Stored, Options),
+    database_prefixes(Transaction, Prefixes),
+    once(infer_type(Transaction, Prefixes, Stored, _Type, success(Elaborated))).
+
+canonical_elaborated_content(Transaction, Elaborated, Canonical) :-
+    canonical_elaborated_value(Transaction, Elaborated, Canonical).
+
+canonical_elaborated_value(Transaction, Value, Canonical) :-
+    is_dict(Value),
+    get_dict('@container', Value, Container),
+    !,
+    get_dict('@value', Value, Members),
+    (   get_dict('@type', Value, Type)
+    ->  true
+    ;   Type = none),
+    (   get_dict('@dimensions', Value, Dimensions)
+    ->  true
+    ;   Dimensions = none),
+    maplist(canonical_elaborated_value(Transaction), Members, Canonical_Members),
+    (   Container = "@set"
+    ->  sort(Canonical_Members, Ordered_Members)
+    ;   Ordered_Members = Canonical_Members),
+    Canonical = container(Container, Type, Dimensions, Ordered_Members).
+canonical_elaborated_value(Transaction, Value, ordered(Canonical_Members)) :-
+    is_list(Value),
+    !,
+    maplist(canonical_elaborated_value(Transaction), Value, Canonical_Members).
+canonical_elaborated_value(_Transaction, Value, reference(Id)) :-
+    is_dict(Value),
+    get_dict('@type', Value, "@id"),
+    !,
+    get_dict('@id', Value, Id).
+canonical_elaborated_value(Transaction, Value, literal(Casted)) :-
+    is_dict(Value),
+    get_dict('@value', Value, Literal),
+    get_dict('@type', Value, Type),
+    !,
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Type, Prefixes, Type_Ex),
+    (   Type_Ex = 'http://terminusdb.com/schema/sys#JSON'
+    ->  Casted = json(Literal)
+    ;   string(Literal),
+        Type_Ex = 'http://www.w3.org/2001/XMLSchema#string'
+    ->  Casted = Literal^^Type_Ex
+    ;   number(Literal),
+        Type_Ex = 'http://www.w3.org/2001/XMLSchema#decimal'
+    ->  Casted = Literal^^Type_Ex
+    ;   json_to_database_type(Literal^^Type_Ex, [prefixes(Prefixes)], Casted)
+    ).
+canonical_elaborated_value(Transaction, Value, document(Type, Id_Canonical, Canonical_Fields)) :-
+    is_dict(Value),
+    get_dict('@type', Value, Type),
+    !,
+    dict_pairs(Value, _, Pairs),
+    (   get_dict('@id', Value, Id),
+        \+ key_descriptor(Transaction, Type, random(_))
+    ->  Id_Canonical = id(Id)
+    ;   Id_Canonical = omitted_id),
+    exclude(elaboration_metadata_pair, Pairs, Content_Pairs),
+    maplist({Transaction}/[Key-Field_Value,Key-Canonical_Field]>>(
+                canonical_elaborated_value(Transaction, Field_Value, Canonical_Field)
+            ),
+            Content_Pairs,
+            Canonical_Fields).
+canonical_elaborated_value(_Transaction, Value, atomic(Value)).
+
+elaboration_metadata_pair('@id'- _).
+elaboration_metadata_pair('@type'- _).
+elaboration_metadata_pair('@capture'- _).
+elaboration_metadata_pair('@linked-by'- _).
+
 valid_json_id_or_die(Prefixes,Id) :-
     do_or_die(
         (   get_dict('@base', Prefixes, Base),
@@ -3880,9 +4062,28 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids,
         error(missing_field('@id', Elaborated), _)),
     extract_return_ids(Id_Pairs, Ids),
     when(ground(Dependencies),
-         insert_document_expanded(Transaction, Elaborated, Id)).
+         insert_full_replacement_document_expanded(Transaction, Elaborated, Id)).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
+    insert_document_expanded_with_reuse(Transaction, reference, Elaborated, ID).
+
+% Replacement must write reused content in full because deletion may have removed it.
+insert_replacement_document_expanded(Transaction, Elaborated, ID) :-
+    insert_document_expanded_with_reuse(Transaction, elaborated, Elaborated, ID).
+
+insert_full_replacement_document_expanded(Transaction, Elaborated, ID) :-
+    insert_document_expanded_with_reuse(Transaction, rebuild, Elaborated, ID).
+
+insert_document_expanded_with_reuse(Transaction, Reuse0, Elaborated, ID) :-
+    (   Reuse0 = elaborated,
+        get_dict('@id', Elaborated, Root_Id)
+    ->  Reuse = elaborated(Root_Id)
+    ;   Reuse = Reuse0
+    ),
+    normalize_repeated_random_subdocuments(Transaction, Reuse, Elaborated, Normalized_Elaborated),
+    insert_elaborated_document_triples(Transaction, Normalized_Elaborated, ID).
+
+insert_elaborated_document_triples(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID0),
     (   atom(ID0)
     ->  ID = ID0
@@ -3995,10 +4196,21 @@ replace_document_expanded(Transaction, Elaborated, Contract, Create, ID) :-
             )
         )
     ),
+    delete_replacement_value_hash_document(Transaction, ID, Id_Pairs),
     (   ground(Dependencies)
-    ->  insert_document_expanded(Transaction, Elaborated, ID)
+    ->  insert_replacement_document_expanded(Transaction, Elaborated, ID)
     ;   when(ground(Dependencies),
-             insert_document_expanded(Transaction, Elaborated, ID))
+             insert_replacement_document_expanded(Transaction, Elaborated, ID))
+    ).
+
+delete_replacement_value_hash_document(Transaction, Id, Id_Pairs) :-
+    (   memberchk(Id-value_hash, Id_Pairs)
+    ->  catch(
+            delete_document(Transaction, false, Id),
+            error(document_not_found(_), _),
+            true
+        )
+    ;   true
     ).
 
 insert_backlinks(Links, Graph) :-
@@ -4079,10 +4291,11 @@ replace_document(Transaction, Document, Create, false, Captures_In, Ids, Depende
                 )
             ),
             Deletions),
+    delete_replacement_value_hash_document(Transaction, Elaborated_Id, Id_Pairs),
     ensure_transaction_has_builder(instance, Transaction),
     convlist([Id0-Variety,Id0]>>(Variety \= value_hash),Id_Pairs,Ids),
     when(ground(Dependencies),
-         insert_document_expanded(Transaction, Elaborated, Id)).
+         insert_replacement_document_expanded(Transaction, Elaborated, Id)).
 replace_document(Query_Context, Document, Create, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
