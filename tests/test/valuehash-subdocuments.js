@@ -114,6 +114,24 @@ describe('valuehash-subdocuments', function () {
       expect(result.body[0].sub.tags).to.deep.equal(['a', 'b'])
     })
 
+    it('does not rewrite a captured random subdocument id during replacement', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RCaptureSub', '@subdocument': [], '@key': { '@type': 'Random' }, x: 'xsd:string' },
+        { '@type': 'Class', '@id': 'LCaptureParent', '@key': { '@type': 'Lexical', '@fields': ['k'] }, k: 'xsd:string', sub: { '@type': 'Optional', '@class': 'RCaptureSub' }, alias: { '@type': 'Optional', '@class': 'RCaptureSub' } },
+      ])
+      const instance = { '@type': 'LCaptureParent', k: 'one', sub: { '@type': 'RCaptureSub', '@capture': 'child', x: 'a' }, alias: { '@ref': 'child' } }
+      await document.insert(agent, { instance })
+      const inserted = await document.get(agent, { query: { type: 'LCaptureParent', as_list: true } })
+      const id = inserted.body[0]['@id']
+
+      await document.replace(agent, { instance: { '@id': id, ...instance } })
+
+      const result = await document.get(agent, { query: { type: 'LCaptureParent', as_list: true } })
+      expect(result.body).to.have.lengthOf(1)
+      expect(result.body[0].sub.x).to.equal('a')
+      expect(result.body[0].alias.x).to.equal('a')
+    })
+
     it('keeps deterministic ValueHash subdocument repeat inserts as no-ops', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'VHSub', '@subdocument': [], '@key': { '@type': 'ValueHash' }, x: 'xsd:string' },

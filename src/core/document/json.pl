@@ -3950,6 +3950,14 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids,
          insert_document_expanded(Transaction, Elaborated, Id)).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
+    normalize_repeated_random_subdocuments(Transaction, Elaborated, Normalized_Elaborated),
+    insert_elaborated_document_triples(Transaction, Normalized_Elaborated, ID).
+
+% Replacement cannot reuse the stored ownership tree it has just deleted.
+insert_replacement_document_expanded(Transaction, Elaborated, ID) :-
+    insert_elaborated_document_triples(Transaction, Elaborated, ID).
+
+insert_elaborated_document_triples(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID0),
     (   atom(ID0)
     ->  ID = ID0
@@ -3961,10 +3969,9 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
     % (S)QName lexicals resolve against this database's own prefix map —
     % validation already used it, so storage must too.
     database_and_default_prefixes(Transaction, Cast_Prefixes),
-    normalize_repeated_random_subdocuments(Transaction, Elaborated, Normalized_Elaborated),
     % insert
     forall(
-        json_triple_(Normalized_Elaborated, Cast_Prefixes, t(S,P,O)),
+        json_triple_(Elaborated, Cast_Prefixes, t(S,P,O)),
         (   (   O = _^^OT, context_prefix_datatype(OT)
             ->  json_to_database_type(O, [prefixes(Cast_Prefixes)], OC)
             ;   json_to_database_type(O, OC)
@@ -4063,9 +4070,9 @@ replace_document_expanded(Transaction, Elaborated, Contract, Create, ID) :-
         )
     ),
     (   ground(Dependencies)
-    ->  insert_document_expanded(Transaction, Elaborated, ID)
+    ->  insert_replacement_document_expanded(Transaction, Elaborated, ID)
     ;   when(ground(Dependencies),
-             insert_document_expanded(Transaction, Elaborated, ID))
+             insert_replacement_document_expanded(Transaction, Elaborated, ID))
     ).
 
 insert_backlinks(Links, Graph) :-
@@ -4149,7 +4156,7 @@ replace_document(Transaction, Document, Create, false, Captures_In, Ids, Depende
     ensure_transaction_has_builder(instance, Transaction),
     convlist([Id0-Variety,Id0]>>(Variety \= value_hash),Id_Pairs,Ids),
     when(ground(Dependencies),
-         insert_document_expanded(Transaction, Elaborated, Id)).
+         insert_replacement_document_expanded(Transaction, Elaborated, Id)).
 replace_document(Query_Context, Document, Create, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
