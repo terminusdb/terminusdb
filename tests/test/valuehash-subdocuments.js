@@ -94,6 +94,26 @@ describe('valuehash-subdocuments', function () {
       expect(result.body.map(doc => doc.sub.x).sort()).to.deep.equal(['a', 'b'])
     })
 
+    it('treats an unsorted set inside a random subdocument as identical on repeat insert', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RSetSub', '@subdocument': [], '@key': { '@type': 'Random' }, tags: { '@type': 'Set', '@class': 'xsd:string' } },
+        { '@type': 'Class', '@id': 'VHSetParent', '@key': { '@type': 'ValueHash' }, sub: { '@type': 'Optional', '@class': 'RSetSub' } },
+      ])
+      const instance = { '@type': 'VHSetParent', sub: { '@type': 'RSetSub', tags: ['b', 'a'] } }
+
+      await document.insert(agent, { instance })
+      const inserted = await document.get(agent, { query: { type: 'VHSetParent', as_list: true } })
+      const commitsBefore = await documentHistoryLength(agent, dbName, inserted.body[0]['@id'])
+      await document.insert(agent, { instance })
+      const commitsAfter = await documentHistoryLength(agent, dbName, inserted.body[0]['@id'])
+
+      const result = await document.get(agent, { query: { type: 'VHSetParent', as_list: true } })
+      expect(commitsAfter).to.equal(commitsBefore)
+      expect(result.body).to.have.lengthOf(1)
+      expect(result.body[0].sub).to.be.an('object')
+      expect(result.body[0].sub.tags).to.deep.equal(['a', 'b'])
+    })
+
     it('keeps deterministic ValueHash subdocument repeat inserts as no-ops', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'VHSub', '@subdocument': [], '@key': { '@type': 'ValueHash' }, x: 'xsd:string' },

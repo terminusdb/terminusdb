@@ -3719,13 +3719,13 @@ matching_existing_random_subdocument(Transaction, Parent_Id, Property, Base, Val
     database_and_default_prefixes(Transaction, Prefixes),
     path_component([type(Base),property(Property),node(Parent_Id)], Prefixes, [Path_Base]),
     prefix_expand(Path_Base, Prefixes, Path_Base_Ex),
-    elaborated_content_hash(Transaction, Value, Hash),
+    canonical_elaborated_content(Transaction, Value, Canonical),
     database_instance(Transaction, Instance),
     xrdf(Instance, Parent_Id, Property, Existing_Id),
     % Migrations use fresh random ids to repair nonconforming stored ids.
     atom_concat(Path_Base_Ex, _, Existing_Id),
     stored_subdocument_elaboration(Transaction, Existing_Id, Existing_Elaborated),
-    elaborated_content_hash(Transaction, Existing_Elaborated, Hash).
+    canonical_elaborated_content(Transaction, Existing_Elaborated, Canonical).
 
 stored_subdocument_elaboration(Transaction, Id, Elaborated) :-
     Options = options{compress_ids: false, unfold: true, keep_json_type: false},
@@ -3733,10 +3733,60 @@ stored_subdocument_elaboration(Transaction, Id, Elaborated) :-
     database_prefixes(Transaction, Prefixes),
     once(infer_type(Transaction, Prefixes, Stored, _Type, success(Elaborated))).
 
-elaborated_content_hash(Transaction, Elaborated, Hash) :-
-    database_and_default_prefixes(Transaction, Prefixes),
-    get_all_path_values(Elaborated, Prefixes, Path_Values),
-    idgen_path_values_hash('', Path_Values, Hash).
+canonical_elaborated_content(Transaction, Elaborated, Canonical) :-
+    canonical_elaborated_value(Transaction, Elaborated, Canonical).
+
+canonical_elaborated_value(Transaction, Value, Canonical) :-
+    is_dict(Value),
+    get_dict('@container', Value, Container),
+    !,
+    get_dict('@value', Value, Members),
+    (   get_dict('@type', Value, Type)
+    ->  true
+    ;   Type = none),
+    (   get_dict('@dimensions', Value, Dimensions)
+    ->  true
+    ;   Dimensions = none),
+    maplist(canonical_elaborated_value(Transaction), Members, Canonical_Members),
+    (   Container = "@set"
+    ->  sort(Canonical_Members, Ordered_Members)
+    ;   Ordered_Members = Canonical_Members),
+    Canonical = container(Container, Type, Dimensions, Ordered_Members).
+canonical_elaborated_value(Transaction, Value, ordered(Canonical_Members)) :-
+    is_list(Value),
+    !,
+    maplist(canonical_elaborated_value(Transaction), Value, Canonical_Members).
+canonical_elaborated_value(_Transaction, Value, reference(Id)) :-
+    is_dict(Value),
+    get_dict('@type', Value, "@id"),
+    !,
+    get_dict('@id', Value, Id).
+canonical_elaborated_value(_Transaction, Value, literal(Type, Literal)) :-
+    is_dict(Value),
+    get_dict('@value', Value, Literal),
+    get_dict('@type', Value, Type),
+    !.
+canonical_elaborated_value(Transaction, Value, document(Type, Id_Canonical, Canonical_Fields)) :-
+    is_dict(Value),
+    get_dict('@type', Value, Type),
+    !,
+    dict_pairs(Value, _, Pairs),
+    (   get_dict('@id', Value, Id),
+        \+ key_descriptor(Transaction, Type, random(_))
+    ->  Id_Canonical = id(Id)
+    ;   Id_Canonical = omitted_id),
+    exclude(elaboration_metadata_pair, Pairs, Content_Pairs),
+    maplist({Transaction}/[Key-Field_Value,Key-Canonical_Field]>>(
+                canonical_elaborated_value(Transaction, Field_Value, Canonical_Field)
+            ),
+            Content_Pairs,
+            Canonical_Fields).
+canonical_elaborated_value(_Transaction, Value, atomic(Value)).
+
+elaboration_metadata_pair('@id'- _).
+elaboration_metadata_pair('@type'- _).
+elaboration_metadata_pair('@capture'- _).
+elaboration_metadata_pair('@linked-by'- _).
 
 valid_json_id_or_die(Prefixes,Id) :-
     do_or_die(
