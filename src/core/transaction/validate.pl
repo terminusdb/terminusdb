@@ -861,9 +861,10 @@ test(cardinality_error,
       cleanup(teardown_temp_store(State)),
       error(
           schema_check_failure(
-              [witness{'@type':unexpected_list,
-                       type:'http://www.w3.org/2001/XMLSchema#string',
-                       value:["Dublin","Dubhlinn"]}]),
+              [witness{'@type':instance_not_cardinality_one,
+                       class:'http://www.w3.org/2001/XMLSchema#string',
+                       instance:'http://example.com/data/world/City/Dublin',
+                       predicate:'http://example.com/schema/worldOntology#name'}]),
           _)
      ]) :-
 

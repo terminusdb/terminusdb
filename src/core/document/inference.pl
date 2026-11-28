@@ -506,6 +506,45 @@ check_type_pairs_([Key-Range|Pairs],Schema,Prefixes,Dictionary,Annotated,capture
     check_type_pair_(Key,Range,Schema,Prefixes,Dictionary,Dictionary0,captures(In,DepH-DepM,SubH-SubM,Middle)),
     check_type_pairs_(Pairs,Schema,Prefixes,Dictionary0,Annotated,captures(Middle,DepM-DepT,SubM-SubT,Out)).
 
+non_sys_json_type(Type, Schema) :-
+    \+ (   text(Type),
+           expand_type(Type, Schema, Type_Ex),
+           global_prefix_expand(sys:'JSON', Type_Ex)
+       ).
+
+check_non_collection_type_(Key,Kind,Schema,Prefixes,Value,Type,Annotated,Captures) :-
+    (   is_list(Value),
+        non_sys_json_type(Type, Schema),
+        length(Value, Count),
+        Count > 1
+    ->  Captures = captures(In,DepH-DepT,SubH-SubT,Out),
+        mapm(
+            {Schema,Prefixes,Type}/
+            [Member,Exp,DepH0-SubH0-In0,DepT0-SubT0-Out0]>>(
+                Capture0 = captures(In0,DepH0-DepT0,SubH0-SubT0,Out0),
+                check_simple_or_compound_type_(Schema,Prefixes,Member,Type,Exp,Capture0)
+            ),
+            Value,Expanded,DepH-SubH-In,DepT-SubT-Out),
+        promote_result_list(Expanded,Result_List),
+        (   Result_List = witness(_)
+        ->  Annotated = Result_List
+        ;   Result_List = success(List),
+            sort(List, Unique),
+            (   Unique = [_,_|_]
+            ->  presentation_type(Type, Presentation),
+                Annotated = success(cardinality_violation{ '@container' : "@set",
+                                                           '@type' : Presentation,
+                                                           '@value' : Unique,
+                                                           kind: Kind,
+                                                           class: Presentation,
+                                                           predicate: Key })
+            ;   throw(error(schema_check_failure([witness{ '@type' : unexpected_list,
+                                                           value: Value, type : Type }]), _))
+            )
+        )
+    ;   check_simple_or_compound_type_(Schema, Prefixes, Value, Type, Annotated, Captures)
+    ).
+
 check_type_pair_(_Key,_Range,_Schema,_Prefixes,witness(Failure),Annotated,Captures) =>
     no_captures(Captures),
     witness(Failure) = Annotated.
@@ -530,7 +569,7 @@ check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Annotated,Captures
 ;   foreign_class(Type, _)) =>
     expand_type(Type, Schema, Type_Ex),
     (   get_dict_not_null(Key,Dictionary,Value)
-    ->  (   check_value_type_(Schema, Prefixes, Value, Type_Ex, Annotated_Value,Captures)
+    ->  (   check_non_collection_type_(Key, plain, Schema, Prefixes, Value, Type_Ex, Annotated_Value,Captures)
         ->  (   Annotated_Value = success(Success_Value)
             ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
                 Annotated = success(Annotated_Success)
@@ -587,7 +626,7 @@ _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@subdocument' : [], '@class' : Type} :< Range =>
     (   get_dict_not_null(Key,Dictionary,Value)
-    ->  check_value_type_(Schema, Prefixes, Value, Type, Annotated_Value, Captures),
+    ->  check_non_collection_type_(Key, plain, Schema, Prefixes, Value, Type, Annotated_Value, Captures),
         (   Annotated_Value = success(Success_Value)
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
@@ -610,7 +649,7 @@ _{ '@subdocument' : [], '@class' : Type} :< Range =>
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@unfoldable' : [], '@class' : Type} :< Range =>
     (   get_dict_not_null(Key,Dictionary,Value)
-    ->  check_value_type_(Schema, Prefixes, Value, Type, Annotated_Value, Captures),
+    ->  check_non_collection_type_(Key, plain, Schema, Prefixes, Value, Type, Annotated_Value, Captures),
         (   Annotated_Value = success(Success_Value)
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
@@ -698,7 +737,7 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Optional', '@class' : Class } :< 
     (   get_dict_not_null(Key, Dictionary, Value)
     ->  (   foreign_class(Range,Type)
         ->  check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Annotated,Captures)
-        ;   check_simple_or_compound_type_(Schema, Prefixes, Value, Class, Annotated_Value,Captures),
+        ;   check_non_collection_type_(Key, optional, Schema, Prefixes, Value, Class, Annotated_Value,Captures),
             (   Annotated_Value = success(Success_Value)
             ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
                 Annotated = success(Annotated_Success)
@@ -1158,6 +1197,41 @@ infer_type_(Schema, Prefixes, Super, Dictionary, Type, Annotated, captures(In,De
         In = Out
     ).
 
+cardinality_violation_in(Term) :-
+    is_dict(Term, cardinality_violation),
+    !.
+cardinality_violation_in(Dict) :-
+    is_dict(Dict),
+    !,
+    dict_pairs(Dict, _, Pairs),
+    member(_-Value, Pairs),
+    cardinality_violation_in(Value).
+cardinality_violation_in(List) :-
+    is_list(List),
+    member(Value, List),
+    cardinality_violation_in(Value).
+
+check_type_candidate_(Schema, Prefixes, Dictionary, Candidate, Annotated, Captures) :-
+    catch(
+        check_type_(Schema, Prefixes, Dictionary, Candidate, Annotated, Captures),
+        error(schema_check_failure(Witnesses), Context),
+        Annotated = thrown(error(schema_check_failure(Witnesses), Context))
+    ).
+
+failed_candidate_result(_-witness(_)-_-_).
+failed_candidate_result(_-thrown(_)-_-_).
+
+split_cardinality_successes([], [], []).
+split_cardinality_successes([Success|Successes], Violating, Conforming) :-
+    (   Success = _-success(Annotated)-_-_,
+        cardinality_violation_in(Annotated)
+    ->  Violating = [Success|Violating_Rest],
+        Conforming = Conforming_Rest
+    ;   Violating = Violating_Rest,
+        Conforming = [Success|Conforming_Rest]
+    ),
+    split_cardinality_successes(Successes, Violating_Rest, Conforming_Rest).
+
 infer_type_or_check_(Schema, _Prefixes, _Super, Dictionary, _Inferred_Type, Annotated, Captures),
 get_dict('@type', Dictionary, "@id"),
 get_dict('@id', Dictionary, Id),
@@ -1213,23 +1287,31 @@ infer_type_or_check_(Schema, Prefixes, Super, Dictionary, Type, Annotated,captur
             (   Captures0 = captures(In,DepH-DepT0,SubH-SubT0, Out0),
                 candidate_subsumed_(Schema, Super, Candidate, Dictionary_Expanded),
                 inference_level_set(0),
-                check_type_(Schema,Prefixes,Dictionary_Expanded,Candidate,Annotated0,Captures0),
+                check_type_candidate_(Schema,Prefixes,Dictionary_Expanded,Candidate,Annotated0,Captures0),
                 inference_level_read(Cand_Level)
             ),
             Results),
-    exclude([_-witness(_)-_-_]>>true, Results, Successes),
+    exclude(failed_candidate_result, Results, Successes),
     (   Successes = []
     ->  inference_level_set(Saved_Level),
-        (   [_-witness(Witness)-_-_] = Results
-        ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
-                                      'reason' : Witness,
-                                      'document' : Dictionary})
-        ;   Annotated = witness(json{ '@type' : no_unique_type_for_document,
-                                      'document' : Dictionary})
+        (   member(_-thrown(Error)-_-_, Results)
+        ->  throw(Error)
+        ;   (   [_-witness(Witness)-_-_] = Results
+            ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
+                                          'reason' : Witness,
+                                          'document' : Dictionary})
+            ;   Annotated = witness(json{ '@type' : no_unique_type_for_document,
+                                          'document' : Dictionary})
+            )
         )
-    ;   findall(L, member(_-_-_-L, Successes), Levels),
+    ;   split_cardinality_successes(Successes, Violating, Conforming),
+        (   Conforming = []
+        ->  Candidates = Violating
+        ;   Candidates = Conforming
+        ),
+        findall(L, member(_-_-_-L, Candidates), Levels),
         min_list(Levels, Best_Level),
-        findall(E, (member(E, Successes), E = _-_-_-Best_Level), Best),
+        findall(E, (member(E, Candidates), E = _-_-_-Best_Level), Best),
         (   Best = [Type-success(Annotated0)-captures(In,DepH-DepT,SubH-SubT,Out)-Best_Level]
         ->  put_dict(json{'@type' : Type}, Annotated0, Annotated1),
             Annotated = success(Annotated1),
@@ -1491,6 +1573,147 @@ test(reference_success,
                      'terminusdb:///schema#mentions':
                      json{'@id':'terminusdb:///data/Mentioned/something_or_other',
                           '@type':"@id"}}.
+
+scalar_or_set_inference('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "InferenceTarget" }
+
+{ "@type" : "Class",
+  "@id" : "ScalarMentions",
+  "mentions" : "InferenceTarget" }
+
+{ "@type" : "Class",
+  "@id" : "SetMentions",
+  "mentions" : { "@type" : "Set",
+                 "@class" : "xsd:string" } }
+').
+
+test(infer_list_as_set_over_invalid_scalar_cardinality,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(scalar_or_set_inference,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Cases = [
+        ["Target/one"],
+        ["Target/one", "Target/one"],
+        ["Target/one", "Target/two"]
+    ],
+    open_descriptor(Desc,Database),
+    forall(
+        member(Mentions, Cases),
+        (   Document =
+            json{
+                mentions : Mentions
+            },
+            infer_type(Database,Document,Type,success(_)),
+            Type = 'terminusdb:///schema#SetMentions'
+        )).
+
+scalar_only_inference('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "ScalarOnlyTarget" }
+
+{ "@type" : "Class",
+  "@id" : "ScalarOnlyMentions",
+  "mentions" : "ScalarOnlyTarget" }
+
+{ "@type" : "Class",
+  "@id" : "OtherScalarOnlyMentions",
+  "mentions" : "ScalarOnlyTarget" }
+').
+
+test(infer_list_error_survives_failed_inference,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(scalar_only_inference,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(
+                [witness{'@type':unexpected_list,
+                         type:'terminusdb:///schema#ScalarOnlyTarget',
+                         value:["Target/one"]}]),
+            _)
+     ]) :-
+
+    Document =
+    json{
+        mentions : ["Target/one"]
+    },
+    open_descriptor(Desc,Database),
+    infer_type(Database,Document,_,_).
+
+abstract_nested_inference('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Entity",
+  "@abstract" : [],
+  "name" : { "@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@type" : "Class",
+  "@id" : "Person",
+  "@inherits" : "Entity" }
+
+{ "@type" : "Class",
+  "@id" : "Holder",
+  "entity" : "Entity" }
+').
+
+test(infer_nested_concrete_subclass_of_abstract_field,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_nested_inference,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@type' : 'Holder',
+        entity : json{ name : "Aelfred" }
+    },
+    open_descriptor(Desc,Database),
+    infer_type(Database,Document,Type,success(Annotated)),
+
+    Type = 'terminusdb:///schema#Holder',
+    get_dict('terminusdb:///schema#entity', Annotated, Entity),
+    get_dict('@type', Entity, 'terminusdb:///schema#Person').
+
+test(reify_nested_abstract_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_nested_inference,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(
+                [witness{'@type':reifying_abstract_class,
+                         class:'terminusdb:///schema#Entity',
+                         subject:unknown}]),
+            _)
+     ]) :-
+
+    Document =
+    json{
+        '@type' : 'Holder',
+        entity : json{ '@type' : 'Entity',
+                       name : "Aelfred" }
+    },
+    open_descriptor(Desc,Database),
+    infer_type(Database,Document,_,_).
 
 test(expanded_enum,
      [setup((setup_temp_store(State),
