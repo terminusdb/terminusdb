@@ -43,6 +43,7 @@ install_macos_release() {
 
   curl -fL --retry 3 -o "$tap_path/Formula/swi-prolog.rb" "$formula_url" \
     || die "Failed to download SWI-Prolog $release formula"
+  brew uninstall homebrew/core/swi-prolog >/dev/null 2>&1 || true
   HOMEBREW_NO_AUTO_UPDATE=1 brew install "$tap/swi-prolog" || die "Failed to install SWI-Prolog $release"
 
   bin_dir="$(dirname "$(command -v swipl)")" || die "swipl command not found"

@@ -131,13 +131,14 @@ sudo pacman -S swi-prolog
 
 **Using Homebrew on macOS**
 
-Homebrew's current `swi-prolog` formula installs SWI-Prolog 11, which TerminusDB does not support. Install the pinned 10.0.2 formula into a local tap so Homebrew pours the matching bottle:
+Homebrew's current `swi-prolog` formula installs SWI-Prolog 11, which TerminusDB does not support. Install the pinned 10.0.2 formula into a local tap so Homebrew pours the matching bottle. If Homebrew already has `swi-prolog` installed, uninstall the Core keg first because the pinned recipe uses the same keg name; the bottle is Apple Silicon only, while Intel Macs build the pinned formula from source.
 
 ```sh
 tap=terminusdb/swi-prolog-10
 brew tap-new --no-git "$tap"
 curl -fLO https://raw.githubusercontent.com/Homebrew/homebrew-core/89fc67a7d3f12962f3eddfb6b56ccb02d4c4be08/Formula/s/swi-prolog.rb
 mv swi-prolog.rb "$(brew --repository "$tap")/Formula/swi-prolog.rb"
+brew uninstall homebrew/core/swi-prolog 2>/dev/null || true
 brew install "$tap/swi-prolog"
 ```
 
