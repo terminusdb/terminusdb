@@ -7,7 +7,10 @@
               api_diff_all_documents/7,
               api_apply_squash_commit/7,
               api_check_apply_squash_commit/8,
-              api_merge_squash_commit/7
+              api_merge_squash_commit/7,
+              normalize_conflict_resolution/3,
+              normalize_conflict_resolution/4,
+              resolution_winner/3
           ]).
 
 :- use_module(core(util)).
@@ -651,16 +654,21 @@ squash_instance_witnesses(Context, Source, Resolution, Merged_Options, Witnesses
             Witnesses).
 
 %% normalize_conflict_resolution(+Raw, +Context, -Resolution) is det.
+%% normalize_conflict_resolution(+Raw, +Context, +Allowed, -Resolution) is det.
 %
-% Accepts a bare winner atom/string ("error", "ours", "theirs") or a dict
-% with `default` and `documents` keys. `documents` maps each winner atom
-% to a list of document ids — `{"theirs": ["Person/Jane"], "ours": [...]}` —
-% so arbitrary document ids never sit in JSON object keys. Ids may be
+% Accepts a bare winner atom/string or a dict with `default` and
+% `documents` keys. `documents` maps each winner atom to a list of
+% document ids — `{"theirs": ["Person/Jane"], "ours": [...]}` — so
+% arbitrary document ids never sit in JSON object keys. Ids may be
 % @base-compressed, prefixed or absolute IRIs; all are expanded against
 % the context prefixes and stored id->winner so lookup happens in the
 % expanded form the diffs carry. An id listed under two winners is
-% ambiguous and rejected.
-normalize_conflict_resolution(Raw, Context, resolution{default:Default, documents:Documents}) :-
+% ambiguous and rejected. The three-argument form accepts the squash-apply
+% winners; callers with a wider vocabulary pass it explicitly.
+normalize_conflict_resolution(Raw, Context, Resolution) :-
+    normalize_conflict_resolution(Raw, Context, [error, ours, theirs], Resolution).
+
+normalize_conflict_resolution(Raw, Context, Allowed, resolution{default:Default, documents:Documents}) :-
     (   is_dict(Raw)
     ->  (   get_dict(default, Raw, Default0)
         ->  true
@@ -673,7 +681,7 @@ normalize_conflict_resolution(Raw, Context, resolution{default:Default, document
             dict_pairs(Documents0, json, Winner_Pairs),
             findall(Id-Winner,
                     (   member(Win_Raw-Ids, Winner_Pairs),
-                        (   resolution_winner_value(Win_Raw, Winner)
+                        (   resolution_winner_value(Win_Raw, Allowed, Winner)
                         ->  do_or_die(is_list(Ids),
                                       error(bad_conflict_resolution(Raw), _)),
                             member(Id0, Ids),
@@ -697,25 +705,25 @@ normalize_conflict_resolution(Raw, Context, resolution{default:Default, document
             dict_create(Documents, json, Doc_Pairs)
         ;   Documents = json{}
         ),
-        (   resolution_winner_value(Default0, Default)
+        (   resolution_winner_value(Default0, Allowed, Default)
         ->  true
         ;   throw(error(bad_conflict_resolution(Raw), _))
         )
-    ;   resolution_winner_value(Raw, Default)
+    ;   resolution_winner_value(Raw, Allowed, Default)
     ->  Documents = json{}
     ;   throw(error(bad_conflict_resolution(Raw), _))
     ).
 
-%% resolution_winner_value(+Raw, -Winner) is semidet.
+%% resolution_winner_value(+Raw, +Allowed, -Winner) is semidet.
 %
-% Winner values are atoms in {error, ours, theirs}; raw strings are
-% converted, atoms pass through.
-resolution_winner_value(Raw, Winner) :-
+% Winner values are atoms in Allowed; raw strings are converted, atoms
+% pass through.
+resolution_winner_value(Raw, Allowed, Winner) :-
     (   atom(Raw)
     ->  Winner = Raw
     ;   catch(atom_string(Winner, Raw), _, fail)
     ),
-    memberchk(Winner, [error, ours, theirs]).
+    memberchk(Winner, Allowed).
 
 %% resolution_winner(+Resolution, +Doc_Id, -Winner) is det.
 resolution_winner(resolution{default:Default, documents:Documents}, Doc_Id, Winner) :-
@@ -776,6 +784,14 @@ squash_force_document(Context, Doc, Id) :-
 
 
 :- begin_tests(apply).
+
+test(apply_conflict_resolution_rejects_merge,
+     [throws(error(bad_conflict_resolution(merge), _))]) :-
+    normalize_conflict_resolution(merge, _{prefixes: json{}}, _).
+
+test(extended_conflict_resolution_accepts_merge) :-
+    normalize_conflict_resolution(merge, _{prefixes: json{}}, [error, ours, theirs, merge], Resolution),
+    Resolution = resolution{default: merge, documents: json{}}.
 
 :- use_module(core(util/test_utils)).
 :- use_module(core(document)).

@@ -2554,6 +2554,23 @@ paths:
                 rebase_from:
                   type: string
                   example: admin/test/local/branch/bar
+                conflict_resolution:
+                  description: "How to resolve instance conflicts while replaying commits: a winner string (\"error\" reports, \"ours\" keeps the rebased target state, \"theirs\" applies the replayed state, \"merge\" unions divergent multi-valued Set fields), or an object with a `default` winner and a `documents` map from winner to a list of document ids for per-document overrides. Document ids may be @base-compressed, prefixed, or absolute IRIs. Merge applies within a divergent multi-valued field only. Cardinality-one properties do not union. List and Array values keep deterministic ordered merge semantics and do not concatenate divergent ordered writes."
+                  oneOf:
+                    - type: string
+                      enum: [error, ours, theirs, merge]
+                    - type: object
+                      properties:
+                        "default":
+                          type: string
+                          enum: [error, ours, theirs, merge]
+                        "documents":
+                          type: object
+                          additionalProperties:
+                            type: array
+                            items:
+                              type: string
+                      example: { "default" : "error", "documents" : { "merge" : ["Thing/example"] } }
       responses:
         200:
           description: "Successfully rebased commits"
@@ -2596,6 +2613,25 @@ paths:
                           type: string
                           enum:
                             - api:valid_commit
+                        "api:resolution_report":
+                          type: array
+                          description: resolutions applied while replaying this commit
+                          items:
+                            type: object
+                            properties:
+                              "@type":
+                                type: string
+                                enum:
+                                  - api:RebaseResolutionReport
+                              "api:document":
+                                type: string
+                              "api:path":
+                                type: array
+                                items:
+                                  type: string
+                              "api:resolution":
+                                type: string
+                                enum: [ours, theirs, merge]
                     example:
                       - '@type': api:RebaseReport
                         api:applied:

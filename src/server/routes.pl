@@ -1488,7 +1488,10 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
         rebase,
         Request,
         (   Strategy_Map = [],
-            rebase_on_branch(System_DB, Auth, Path, Their_Path, Author, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
+            (   _{ conflict_resolution: Conflict_Resolution } :< Document
+            ->  Resolution_Options = [conflict_resolution(Conflict_Resolution)]
+            ;   Resolution_Options = []),
+            rebase_on_branch(System_DB, Auth, Path, Their_Path, Author, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports, Resolution_Options),
 
             Incomplete_Reply = _{ '@type' : "api:RebaseResponse",
                                   'api:status' : "api:success",

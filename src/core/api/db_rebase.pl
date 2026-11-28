@@ -1,5 +1,6 @@
 :- module(db_rebase, [
               rebase_on_branch/9,
+              rebase_on_branch/10,
               run_rebase_contract/1,
               cycle_context/4
           ]).
@@ -8,6 +9,7 @@
 :- use_module(library(apply)).
 :- use_module(library(plunit)).
 :- use_module(library(lists)).
+:- use_module(library(option)).
 
 :- use_module(core(util)).
 :- use_module(core(account)).
@@ -23,11 +25,18 @@
                   api_insert_documents/9,
                   api_replace_documents/9
               ]).
+:- use_module(core(api/api_patch), [
+                  normalize_conflict_resolution/4,
+                  resolution_winner/3
+              ]).
+:- use_module(core(document/history), [changed_document_id/2]).
 :- use_module(core(document/commit_queue), [
                   enqueue_commit/2
               ]).
 :- use_module(core(document/json), [
+                  database_prefixes/2,
                   delete_document/3,
+                  get_document/3,
                   insert_document/3,
                   replace_document/2
               ]).
@@ -88,19 +97,22 @@ make_validation_object_appear_as_changed(Validation_Object, New_Validation_Objec
 
     New_Validation_Object = (Validation_Object.put(Objects)).
 
-apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, Us_Commit_Uri, _Author, _Auth_Object, [], [], Us_Commit_Uri, Our_Repo_Context, []) :-
+apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, Us_Commit_Uri, _Author, _Auth_Object, _Resolution, [], [], Us_Commit_Uri, Our_Repo_Context, []) :-
     !,
     true.
-apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, Auth_Object, [Their_Commit_Id|Their_Commit_Ids], [Strategy|Strategies], Final_Commit_Uri, Return_Context, [Report|Reports]) :-
-    Report = report{
-                 '@type' : "api:RebaseReport",
-                 'api:origin_commit': Their_Commit_Id,
-                 'api:applied': Applied_Commit_Ids,
-                 'api:commit_type': Commit_Application_Type
-             },
+apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, Auth_Object, Resolution, [Their_Commit_Id|Their_Commit_Ids], [Strategy|Strategies], Final_Commit_Uri, Return_Context, [Report|Reports]) :-
+    Report0 = report{
+                  '@type' : "api:RebaseReport",
+                  'api:origin_commit': Their_Commit_Id,
+                  'api:applied': Applied_Commit_Ids,
+                  'api:commit_type': Commit_Application_Type
+              },
     % apply the commit
     commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri), % we are renaming, Commit_Uri -> Their_Commit_Uri
-    rebase_apply_commit(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Id, Their_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri),
+    rebase_apply_commit(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Id, Their_Commit_Uri, Author, Resolution, New_Commit_Id, New_Commit_Uri, Resolution_Reports),
+    (   Resolution_Reports = []
+    ->  Report = Report0
+    ;   put_dict('api:resolution_report', Report0, Resolution_Reports, Report)),
 
     % turn our repo context into a validation object
     cycle_context(Our_Repo_Context, Our_Repo_Context2, New_Our_Repo_Transaction_Object, _Our_Repo_Validation_Object),
@@ -168,26 +180,42 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
             Applied_Commit_Ids = [New_Commit_Id, New_Commit_Id2])
     ),
 
-    apply_commit_chain(Our_Repo_Context3, Their_Repo_Context, New_Commit_Uri2, Author, Auth_Object, Their_Commit_Ids, Strategies, Final_Commit_Uri, Return_Context, Reports).
+    apply_commit_chain(Our_Repo_Context3, Their_Repo_Context, New_Commit_Uri2, Author, Auth_Object, Resolution, Their_Commit_Ids, Strategies, Final_Commit_Uri, Return_Context, Reports).
 
-% rebase_apply_commit(+Our_Repo_Context, +Their_Repo_Context, +Us_Commit_Uri, +Their_Commit_Id, +Their_Commit_Uri, +Author, -New_Commit_Id, -New_Commit_Uri) is det.
+% rebase_apply_commit(+Our_Repo_Context, +Their_Repo_Context, +Us_Commit_Uri, +Their_Commit_Id, +Their_Commit_Uri, +Author, +Resolution, -New_Commit_Id, -New_Commit_Uri, -Resolution_Reports) is det.
 %
-% A commit that rewrites List or Array cells cannot replay as a raw triple
-% delta: cells get fresh random ids per rewrite and subdocument ids embed
-% element positions, so the delta cannot line up with the target branch.
-% Such commits merge each affected document three-way; all others replay raw.
-rebase_apply_commit(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Id, Their_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri) :-
-    (   collection_instance_layer(Their_Repo_Context, Their_Commit_Uri, Their_Layer),
-        merged_roots(Us_Repo_Context, Us_Commit_Uri, Their_Layer, Roots, Cell_Set)
-    ->  apply_commit_merged(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Id, Their_Commit_Uri, Author, Their_Layer, Roots, Cell_Set, New_Commit_Id, New_Commit_Uri)
-    ;   apply_commit_on_commit(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri)).
+% Document commits merge each affected document three-way because raw triple
+% replay cannot distinguish a clean replay from a divergent write. Commits
+% without document changes replay as raw triple deltas.
+rebase_apply_commit(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Id, Their_Commit_Uri, Author, Resolution, New_Commit_Id, New_Commit_Uri, Resolution_Reports) :-
+    commit_query_context(Us_Repo_Context, Their_Commit_Id, Their_Transaction, Their_Context),
+    (   commit_instance_layer(Their_Repo_Context, Their_Commit_Uri, Their_Layer),
+        mergeable_roots(Us_Repo_Context, Us_Commit_Uri, Their_Transaction, Their_Layer, Roots, Cell_Set)
+    ->  apply_commit_merged(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Id, Their_Commit_Uri, Author, Resolution, Their_Context, Their_Layer, Roots, Cell_Set, New_Commit_Id, New_Commit_Uri, Resolution_Reports)
+    ;   apply_commit_on_commit(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri),
+        Resolution_Reports = []).
 
-collection_instance_layer(Askable, Commit_Uri, Layer) :-
+commit_instance_layer(Askable, Commit_Uri, Layer) :-
     layer_uri_for_commit(Askable, Commit_Uri, instance, Layer_Uri),
     layer_id_uri(Askable, Layer_Id, Layer_Uri),
     triple_store(Store),
-    store_id_layer(Store, Layer_Id, Layer),
-    layer_touches_collections(Layer).
+    store_id_layer(Store, Layer_Id, Layer).
+
+% mergeable_roots(+Us_Repo_Context, +Us_Commit_Uri, +Their_Transaction, +Their_Layer, -Roots, -Cell_Set) is semidet.
+%
+% Document identity comes from the commit delta. Collection ownership still
+% comes from the cell graph because List and Array cells have random ids; if
+% that ownership cannot be resolved the commit falls back to raw replay.
+mergeable_roots(Us_Repo_Context, Us_Commit_Uri, Their_Transaction, Their_Layer, Roots, Cell_Set) :-
+    findall(Document_Root, changed_document_id(Their_Transaction, Document_Root), Document_Roots0),
+    sort(Document_Roots0, Document_Roots),
+    (   layer_touches_collections(Their_Layer)
+    ->  merged_roots(Us_Repo_Context, Us_Commit_Uri, Their_Layer, Collection_Roots, Cell_Set)
+    ;   Collection_Roots = [],
+        cell_set([], Cell_Set)),
+    append(Document_Roots, Collection_Roots, Roots0),
+    sort(Roots0, Roots),
+    Roots \== [].
 
 delta_edges(Layer, Added, Deleted) :-
     RWO = read_write_obj{read: Layer},
@@ -296,12 +324,11 @@ dfs_cells_all(Map, Cell_Set, [Object|Objects], Visited_In, Found_In, Visited_Out
     dfs_cells(Map, Cell_Set, Object, Visited_In, Found_In, Visited1, Found1),
     dfs_cells_all(Map, Cell_Set, Objects, Visited1, Found1, Visited_Out, Found_Out).
 
-apply_commit_merged(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Id, Their_Commit_Uri, Author, Their_Layer, Roots, Cell_Set, New_Commit_Id, New_Commit_Uri) :-
+apply_commit_merged(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Id, Their_Commit_Uri, Author, Resolution, Their_Context, Their_Layer, Roots, Cell_Set, New_Commit_Id, New_Commit_Uri, Resolution_Reports) :-
     commit_id_to_metadata(Their_Repo_Context, Their_Commit_Id, _Their_Author, Message, _Their_Timestamp),
     Commit_Info = commit_info{author: Author, message: Message,
                               merge_source: _{operation: rebase,
                                               commits: [Their_Commit_Uri]}},
-    commit_query_context(Us_Repo_Context, Their_Commit_Id, _Their_Transaction, Their_Context),
     (   commit_uri_to_parent_uri(Us_Repo_Context, Their_Commit_Uri, Parent_Uri),
         commit_id_uri(Us_Repo_Context, Parent_Id, Parent_Uri)
     ->  commit_query_context(Us_Repo_Context, Parent_Id, _Base_Transaction, Base_Context)
@@ -310,37 +337,56 @@ apply_commit_merged(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Co
     commit_query_context(Us_Repo_Context, Us_Commit_Id, Head_Transaction, Head_Context),
     database_schema(Head_Transaction, Schema),
     database_prefixes(Head_Context, Prefixes),
-    findall(Action, merged_document_action(Base_Context, Their_Context, Head_Context, Schema, Prefixes, Roots, Action), Actions),
+    findall(Action, merged_document_action(Base_Context, Their_Context, Head_Context, Schema, Prefixes, Resolution, Roots, Action), Actions),
+    actions_resolution_reports(Actions, Resolution_Reports),
     apply_layer_change(Us_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Uri, schema, Schema_Layer_Uri),
     build_merged_instance_layer(Us_Repo_Context, Us_Commit_Uri, Their_Layer, Roots, Cell_Set, Head_Context, Actions, Instance_Layer_Uri),
     insert_child_commit_object(Us_Repo_Context, Us_Commit_Uri, Schema_Layer_Uri, Instance_Layer_Uri, Commit_Info, New_Commit_Id, New_Commit_Uri).
 
-% merged_document_action(+Base_Context, +Their_Context, +Head_Context, +Schema, +Prefixes, +Roots, -Action) is nondet.
+% merged_document_action(+Base_Context, +Their_Context, +Head_Context, +Schema, +Prefixes, +Resolution, +Roots, -Action) is nondet.
 %
-% Action is doc(Id, Merged, Kind) with Kind in delete/insert/replace, or
-% fails (no action) when the merged document equals head.
-merged_document_action(Base_Context, Their_Context, Head_Context, Schema, Prefixes, Roots, Action) :-
+% Action is doc(Id, Merged, Kind, ResolutionReports) with Kind in
+% delete/insert/replace/none. A none action carries no write but can carry a
+% resolution report when the caller-selected outcome is the existing state.
+merged_document_action(Base_Context, Their_Context, Head_Context, Schema, Prefixes, Resolution, Roots, Action) :-
     member(Root, Roots),
     get_document_maybe(Head_Context, Root, OursDoc),
     get_document_maybe(Their_Context, Root, TheirsDoc),
     (   Base_Context == none
     ->  BaseDoc = missing
     ;   get_document_maybe(Base_Context, Root, BaseDoc)),
-    merge_document(Schema, Prefixes, BaseDoc, OursDoc, TheirsDoc, Merged),
-    \+ (   Merged == missing, OursDoc == missing
-       ;   is_dict(Merged), is_dict(OursDoc),
-           normalize_document(Schema, Prefixes, OursDoc, OursStripped),
-           OursStripped == Merged),
-    doc_action(Merged, OursDoc, Root, Action).
+    resolution_winner(Resolution, Root, Winner),
+    merge_document_with_resolution(Schema, Prefixes, BaseDoc, OursDoc, TheirsDoc, Winner, Merged, Events),
+    (   Merged == missing, OursDoc == missing
+    ->  Kind = none
+    ;   is_dict(Merged), is_dict(OursDoc),
+        normalize_document(Schema, Prefixes, OursDoc, OursStripped),
+        OursStripped == Merged
+    ->  Kind = none
+    ;   doc_action(Merged, OursDoc, Kind)),
+    document_id(Merged, OursDoc, Root, Id),
+    maplist(resolution_report(Id), Events, ResolutionReports),
+    Action = doc(Id, Merged, Kind, ResolutionReports).
 
-doc_action(Merged, OursDoc, Root, Action) :-
+doc_action(Merged, OursDoc, Kind) :-
     (   Merged == missing
     ->  Kind = delete
     ;   OursDoc == missing
     ->  Kind = insert
-    ;   Kind = replace),
-    document_id(Merged, OursDoc, Root, Id),
-    Action = doc(Id, Merged, Kind).
+    ;   Kind = replace).
+
+resolution_report(Id, resolution(Path, Winner), json{
+        '@type': "api:RebaseResolutionReport",
+        'api:document': Id,
+        'api:path': Path,
+        'api:resolution': Winner_String}) :-
+    atom_string(Winner, Winner_String).
+
+actions_resolution_reports(Actions, ResolutionReports) :-
+    findall(Report,
+            (   member(doc(_, _, _, Reports), Actions),
+                member(Report, Reports)),
+            ResolutionReports).
 
 document_id(Merged, _, _, Id) :- is_dict(Merged), get_dict('@id', Merged, Id), !.
 document_id(_, OursDoc, _, Id) :- is_dict(OursDoc), get_dict('@id', OursDoc, Id), !.
@@ -377,7 +423,7 @@ build_merged_instance_layer(Us_Repo_Context, Us_Commit_Uri, Their_Layer, Roots, 
            (   skip_subject(S, Roots, Cell_Set)
            ->  true
            ;   delete(Write_RWO, S, P, O, _))),
-    forall(member(doc(Id, Merged, Kind), Actions),
+    forall(member(doc(Id, Merged, Kind, _Reports), Actions),
            apply_doc_action(Write_Context, Id, Merged, Kind)),
     nb_commit(Builder, New_Layer),
     store_id_layer(Store, New_Layer_Id, New_Layer),
@@ -393,12 +439,14 @@ skip_subject(S, _Roots, Cell_Set) :-
     get_dict(S, Cell_Set, _),
     !.
 
+apply_doc_action(_Write_Context, _Id, _Merged, none) :-
+    !.
 apply_doc_action(Write_Context, Id, _, delete) :-
     !,
     delete_document(Write_Context, false, Id).
-apply_doc_action(Write_Context, Id, Merged, insert) :-
+apply_doc_action(Write_Context, _Id, Merged, insert) :-
     !,
-    insert_document(Write_Context, Merged, Id).
+    insert_document(Write_Context, Merged, _Inserted_Id).
 apply_doc_action(Write_Context, _, Merged, replace) :-
     replace_document(Write_Context, Merged).
 
@@ -424,20 +472,23 @@ create_strategies([Commit_ID|Their_Branch_Path], Strategy_Map, [Strategy|Strateg
     create_strategies(Their_Branch_Path, Strategy_Map, Strategies).
 
 rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, Strategy_Map, Optional_Common_Commit_Id, Their_Branch_History, Reports) :-
+    rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, Strategy_Map, Optional_Common_Commit_Id, Their_Branch_History, Reports, []).
+
+rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, Strategy_Map, Optional_Common_Commit_Id, Their_Branch_History, Reports, Options) :-
     do_rebase_with_retry(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
                          Author, Strategy_Map, Optional_Common_Commit_Id,
-                         Their_Branch_History, Reports, 10).
+                         Their_Branch_History, Reports, Options, 10).
 
-% do_rebase_with_retry/10 submits a prepared rebase contract to the branch
+% do_rebase_with_retry/11 submits a prepared rebase contract to the branch
 % commit queue and retries synchronously if the worker rejects it because the
 % target branch head changed. This follows the same contract-and-retry pattern
 % used by regular document commits.
 do_rebase_with_retry(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
                      Author, Strategy_Map, Optional_Common_Commit_Id,
-                     Their_Branch_History, Reports, Retries) :-
+                     Their_Branch_History, Reports, Options, Retries) :-
     rebase_on_branch_inner(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
                            Author, Strategy_Map, Optional_Common_Commit_Id,
-                           Their_Branch_History, Contract),
+                           Their_Branch_History, Options, Contract),
     submit_rebase_contract(Contract, Result),
     (   Result = rebase_success(Reports)
     ->  true
@@ -446,7 +497,7 @@ do_rebase_with_retry(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
     ->  New_Retries is Retries - 1,
         do_rebase_with_retry(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
                              Author, Strategy_Map, Optional_Common_Commit_Id,
-                             Their_Branch_History, Reports, New_Retries)
+                             Their_Branch_History, Reports, Options, New_Retries)
     ;   Result = reject(rebase_target_branch_changed)
     ->  throw(error(rebase_target_branch_changed(Our_Branch_Path), _))
     ;   Result = error(Error)
@@ -457,7 +508,7 @@ do_rebase_with_retry(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
 
 rebase_on_branch_inner(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
                        Author, Strategy_Map, Optional_Common_Commit_Id,
-                       Their_Branch_History, Contract) :-
+                       Their_Branch_History, Options, Contract) :-
     do_or_die(
         resolve_absolute_string_descriptor(Our_Branch_Path, Our_Branch_Descriptor),
         error(invalid_target_absolute_path(Our_Branch_Path),_)),
@@ -488,17 +539,17 @@ rebase_on_branch_inner(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
                             Their_Ref_Descriptor,
                             Our_Repo_Descriptor, Their_Repo_Descriptor,
                             Our_Branch_Path, Their_Branch_Path, Author,
-                            Strategy_Map, Optional_Common_Commit_Id,
+                            Strategy_Map, Optional_Common_Commit_Id, Options,
                             Contract, Their_Branch_History).
 
-% prepare_rebase_contract/13 does all the rebase work that can safely happen
+% prepare_rebase_contract/14 does all the rebase work that can safely happen
 % outside the branch lock: history computation, commit copying, and replay.
 % It returns a rebase_contract dict that the worker will verify and commit.
 prepare_rebase_contract(System_DB, Auth, Our_Branch_Descriptor,
                         Their_Ref_Descriptor,
                         Our_Repo_Descriptor, Their_Repo_Descriptor,
                         Our_Branch_Path, Their_Branch_Path, Author,
-                        Strategy_Map, Optional_Common_Commit_Id,
+                        Strategy_Map, Optional_Common_Commit_Id, Options,
                         Contract, Their_Branch_History) :-
 
     do_or_die(
@@ -551,6 +602,12 @@ prepare_rebase_contract(System_DB, Auth, Our_Branch_Descriptor,
     % list of commits to apply is ours since common
 
     create_strategies(Our_Branch_History, Strategy_Map, Strategies),
+    option(conflict_resolution(Raw_Conflict_Resolution), Options, error),
+    database_prefixes(Our_Branch_Descriptor, Resolution_Prefixes),
+    normalize_conflict_resolution(Raw_Conflict_Resolution,
+                                  _{prefixes: Resolution_Prefixes},
+                                  [error, ours, theirs, merge],
+                                  Resolution),
 
     (   Our_Branch_History = []
     % yay we're done! All commits are known to us, no need to do a thing
@@ -563,6 +620,7 @@ prepare_rebase_contract(System_DB, Auth, Our_Branch_Descriptor,
                                Their_Commit_Uri,
                                Author,
                                Auth,
+                               Resolution,
                                Our_Branch_History,
                                Strategies,
                                Final_Commit_Uri,
@@ -1092,7 +1150,7 @@ test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
              create_db_with_test_schema("admin","test"))),
       cleanup(teardown_temp_store(State)),
-      throws(error(rebase_commit_application_failed(schema_validation_error(Failure_Commit_Id,_),[Failure_Commit_Id]), _))
+      throws(error(rebase_merge_conflict('City/Dublin', [name], "Dublin", "Baile Átha Cliath", "Dubhlinn"), _))
      ])
 :-
     Master_Path = "admin/test",
@@ -1108,8 +1166,6 @@ test(rebase_conflicting_history_errors,
                      insert_document(Master_Context1,Document,_),
                      _
                     ),
-
-    Repository_Descriptor = (Master_Descriptor.repository_descriptor),
 
     Second_Path = "admin/test/local/branch/second",
     super_user_authority(Auth),
@@ -1128,9 +1184,6 @@ test(rebase_conflicting_history_errors,
     with_transaction(Master_Context3,
                      replace_document(Master_Context3,Document2),
                      _),
-
-    branch_head_commit(Repository_Descriptor, "main", Failure_Commit_Uri),
-    commit_id_uri(Repository_Descriptor, Failure_Commit_Id, Failure_Commit_Uri),
 
     % create a commit on the second branch, diverging history
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context_),
@@ -1257,14 +1310,7 @@ test(rebase_conflict,
                 create_db_with_empty_schema("admin", "foo"),
                 resolve_absolute_string_descriptor("admin/foo", Desc))),
          cleanup(teardown_temp_store(State)),
-         error(rebase_commit_application_failed(
-                   schema_validation_error(
-                       _,
-                       [witness{'@type':instance_not_cardinality_one,
-                                class:'http://www.w3.org/2001/XMLSchema#string',
-                                instance:'http://somewhere.for.now/document/User/Document1',
-                                predicate:'http://somewhere.for.now/schema#name'}]),
-                   _),
+         error(rebase_merge_conflict('User/Document1', [name], "Document1", "Document1 is changed X", "Document1 is changed Y"),
                _)
      ])
 :-
