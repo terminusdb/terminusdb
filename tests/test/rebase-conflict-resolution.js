@@ -61,6 +61,9 @@ describe('rebase-conflict-resolution', function () {
     expect(result.body['api:error']['@type']).to.equal('api:RebaseMergeConflict')
     expect(result.body['api:error']['api:path']).to.deep.equal(['tags'])
     expect(result.body['api:message']).to.include('conflict_resolution')
+    expect(result.body['api:error']).to.not.have.property('api:base')
+    expect(result.body['api:error']).to.not.have.property('api:ours')
+    expect(result.body['api:error']).to.not.have.property('api:theirs')
   })
 
   it('unions divergent Set writes only when merge is selected', async function () {
