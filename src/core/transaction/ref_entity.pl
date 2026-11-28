@@ -45,6 +45,7 @@
               commit_uri_to_history_commit_ids/3,
               commit_uri_to_history_commit_uris/3,
               commit_uri_to_history_commit_uris/4,
+              commit_uris_on_branch/4,
               schema_change_for_commit/3,
               apply_layer_change/6
           ]).
@@ -1499,6 +1500,33 @@ commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris, Opti
     commit_uri_to_history_commit_uris_(Context, Commit_Uri, Start, Count, Reversed_History_Commit_Uris),
     reverse(Reversed_History_Commit_Uris, History_Commit_Uris).
 
+commit_uris_on_branch(_, _, [], []) :- !.
+commit_uris_on_branch(Askable, Branch_Name, Candidate_Uris, Scoped_Uris) :-
+    sort(Candidate_Uris, Unique_Candidate_Uris),
+    (   branch_head_commit(Askable, Branch_Name, Head_Uri)
+    ->  length(Unique_Candidate_Uris, Remaining),
+        empty_assoc(Candidate_Set_0),
+        foldl([Commit_Uri, Set_In, Set_Out]>>put_assoc(Commit_Uri, Set_In, true, Set_Out),
+              Unique_Candidate_Uris, Candidate_Set_0, Candidate_Set),
+        commit_uris_on_branch_walk(Askable, Head_Uri, Candidate_Set, Remaining, [], Found),
+        sort(Found, Scoped_Uris)
+    ;   Scoped_Uris = []).
+
+commit_uris_on_branch_walk(_, _, _, 0, Found, Found) :- !.
+commit_uris_on_branch_walk(Askable, Commit_Uri, Candidate_Set, Remaining0, Found0, Found) :-
+    (   get_assoc(Commit_Uri, Candidate_Set, _)
+    ->  Remaining1 is Remaining0 - 1,
+        Found1 = [Commit_Uri|Found0]
+    ;   Remaining1 = Remaining0,
+        Found1 = Found0
+    ),
+    (   Remaining1 =:= 0
+    ->  Found = Found1
+    ;   commit_uri_to_parent_uri(Askable, Commit_Uri, Parent_Uri)
+    ->  commit_uris_on_branch_walk(Askable, Parent_Uri, Candidate_Set, Remaining1, Found1, Found)
+    ;   Found = Found1
+    ).
+
 commit_uri_to_history_commit_ids_(Context, Commit_Uri, [Commit_Id|History_Commit_Ids]) :-
     commit_id_uri(Context, Commit_Id, Commit_Uri),
     (   commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri)
@@ -1586,5 +1614,48 @@ test(commit_history_uris,
     commit_uri_to_metadata(Repository_Descriptor, Commit_B_Uri, _, "commit b", _),
 
     true.
+
+test(commit_uris_on_branch_filters_other_branches,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
+    create_context(Descriptor, commit_info{author:"test",message: "commit a"}, Commit_A_Context),
+    with_transaction(Commit_A_Context,
+                     ask(Commit_A_Context,
+                         insert(a,b,c)),
+                     _),
+
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth,
+                  "admin/testdb/local/branch/second",
+                  branch("admin/testdb"), _),
+    resolve_absolute_string_descriptor("admin/testdb/local/branch/second", Second_Descriptor),
+    create_context(Second_Descriptor, commit_info{author:"test",message: "commit b"}, Commit_B_Context),
+    with_transaction(Commit_B_Context,
+                     ask(Commit_B_Context,
+                         insert(d,e,f)),
+                     _),
+
+    create_context(Descriptor, commit_info{author:"test",message: "commit c"}, Commit_C_Context),
+    with_transaction(Commit_C_Context,
+                     ask(Commit_C_Context,
+                         insert(g,h,i)),
+                     _),
+
+    Repository_Descriptor = Descriptor.repository_descriptor,
+    branch_head_commit(Repository_Descriptor, "main", Commit_C_Uri),
+    branch_head_commit(Repository_Descriptor, "second", Commit_B_Uri),
+    commit_uri_to_parent_uri(Repository_Descriptor, Commit_C_Uri, Commit_A_Uri),
+
+    Candidates = [Commit_A_Uri, Commit_B_Uri, Commit_C_Uri],
+    commit_uris_on_branch(Repository_Descriptor, "main", Candidates, Main_Scoped),
+    commit_uris_on_branch(Repository_Descriptor, "second", Candidates, Second_Scoped),
+    sort([Commit_A_Uri, Commit_C_Uri], Main_Expected),
+    sort([Commit_A_Uri, Commit_B_Uri], Second_Expected),
+    Main_Scoped = Main_Expected,
+    Second_Scoped = Second_Expected.
 
 :- end_tests(commit_history).
