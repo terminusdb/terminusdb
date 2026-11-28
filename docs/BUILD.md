@@ -77,20 +77,13 @@ in your path (e.g. `which cargo`) after installation.
 
 #### 1.3 Install SWI-Prolog
 
-> :left_speech_bubble: Much of TerminusDB is written in the logic programming
-> language [Prolog][prolog]. Our development environment is
-> [SWI-Prolog][swi_prolog], a well-maintained implementation with many
-> [swi_prolog_features][]. We test daily with the latest
-> [`stable`][swi_prolog_stable] release. (We cannot guarantee that it will work
-> with a `devel` release or an older `stable` release.)
+> :left_speech_bubble: Much of TerminusDB is written in the logic programming language [Prolog][prolog]. Our development environment is [SWI-Prolog][swi_prolog], a well-maintained implementation with many [swi_prolog_features][]. TerminusDB supports SWI-Prolog 10.x; SWI-Prolog 11 is not supported, and the macOS pin can be lifted when SWI-Prolog 11 is supported.
 
 [prolog]: https://en.wikipedia.org/wiki/Prolog
 [swi_prolog]: https://www.swi-prolog.org/
 [swi_prolog_features]: https://www.swi-prolog.org/features.html
-[swi_prolog_stable]: https://www.swi-prolog.org/download/stable
 
-Install the `stable` SWI-Prolog environment following the [official
-instructions][swi_prolog_install], or use our preferred steps below.
+Install SWI-Prolog 10.x following the [official instructions][swi_prolog_install], or use our preferred steps below.
 
 The main tool used is `swipl`. This should be in your path (e.g. `which swipl`)
 after installation.
@@ -136,12 +129,23 @@ snap install swi-prolog
 sudo pacman -S swi-prolog
 ```
 
-**Using `brew`**
+**Using Homebrew on macOS**
+
+Homebrew's current `swi-prolog` formula installs SWI-Prolog 11, which TerminusDB does not support. Install the pinned 10.0.2 formula into a local tap so Homebrew pours the matching bottle. If Homebrew already has `swi-prolog` installed, uninstall the Core keg first because the pinned recipe uses the same keg name; the bottle is Apple Silicon only, while Intel Macs build the pinned formula from source.
 
 ```sh
-brew install gmp
-brew install swi-prolog
+(
+  set -e
+  tap=terminusdb/swi-prolog-10
+  brew tap | grep -qx "$tap" || brew tap-new --no-git "$tap"
+  curl -fLO https://raw.githubusercontent.com/Homebrew/homebrew-core/89fc67a7d3f12962f3eddfb6b56ccb02d4c4be08/Formula/s/swi-prolog.rb
+  mv swi-prolog.rb "$(brew --repository "$tap")/Formula/swi-prolog.rb"
+  brew uninstall homebrew/core/swi-prolog 2>/dev/null || true
+  brew install "$tap/swi-prolog"
+)
 ```
+
+Restart your shell and check that `swipl --version` reports SWI-Prolog 10.0.2.
 
 ### 2. Install library dependencies
 

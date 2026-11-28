@@ -15,7 +15,7 @@ parse_param() {
       [ "$RUNNER_OS" = "macOS" ] || die "Unsupported: '$release' on '$RUNNER_OS'"
       ;;
     *.*.*)
-      [ "$RUNNER_OS" = "Linux" ] || die "Unsupported: '$release' on '$RUNNER_OS'"
+      [ "$RUNNER_OS" = "Linux" ] || [ "$RUNNER_OS" = "macOS" ] || die "Unsupported: '$release' on '$RUNNER_OS'"
       ;;
     *)
       die "Unexpected argument: '$release'"
@@ -23,8 +23,52 @@ parse_param() {
   esac
 }
 
+# Homebrew's current swi-prolog formula installs SWI-Prolog 11. Load the pinned
+# 10.0 recipe into a local tap so Homebrew pours the matching bottle into a
+# normal prefix; saved states can stay standalone.
+install_macos_release() {
+  local release="${1-}"
+  [ "$release" = "10.0.2" ] || die "Unsupported macOS SWI-Prolog release: '$release'"
+
+  local formula_revision="89fc67a7d3f12962f3eddfb6b56ccb02d4c4be08"
+  local formula_url="https://raw.githubusercontent.com/Homebrew/homebrew-core/${formula_revision}/Formula/s/swi-prolog.rb"
+  local tap="terminusdb/swi-prolog-10"
+  local tap_path bin_dir
+
+  command -v brew >/dev/null || die "Homebrew is required to install SWI-Prolog on macOS"
+  if ! brew tap | grep -qx "$tap"; then
+    HOMEBREW_DEV_CMD_RUN=1 brew tap-new --no-git "$tap" >/dev/null || die "Failed to create Homebrew tap $tap"
+  fi
+  tap_path="$(brew --repository "$tap")" || die "Failed to resolve Homebrew tap $tap"
+
+  curl -fL --retry 3 -o "$tap_path/Formula/swi-prolog.rb" "$formula_url" \
+    || die "Failed to download SWI-Prolog $release formula"
+  brew uninstall homebrew/core/swi-prolog >/dev/null 2>&1 || true
+  HOMEBREW_NO_AUTO_UPDATE=1 brew install "$tap/swi-prolog" || die "Failed to install SWI-Prolog $release"
+
+  bin_dir="$(dirname "$(command -v swipl)")" || die "swipl command not found"
+  PATH="$bin_dir:$PATH"
+  if [ -n "${GITHUB_PATH:-}" ]; then
+    echo "$bin_dir" >> "$GITHUB_PATH"
+  fi
+  if [ -n "${GITHUB_ENV:-}" ]; then
+    echo "SWIPL_DIR=$bin_dir/" >> "$GITHUB_ENV"
+  fi
+
+  swipl --version | grep -F "SWI-Prolog version $release" >/dev/null \
+    || die "Installed swipl is not version $release"
+}
+
 do_install() {
   local release="${1-}"
+  case "$release" in
+    *.*.*)
+      if [ "$RUNNER_OS" = "macOS" ]; then
+        install_macos_release "$release"
+        return
+      fi
+      ;;
+  esac
   case "$release" in
     stable | devel)
       # Install swipl from PPA: https://www.swi-prolog.org/build/PPA.html
