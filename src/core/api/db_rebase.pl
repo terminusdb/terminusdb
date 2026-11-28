@@ -370,7 +370,8 @@ merged_document_action(Base_Context, Their_Context, Head_Context, Schema, Prefix
     ;   doc_action(Merged, OursDoc, Kind)),
     document_id(Merged, OursDoc, Root, Id),
     maplist(resolution_report(Id), Events, ResolutionReports),
-    Action = doc(Id, Merged, Kind, ResolutionReports).
+    (   raw_json_root(Their_Context, Root) -> Raw_JSON = true ; Raw_JSON = false),
+    Action = doc(Id, Merged, Kind, ResolutionReports, Raw_JSON).
 
 doc_action(Merged, OursDoc, Kind) :-
     (   Merged == missing
@@ -388,7 +389,7 @@ resolution_report(Id, resolution(Path, Winner), json{
 
 actions_resolution_reports(Actions, ResolutionReports) :-
     findall(Report,
-            (   member(doc(_, _, _, Reports), Actions),
+            (   member(doc(_, _, _, Reports, _), Actions),
                 member(Report, Reports)),
             ResolutionReports).
 
@@ -427,8 +428,8 @@ build_merged_instance_layer(Us_Repo_Context, Us_Commit_Uri, Their_Layer, Roots, 
            (   skip_subject(S, Roots, Cell_Set)
            ->  true
            ;   delete(Write_RWO, S, P, O, _))),
-    forall(member(doc(Id, Merged, Kind, _Reports), Actions),
-           apply_doc_action(Write_Context, Id, Merged, Kind)),
+    forall(member(doc(Id, Merged, Kind, _Reports, Raw_JSON), Actions),
+           apply_doc_action(Write_Context, Id, Merged, Kind, Raw_JSON)),
     nb_commit(Builder, New_Layer),
     store_id_layer(Store, New_Layer_Id, New_Layer),
     insert_layer_object(Us_Repo_Context, New_Layer_Id, Instance_Layer_Uri).
@@ -443,32 +444,25 @@ skip_subject(S, _Roots, Cell_Set) :-
     get_dict(S, Cell_Set, _),
     !.
 
-apply_doc_action(_Write_Context, _Id, _Merged, none) :-
+apply_doc_action(_Write_Context, _Id, _Merged, none, _) :-
     !.
-apply_doc_action(Write_Context, Id, _, delete) :-
+apply_doc_action(Write_Context, Id, _, delete, _) :-
     !,
     delete_document(Write_Context, false, Id).
-apply_doc_action(Write_Context, _Id, Merged, insert) :-
+apply_doc_action(Write_Context, _Id, Merged, insert, Raw_JSON) :-
     !,
-    (   raw_json_document(Write_Context, Merged)
+    (   Raw_JSON == true
     ->  insert_document(Write_Context, Merged, true, _Inserted_Id)
     ;   insert_document(Write_Context, Merged, _Inserted_Id)).
-apply_doc_action(Write_Context, _, Merged, replace) :-
-    (   raw_json_document(Write_Context, Merged)
+apply_doc_action(Write_Context, _, Merged, replace, Raw_JSON) :-
+    (   Raw_JSON == true
     ->  replace_document(Write_Context, Merged, false, true, _Replaced_Id)
     ;   replace_document(Write_Context, Merged)).
 
-raw_json_document(Transaction, Document) :-
-    is_dict(Document),
-    (   \+ get_dict('@type', Document, _)
-    ->  true
-    ;   get_dict('@type', Document, Type),
-        (   [Transaction_Object] = Transaction.transaction_objects,
-            catch(database_schema(Transaction_Object, Schema), _, fail)
-        ->  database_prefixes(Transaction, Prefixes),
-            catch(prefix_expand_schema(Type, Prefixes, TypeEx), _, fail),
-            \+ is_schema_simple_class(Schema, TypeEx)
-        ;   true)).
+raw_json_root(Context, Root) :-
+    catch(ask(Context, t(Root, rdf:type, sys:'JSONDocument')), _, fail),
+    !.
+
 
 % segment_writes_schema(+Repo_Context, +Commit_Ids) is semidet.
 %
