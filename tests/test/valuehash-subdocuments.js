@@ -200,6 +200,25 @@ describe('valuehash-subdocuments', function () {
       expect(result.body[0].alias.x).to.equal('a')
     })
 
+    it('keeps a shared subdocument list intact during replacement', async function () {
+      await createSchema([
+        { '@type': 'Class', '@id': 'RSharedListChild', '@subdocument': [], '@key': { '@type': 'Random' }, items: { '@type': 'List', '@class': 'xsd:string' } },
+        { '@type': 'Class', '@id': 'VHListGroup', '@subdocument': [], '@key': { '@type': 'ValueHash' }, children: { '@type': 'Set', '@class': 'RSharedListChild' } },
+        { '@type': 'Class', '@id': 'VPListGroup', '@key': { '@type': 'Lexical', '@fields': ['k'] }, k: 'xsd:string', sub: { '@type': 'Optional', '@class': 'VHListGroup' } },
+      ])
+      const group = { '@type': 'VHListGroup', children: [{ '@type': 'RSharedListChild', items: ['a', 'b'] }] }
+      await document.insert(agent, { instance: { '@type': 'VPListGroup', k: 'one', sub: group } })
+      const inserted = await document.get(agent, { query: { id: 'VPListGroup/one' } })
+      const groupId = inserted.body.sub['@id']
+      await document.insert(agent, { instance: { '@type': 'VPListGroup', k: 'two', sub: { '@type': '@id', '@id': groupId } } })
+
+      await document.replace(agent, { instance: { '@id': 'VPListGroup/one', '@type': 'VPListGroup', k: 'one', sub: group } })
+
+      const result = await document.get(agent, { query: { type: 'VPListGroup', as_list: true } })
+      expect(result.body[0].sub.children).to.have.lengthOf(1)
+      expect(result.body[0].sub.children[0].items).to.deep.equal(['a', 'b'])
+    })
+
     it('treats an identical repeat insert with a typed literal as a no-op', async function () {
       await createSchema([
         { '@type': 'Class', '@id': 'RTypedSub', '@subdocument': [], '@key': { '@type': 'Random' }, n: 'xsd:integer' },

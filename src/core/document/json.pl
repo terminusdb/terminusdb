@@ -3748,7 +3748,26 @@ matching_existing_random_subdocument(Transaction, Reuse, Parent_Id, Property, Ba
     canonical_elaborated_content(Transaction, Existing_Elaborated, Canonical),
     (   Reuse = reference
     ->  Existing = json{'@type': "@id", '@id': Existing_Id}
+    ;   Reuse = elaborated(Root_Id),
+        parent_survives_outside_root(Transaction, Root_Id, Parent_Id)
+    ->  Existing = json{'@type': "@id", '@id': Existing_Id}
     ;   Existing = Existing_Elaborated
+    ).
+
+parent_survives_outside_root(Transaction, Root_Id, Node) :-
+    database_instance(Transaction, Instance),
+    xrdf(Instance, Owner, _, Node),
+    Owner \= Root_Id,
+    owner_survives_outside_root(Transaction, Instance, Root_Id, Owner, [Node]).
+
+owner_survives_outside_root(Transaction, Instance, Root_Id, Owner, Visited) :-
+    \+ memberchk(Owner, Visited),
+    (   xrdf(Instance, Owner, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Type),
+        is_subdocument(Transaction, Type)
+    ->  xrdf(Instance, Parent, _, Owner),
+        Parent \= Root_Id,
+        owner_survives_outside_root(Transaction, Instance, Root_Id, Parent, [Owner|Visited])
+    ;   true
     ).
 
 stored_subdocument_elaboration(Transaction, Id, Elaborated) :-
@@ -3992,7 +4011,12 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
 insert_replacement_document_expanded(Transaction, Elaborated, ID) :-
     insert_document_expanded_with_reuse(Transaction, elaborated, Elaborated, ID).
 
-insert_document_expanded_with_reuse(Transaction, Reuse, Elaborated, ID) :-
+insert_document_expanded_with_reuse(Transaction, Reuse0, Elaborated, ID) :-
+    (   Reuse0 = elaborated,
+        get_dict('@id', Elaborated, Root_Id)
+    ->  Reuse = elaborated(Root_Id)
+    ;   Reuse = Reuse0
+    ),
     normalize_repeated_random_subdocuments(Transaction, Reuse, Elaborated, Normalized_Elaborated),
     insert_elaborated_document_triples(Transaction, Normalized_Elaborated, ID).
 
