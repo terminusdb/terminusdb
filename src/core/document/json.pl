@@ -3715,7 +3715,7 @@ normalize_repeated_random_subdocument_member(Transaction, Parent_Id, Property, V
     ).
 normalize_repeated_random_subdocument_member(_Transaction, _Parent_Id, _Property, Value, Value).
 
-matching_existing_random_subdocument(Transaction, Parent_Id, Property, Base, Value, Existing_Elaborated) :-
+matching_existing_random_subdocument(Transaction, Parent_Id, Property, Base, Value, Existing) :-
     database_and_default_prefixes(Transaction, Prefixes),
     path_component([type(Base),property(Property),node(Parent_Id)], Prefixes, [Path_Base]),
     prefix_expand(Path_Base, Prefixes, Path_Base_Ex),
@@ -3725,7 +3725,8 @@ matching_existing_random_subdocument(Transaction, Parent_Id, Property, Base, Val
     % Migrations use fresh random ids to repair nonconforming stored ids.
     atom_concat(Path_Base_Ex, _, Existing_Id),
     stored_subdocument_elaboration(Transaction, Existing_Id, Existing_Elaborated),
-    canonical_elaborated_content(Transaction, Existing_Elaborated, Canonical).
+    canonical_elaborated_content(Transaction, Existing_Elaborated, Canonical),
+    Existing = json{'@type': "@id", '@id': Existing_Id}.
 
 stored_subdocument_elaboration(Transaction, Id, Elaborated) :-
     Options = options{compress_ids: false, unfold: true, keep_json_type: false},
