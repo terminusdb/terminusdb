@@ -217,6 +217,7 @@ describe('valuehash-subdocuments', function () {
       const result = await document.get(agent, { query: { type: 'LNestedCaptureParent', as_list: true } })
       expect(result.body[0].sub.inner.x).to.equal('a')
       expect(result.body[0].alias.x).to.equal('a')
+      expect(result.body[0].alias['@id']).to.equal(result.body[0].sub.inner['@id'])
     })
 
     it('replaces a referenced document without dropping its random child', async function () {
