@@ -506,11 +506,15 @@ check_type_pairs_([Key-Range|Pairs],Schema,Prefixes,Dictionary,Annotated,capture
     check_type_pair_(Key,Range,Schema,Prefixes,Dictionary,Dictionary0,captures(In,DepH-DepM,SubH-SubM,Middle)),
     check_type_pairs_(Pairs,Schema,Prefixes,Dictionary0,Annotated,captures(Middle,DepM-DepT,SubM-SubT,Out)).
 
+non_sys_json_type(Type, Schema) :-
+    \+ (   text(Type),
+           expand_type(Type, Schema, Type_Ex),
+           global_prefix_expand(sys:'JSON', Type_Ex)
+       ).
+
 check_non_collection_type_(Key,Kind,Schema,Prefixes,Value,Type,Annotated,Captures) :-
     (   is_list(Value),
-        expand_type(Type, Schema, Type_Ex),
-        global_prefix_expand(sys:'JSON', Sys_JSON),
-        Type_Ex \== Sys_JSON,
+        non_sys_json_type(Type, Schema),
         length(Value, Count),
         Count > 1
     ->  Captures = captures(In,DepH-DepT,SubH-SubT,Out),
@@ -532,7 +536,7 @@ check_non_collection_type_(Key,Kind,Schema,Prefixes,Value,Type,Annotated,Capture
                                                            '@type' : Presentation,
                                                            '@value' : List,
                                                            kind: Kind,
-                                                           class: Type,
+                                                           class: Presentation,
                                                            predicate: Key })
             ;   throw(error(schema_check_failure([witness{ '@type' : unexpected_list,
                                                            value: Value, type : Type }]), _))

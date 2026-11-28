@@ -8857,6 +8857,55 @@ test(insert_multiple_values_for_optional_field,
         _
     ).
 
+schema_cardinality_optional_enum('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "RockSize",
+  "@type" : "Enum",
+  "@value" : ["big", "small"] }
+
+{ "@id" : "RockNote",
+  "@type" : "Class",
+  "size" : { "@type" : "Optional",
+             "@class" : "RockSize" } }
+
+').
+
+test(insert_multiple_values_for_optional_enum_field,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema_cardinality_optional_enum,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':instance_has_wrong_cardinality,
+                            class:'http://s/RockSize',
+                            instance:'http://i/RockNote/document1',
+                            predicate:'http://s/size',
+                            cardinality:2,
+                            object_list:['http://s/RockSize/big',
+                                         'http://s/RockSize/small']}
+                   ]),
+               _)
+     ]) :-
+    Document = _{ '@id' : "RockNote/document1",
+                  '@type' : "RockNote",
+                  size : ["big", "small"]},
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
+
 test(add_a_double_field,
      [
          setup(
